@@ -1,6 +1,56 @@
 # Test Payloads
 
-This directory contains example webhook payloads for testing the examples-copier application.
+Test files for local integration testing of the github-copier app.
+
+## Quick Start (Isolated Testing)
+
+```bash
+# 1. Copy and configure test environment
+cp test-payloads/.env.test .env.test
+# Edit .env.test with your GitHub App credentials
+
+# 2. Copy config to your test source repo (cbullinger/copier-app-source-test)
+# Upload test-payloads/source-repo-files/.copier/main.yaml to .copier/main.yaml
+
+# 3. Start the app with test config
+ENV_FILE=.env.test go run app.go
+
+# 4. In another terminal, start webhook tunnel
+smee --url https://smee.io/YOUR_CHANNEL --target http://localhost:8080/webhook
+
+# 5. Create a PR in your test source repo and merge it
+```
+
+## Directory Structure
+
+```
+test-payloads/
+├── .env.test                    # Test environment variables (copy to .env.test)
+├── source-repo-files/           # Files to copy to your test source repo
+│   └── .copier/
+│       └── main.yaml            # Workflow config for test repos
+├── test-pr-merged.json          # Sample webhook payload
+├── test-config.yaml             # Example config (reference only)
+└── example-pr-merged.json       # Generic example payload
+```
+
+## Test Repositories
+
+| Repo | Purpose |
+|------|---------|
+| `cbullinger/copier-app-source-test` | Source repo (receives PRs, triggers webhooks) |
+| `cbullinger/copier-app-dest-1` | Destination for Go examples |
+| `cbullinger/copier-app-dest-2` | Destination for Python examples |
+
+## Configured Workflows
+
+The test config (`source-repo-files/.copier/main.yaml`) defines:
+
+| Workflow | Source Pattern | Destination | Transform |
+|----------|---------------|-------------|-----------|
+| `test-go-to-dest1` | `examples/go/**` | `copier-app-dest-1` | `examples/go/` → `go-examples/` |
+| `test-python-to-dest2` | `examples/python/**` | `copier-app-dest-2` | `examples/python/` → `python-examples/` |
+| `test-docs-to-dest1` | `docs/**` | `copier-app-dest-1` | `docs/` → `documentation/` |
 
 ## Files
 

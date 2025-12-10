@@ -1,8 +1,23 @@
 #!/bin/bash
 # Integration test script for github-copier
 # Sends test webhook payload to locally running app
+#
+# Usage:
+#   ./scripts/integration-test.sh webhook   # Send test webhook
+#   ./scripts/integration-test.sh verify    # Check dest repos
+#   ./scripts/integration-test.sh full      # Both + wait
+#
+# Environment:
+#   APP_URL         - App URL (default: http://localhost:8080)
+#   WEBHOOK_SECRET  - Webhook secret (default: reads from .env.test)
+#   PAYLOAD_FILE    - Payload file (default: test-payloads/test-pr-merged.json)
 
 set -e
+
+# Load webhook secret from .env.test if it exists and WEBHOOK_SECRET not set
+if [[ -z "$WEBHOOK_SECRET" && -f ".env.test" ]]; then
+    WEBHOOK_SECRET=$(grep -E "^WEBHOOK_SECRET=" .env.test | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+fi
 
 # Configuration
 APP_URL="${APP_URL:-http://localhost:8080}"
