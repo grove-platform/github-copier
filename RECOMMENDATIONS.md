@@ -27,7 +27,7 @@ The GitHub Copier is a well-architected Go application with strong foundations i
 - Global mutable state creates race condition risks
 - `log.Fatal` calls prevent graceful error handling
 - Inconsistent error handling patterns
-- **🐛 NEW: Deprecation file accumulation bug (see item 4a)**
+- ~~**🐛 NEW: Deprecation file accumulation bug (see item 4a)**~~ ✅ FIXED
 
 ---
 
@@ -38,7 +38,7 @@ The GitHub Copier is a well-architected Go application with strong foundations i
 | 🔴 Critical | CI/CD Pipeline | Very High | 4-6 hours | ⏳ Pending |
 | 🔴 Critical | Global State Refactoring | High | 6-8 hours | ⏳ Pending |
 | 🔴 Critical | Error Handling Improvements | High | 3-4 hours | ⏳ Pending |
-| 🔴 Critical | Deprecation File Bug Fix | High | 1-2 hours | ⏳ Pending |
+| ~~🔴 Critical~~ | ~~Deprecation File Bug Fix~~ | ~~High~~ | ~~1-2 hours~~ | ✅ DONE |
 | ~~🟡 High~~ | ~~workflow_processor Tests~~ | ~~High~~ | ~~4-6 hours~~ | ✅ DONE |
 | 🟡 High | Security Scanning | High | 2-3 hours | ⏳ Pending |
 | 🟢 Medium | Rate Limiting | Medium | 3-4 hours | ⏳ Pending |
@@ -244,40 +244,28 @@ func ConfigurePermissions() error {
 
 ---
 
-### 4a. 🐛 BUG: Deprecation File Accumulation Issue
+### 4a. 🐛 BUG: Deprecation File Accumulation Issue ✅ FIXED
 
-**Problem:** Discovered during test implementation - the `addToDeprecationMap` function uses the deprecation file name as the map key, causing each new deprecated file to **overwrite** the previous entry instead of accumulating.
+**Status:** ✅ **FIXED** on December 10, 2024
 
-**Location:** `services/workflow_processor.go:298-311`
+**Original Problem:** The `addToDeprecationMap` function used the deprecation file name as the map key, causing each new deprecated file to **overwrite** the previous entry instead of accumulating.
 
-**Current (Buggy) Code:**
-```go
-func (wp *workflowProcessor) addToDeprecationMap(workflow Workflow, targetPath string) {
-    deprecationFile := "deprecated_examples.json"
-    if workflow.DeprecationCheck != nil && workflow.DeprecationCheck.File != "" {
-        deprecationFile = workflow.DeprecationCheck.File
-    }
+**Solution Implemented:**
+1. Changed `FileStateService.filesToDeprecate` from `map[string]types.DeprecatedFileEntry` to `map[string][]types.DeprecatedFileEntry`
+2. Updated `AddFileToDeprecate()` to append entries instead of overwriting
+3. Updated `GetFilesToDeprecate()` to return the slice-based structure with deep copy
+4. Updated consumer in `webhook_handler_new.go` to iterate over all entries per deprecation file
 
-    entry := DeprecatedFileEntry{
-        FileName: targetPath,
-        Repo:     workflow.Destination.Repo,
-        Branch:   workflow.Destination.Branch,
-    }
+**Files Modified:**
+- `services/file_state_service.go` - Changed data structure and methods
+- `services/webhook_handler_new.go` - Updated consumer to handle slice of entries
+- `services/file_state_service_test.go` - Added new tests for accumulation behavior
+- `services/workflow_processor_test.go` - Updated tests to verify all files are accumulated
 
-    wp.fileStateService.AddFileToDeprecate(deprecationFile, entry)  // ❌ Overwrites!
-}
-```
-
-**Impact:**
-- When multiple files are removed in a single PR, only the **last** file is recorded for deprecation
-- Previous deprecation entries are silently lost
-- Deprecation tracking is incomplete
-
-**Recommended Fix:** Change the data structure to accumulate entries per deprecation file:
-1. Modify `FileStateService` to store a slice of entries per file
-2. Or use a composite key (deprecation_file + target_path)
-
-**Effort:** 1-2 hours | **Impact:** High | **Priority:** 🔴 Critical
+**New Tests Added:**
+- `TestFileStateService_MultipleDeprecatedFilesAccumulate` - Verifies 3 files accumulate correctly
+- `TestFileStateService_MultipleDeprecationFiles` - Verifies entries go to correct deprecation files
+- Updated `TestWorkflowProcessor_MultipleTransformations` - Now verifies all 3 files are recorded
 
 ---
 
@@ -549,7 +537,7 @@ func (mc *MetricsCollector) GetPercentiles() (p50, p95, p99 float64) {
 - [ ] Create CI/CD pipeline
 - [ ] Fix nil pointer dereference in `github_read.go`
 - [ ] Replace `log.Fatal` calls with error returns
-- [ ] **🐛 Fix deprecation file accumulation bug**
+- [x] ~~**🐛 Fix deprecation file accumulation bug**~~ ✅ COMPLETED (Dec 10, 2024)
 
 ### Phase 2: Stability (Week 2)
 - [ ] Refactor global state to thread-safe services
@@ -576,7 +564,7 @@ The GitHub Copier has a solid foundation with good architecture patterns. The mo
 2. **Global State Refactoring** - Prevents race conditions
 3. **Error Handling** - Enables graceful degradation
 4. ~~**Test Coverage** - Protects critical business logic~~ ✅ COMPLETED
-5. **🐛 Deprecation File Bug** - Fix accumulation issue discovered during testing
+5. ~~**🐛 Deprecation File Bug** - Fix accumulation issue discovered during testing~~ ✅ FIXED
 
 Implementing these recommendations will significantly improve reliability, maintainability, and operational confidence in the application.
 

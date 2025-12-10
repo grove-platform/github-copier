@@ -558,13 +558,23 @@ func TestWorkflowProcessor_MultipleTransformations(t *testing.T) {
 	require.NoError(t, err)
 
 	deprecated := fileStateService.GetFilesToDeprecate()
-	// Note: Current implementation uses deprecation file as key, so only the last entry is stored
-	// This verifies that at least one file was processed (the last one: README.md -> docs/README.md)
-	assert.NotEmpty(t, deprecated, "expected at least one file to be processed")
-	// Verify the last processed file is in the map
-	entry, exists := deprecated["deprecated_examples.json"]
+	assert.NotEmpty(t, deprecated, "expected files to be processed")
+
+	// Verify all 3 matching files are accumulated in the deprecation map
+	entries, exists := deprecated["deprecated_examples.json"]
 	assert.True(t, exists, "expected deprecation entry to exist")
-	assert.Equal(t, "docs/README.md", entry.FileName, "expected last file to be README.md")
+	require.Len(t, entries, 3, "expected 3 files to be accumulated (src/main.go, docs/guide.md, README.md)")
+
+	// Collect all file names
+	fileNames := make([]string, len(entries))
+	for i, e := range entries {
+		fileNames[i] = e.FileName
+	}
+
+	// Verify all expected files are present
+	assert.Contains(t, fileNames, "code/main.go", "expected src/main.go -> code/main.go")
+	assert.Contains(t, fileNames, "documentation/guide.md", "expected docs/guide.md -> documentation/guide.md")
+	assert.Contains(t, fileNames, "docs/README.md", "expected README.md -> docs/README.md")
 }
 
 // ============================================================================
@@ -702,8 +712,10 @@ func TestWorkflowProcessor_CustomDeprecationFile(t *testing.T) {
 	require.NoError(t, err)
 
 	deprecated := fileStateService.GetFilesToDeprecate()
-	_, exists := deprecated["custom_deprecation.json"]
+	entries, exists := deprecated["custom_deprecation.json"]
 	assert.True(t, exists, "expected custom deprecation file to be used")
+	require.Len(t, entries, 1, "expected one entry in custom deprecation file")
+	assert.Equal(t, "dest/main.go", entries[0].FileName)
 }
 
 // ============================================================================
