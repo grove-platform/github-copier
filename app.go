@@ -78,7 +78,10 @@ func main() {
 	defer services.CloseGoogleLogger()
 
 	// Configure GitHub permissions
-	services.ConfigurePermissions()
+	if err := services.ConfigurePermissions(); err != nil {
+		fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Print startup banner
 	printBanner(config, container)

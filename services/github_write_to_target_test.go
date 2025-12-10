@@ -280,7 +280,8 @@ func TestAddFilesToTargetRepoBranch_ViaPR_Succeeds(t *testing.T) {
 	// Force fresh token; stub token endpoint then configure permissions.
 	services.InstallationAccessToken = ""
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	services.ConfigurePermissions()
+	err := services.ConfigurePermissions()
+	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	// Set up cached token for the org to bypass GitHub App auth
 	test.SetupOrgToken(owner, "test-token")
@@ -445,7 +446,8 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	// Fresh token path
 	services.InstallationAccessToken = ""
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	services.ConfigurePermissions()
+	err := services.ConfigurePermissions()
+	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	// Set up cached token for the org to bypass GitHub App auth
 	test.SetupOrgToken(owner, "test-token")
@@ -466,6 +468,11 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 		httpmock.NewJsonResponderOrPanic(200, map[string]any{
 			"ref": "refs/heads/copier/20250101-000000", "object": map[string]any{"sha": "baseSha"},
 		}),
+	)
+	// Mock DELETE for existing temp branch cleanup
+	httpmock.RegisterRegexpResponder("DELETE",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/refs/heads/`+tempHead+`$`),
+		httpmock.NewStringResponder(204, ""),
 	)
 	httpmock.RegisterRegexpResponder("POST",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/trees(\?.*)?$`),
@@ -513,13 +520,14 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	// Assertions
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["POST "+createRefURL])
- require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST",
+	require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST",
 		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls$`)))
 	// No merge call should have been made
- require.Equal(t, 0, test.CountByMethodAndURLRegexp("PUT",
+	require.Equal(t, 0, test.CountByMethodAndURLRegexp("PUT",
 		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls/77/merge$`)))
-	// No delete of temp ref because we returned early
- require.Equal(t, 0, test.CountByMethodAndURLRegexp("DELETE",
+	// Only 1 DELETE call for initial cleanup of existing branch (before creating new one)
+	// No additional DELETE after merge conflict because we returned early
+	require.Equal(t, 1, test.CountByMethodAndURLRegexp("DELETE",
 		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/git/refs/heads/copier/\d{8}-\d{6}$`)))
 
 	services.FilesToUpload = nil
@@ -593,7 +601,8 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	// Token setup
 	services.InstallationAccessToken = ""
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	services.ConfigurePermissions()
+	err := services.ConfigurePermissions()
+	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	// Set up cached token for the org to bypass GitHub App auth
 	test.SetupOrgToken(owner, "test-token")
@@ -604,10 +613,15 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 		httpmock.NewJsonResponderOrPanic(200, map[string]any{"ref": "refs/heads/" + baseBranch, "object": map[string]any{"sha": "baseSha"}}),
 	)
 	_ = test.MockCreateRef(owner, repo)
-		tempHead := `copier/\d{8}-\d{6}`
+	tempHead := `copier/\d{8}-\d{6}`
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+tempHead+`$`),
 		httpmock.NewJsonResponderOrPanic(200, map[string]any{"ref": "refs/heads/copier/20250101-000000", "object": map[string]any{"sha": "baseSha"}}),
+	)
+	// Mock DELETE for existing temp branch cleanup
+	httpmock.RegisterRegexpResponder("DELETE",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/refs/heads/`+tempHead+`$`),
+		httpmock.NewStringResponder(204, ""),
 	)
 	httpmock.RegisterRegexpResponder("POST",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/trees(\?.*)?$`),
@@ -666,7 +680,8 @@ func TestDeleteBranchIfExists_NilReference(t *testing.T) {
 	// Force fresh token
 	services.InstallationAccessToken = ""
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	services.ConfigurePermissions()
+	err := services.ConfigurePermissions()
+	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	// This should not panic or make any API calls when ref is nil
 	// We're testing that the function returns early without attempting to delete
@@ -674,7 +689,8 @@ func TestDeleteBranchIfExists_NilReference(t *testing.T) {
 	client := services.GetRestClient()
 
 	// Call with nil reference - should return immediately without error
-	services.DeleteBranchIfExistsExported(ctx, client, "test-org/test-repo", nil)
+	err = services.DeleteBranchIfExistsExported(ctx, client, "test-org/test-repo", nil)
+	require.NoError(t, err, "DeleteBranchIfExistsExported should succeed with nil ref")
 
 	// Verify no DELETE requests were made (since ref was nil)
 	require.Equal(t, 0, test.CountByMethodAndURLRegexp("DELETE", regexp.MustCompile(`/git/refs/`)))
