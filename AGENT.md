@@ -87,3 +87,4 @@ go test ./services/... -run TestWorkflow -v      # specific
 - Wrap errors: `fmt.Errorf("context: %w", err)`
 - Nil-check GitHub API responses before dereference
 - Tests use `httpmock`; see `tests/utils.go`
+- **Changelog**: Update `CHANGELOG.md` for all notable changes (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/))
