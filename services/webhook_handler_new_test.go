@@ -328,7 +328,7 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 
 	// Check response body
 	var response map[string]string
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
@@ -404,7 +404,7 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 
 	// Check response body
 	var response map[string]string
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
@@ -509,7 +509,7 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 
 			// Check response body
 			var response map[string]string
-			json.Unmarshal(w.Body.Bytes(), &response)
+			_ = json.Unmarshal(w.Body.Bytes(), &response)
 			if response["status"] != "accepted" {
 				t.Errorf("Response status = %v, want accepted", response["status"])
 			}

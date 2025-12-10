@@ -13,27 +13,27 @@ import (
 
 func TestNewSlackNotifier(t *testing.T) {
 	tests := []struct {
-		name       string
-		webhookURL string
-		channel    string
-		username   string
-		iconEmoji  string
+		name        string
+		webhookURL  string
+		channel     string
+		username    string
+		iconEmoji   string
 		wantEnabled bool
 	}{
 		{
-			name:       "enabled with webhook URL",
-			webhookURL: "https://hooks.slack.com/services/TEST",
-			channel:    "#test",
-			username:   "Test Bot",
-			iconEmoji:  ":robot:",
+			name:        "enabled with webhook URL",
+			webhookURL:  "https://hooks.slack.com/services/TEST",
+			channel:     "#test",
+			username:    "Test Bot",
+			iconEmoji:   ":robot:",
 			wantEnabled: true,
 		},
 		{
-			name:       "disabled without webhook URL",
-			webhookURL: "",
-			channel:    "#test",
-			username:   "Test Bot",
-			iconEmoji:  ":robot:",
+			name:        "disabled without webhook URL",
+			webhookURL:  "",
+			channel:     "#test",
+			username:    "Test Bot",
+			iconEmoji:   ":robot:",
 			wantEnabled: false,
 		},
 	}
@@ -93,7 +93,7 @@ func TestSlackNotifier_NotifyPRProcessed(t *testing.T) {
 			var receivedMessage *SlackMessage
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
-				json.Unmarshal(body, &receivedMessage)
+				_ = json.Unmarshal(body, &receivedMessage)
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
@@ -138,7 +138,7 @@ func TestSlackNotifier_NotifyError(t *testing.T) {
 	var receivedMessage *SlackMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedMessage)
+		_ = json.Unmarshal(body, &receivedMessage)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -171,18 +171,18 @@ func TestSlackNotifier_NotifyError(t *testing.T) {
 
 func TestSlackNotifier_NotifyFilesCopied(t *testing.T) {
 	tests := []struct {
-		name      string
-		fileCount int
+		name          string
+		fileCount     int
 		wantTruncated bool
 	}{
 		{
-			name:      "few files",
-			fileCount: 5,
+			name:          "few files",
+			fileCount:     5,
 			wantTruncated: false,
 		},
 		{
-			name:      "many files",
-			fileCount: 15,
+			name:          "many files",
+			fileCount:     15,
 			wantTruncated: true,
 		},
 	}
@@ -206,7 +206,7 @@ func TestSlackNotifier_NotifyFilesCopied(t *testing.T) {
 			var receivedMessage *SlackMessage
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, _ := io.ReadAll(r.Body)
-				json.Unmarshal(body, &receivedMessage)
+				_ = json.Unmarshal(body, &receivedMessage)
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer server.Close()
@@ -245,7 +245,7 @@ func TestSlackNotifier_NotifyDeprecation(t *testing.T) {
 	var receivedMessage *SlackMessage
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &receivedMessage)
+		_ = json.Unmarshal(body, &receivedMessage)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer server.Close()
@@ -329,4 +329,3 @@ func containsMiddle(s, substr string) bool {
 	}
 	return false
 }
-

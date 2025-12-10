@@ -407,27 +407,6 @@ func getCommitStrategyType(workflow Workflow) string {
 	return "pull_request" // default
 }
 
-func getCommitMessage(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.CommitMessage != "" {
-		return workflow.CommitStrategy.CommitMessage
-	}
-	return fmt.Sprintf("Update from workflow: %s", workflow.Name)
-}
-
-func getPRTitle(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.PRTitle != "" {
-		return workflow.CommitStrategy.PRTitle
-	}
-	return getCommitMessage(workflow)
-}
-
-func getPRBody(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.PRBody != "" {
-		return workflow.CommitStrategy.PRBody
-	}
-	return ""
-}
-
 func getUsePRTemplate(workflow Workflow) bool {
 	if workflow.CommitStrategy != nil {
 		return workflow.CommitStrategy.UsePRTemplate
