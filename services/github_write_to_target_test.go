@@ -15,14 +15,14 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v48/github"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/jarcoal/httpmock"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
 	"github.com/stretchr/testify/require"
 
 	// test helpers (utils.go)
-	test "github.com/mongodb/code-example-tooling/code-copier/tests"
+	test "github.com/grove-platform/github-copier/tests"
 )
 
 func TestMain(m *testing.M) {
@@ -390,8 +390,6 @@ func TestAddFilesToTargetRepoBranch_ViaPR_Succeeds(t *testing.T) {
 	services.FilesToUpload = nil
 }
 
-
-
 // --- Added critical tests for merge conflicts and configuration/default priorities ---
 
 func TestAddFiles_DirectConflict_NonFastForward(t *testing.T) {
@@ -491,7 +489,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	pr_number := 77
 	httpmock.RegisterResponder("POST",
 		"https://api.github.com/repos/"+owner+"/"+repo+"/pulls",
-		httpmock.NewJsonResponderOrPanic(201, map[string]any{"number": pr_number, "html_url": "https://github.com/"+owner+"/"+repo+"/pull/77"}),
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"number": pr_number, "html_url": "https://github.com/" + owner + "/" + repo + "/pull/77"}),
 	)
 	// PR mergeability check returns dirty -> not mergeable
 	httpmock.RegisterResponder("GET",

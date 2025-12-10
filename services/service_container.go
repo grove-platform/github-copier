@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 )
 
 // ServiceContainer holds all application services with dependency injection

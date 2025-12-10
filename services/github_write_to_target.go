@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	. "github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	. "github.com/grove-platform/github-copier/types"
 	"github.com/pkg/errors"
 )
 
@@ -20,8 +20,6 @@ import (
 // to be uploaded.
 var FilesToUpload map[UploadKey]UploadFileContent
 var FilesToDeprecate map[string]Configs
-
-
 
 // repoOwner returns the config repository owner from environment variables.
 func repoOwner() string { return os.Getenv(configs.ConfigRepoOwner) }

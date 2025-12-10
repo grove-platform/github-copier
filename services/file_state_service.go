@@ -3,7 +3,7 @@ package services
 import (
 	"sync"
 
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // FileStateService manages the state of files to upload and deprecate
@@ -37,7 +37,7 @@ func NewFileStateService() FileStateService {
 func (fss *DefaultFileStateService) GetFilesToUpload() map[types.UploadKey]types.UploadFileContent {
 	fss.mu.RLock()
 	defer fss.mu.RUnlock()
-	
+
 	// Return a copy to prevent external modification
 	result := make(map[types.UploadKey]types.UploadFileContent, len(fss.filesToUpload))
 	for k, v := range fss.filesToUpload {
@@ -84,7 +84,7 @@ func (fss *DefaultFileStateService) AddFileToDeprecate(deprecationFile string, e
 func (fss *DefaultFileStateService) ClearFilesToUpload() {
 	fss.mu.Lock()
 	defer fss.mu.Unlock()
-	
+
 	fss.filesToUpload = make(map[types.UploadKey]types.UploadFileContent)
 }
 
@@ -95,4 +95,3 @@ func (fss *DefaultFileStateService) ClearFilesToDeprecate() {
 
 	fss.filesToDeprecate = make(map[string][]types.DeprecatedFileEntry)
 }
-

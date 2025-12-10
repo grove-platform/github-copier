@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/services"
 )
 
 func main() {

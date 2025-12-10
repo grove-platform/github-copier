@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 const (

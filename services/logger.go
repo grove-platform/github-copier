@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/logging"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 )
 
 var googleInfoLogger *log.Logger
@@ -120,7 +120,6 @@ func isDebugEnabled() bool {
 func isCloudLoggingDisabled() bool {
 	return strings.EqualFold(os.Getenv("COPIER_DISABLE_CLOUD_LOGGING"), "true")
 }
-
 
 // Context-aware logging functions
 

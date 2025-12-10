@@ -174,7 +174,7 @@ Test without making actual commits:
 
 ```bash
 # Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # Send test webhook
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -227,7 +227,7 @@ Expected: Real PR data fetched and processed
 
 ### Test Case 3: Dry-Run Validation
 ```bash
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 ./test-webhook -payload test-payloads/example-pr-merged.json
 ```
 Expected: Processing logged but no commits made

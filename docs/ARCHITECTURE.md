@@ -1,6 +1,6 @@
 # Examples Copier Architecture
 
-This document describes the architecture and design of the examples-copier application, including its core components, main config system, pattern matching, configuration management, deprecation tracking, and operational features.
+This document describes the architecture and design of the github-copier application, including its core components, main config system, pattern matching, configuration management, deprecation tracking, and operational features.
 
 ## Core Architecture
 

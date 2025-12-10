@@ -6,19 +6,19 @@
 
 ```bash
 # Run with default settings
-./examples-copier
+./github-copier
 
 # Run with custom environment
-./examples-copier -env ./configs/.env.production
+./github-copier -env ./configs/.env.production
 
 # Dry-run mode (no actual commits)
-./examples-copier -dry-run
+./github-copier -dry-run
 
 # Validate configuration only
-./examples-copier -validate
+./github-copier -validate
 
 # Show help
-./examples-copier -help
+./github-copier -help
 ```
 
 ### CLI Validator
@@ -349,7 +349,7 @@ chmod +x scripts/test-with-pr.sh
 ### Test in Dry-Run Mode
 ```bash
 # Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # Send test webhook
 ./test-webhook -pr 123 -owner myorg -repo myrepo
@@ -360,7 +360,7 @@ DRY_RUN=true ./examples-copier &
 ### Build
 ```bash
 # Main application
-go build -o examples-copier .
+go build -o github-copier .
 
 # CLI validator
 go build -o config-validator ./cmd/config-validator
@@ -369,7 +369,7 @@ go build -o config-validator ./cmd/config-validator
 go build -o test-webhook ./cmd/test-webhook
 
 # All tools
-go build -o examples-copier . && \
+go build -o github-copier . && \
 go build -o config-validator ./cmd/config-validator && \
 go build -o test-webhook ./cmd/test-webhook
 ```
@@ -442,7 +442,7 @@ workflows:
 gcloud app logs tail -s default
 
 # Local logs
-LOG_LEVEL=debug ./examples-copier
+LOG_LEVEL=debug ./github-copier
 ```
 
 ### Validate Config
@@ -460,7 +460,7 @@ LOG_LEVEL=debug ./examples-copier
 
 ### Dry Run
 ```bash
-DRY_RUN=true ./examples-copier
+DRY_RUN=true ./github-copier
 ```
 
 ### Check Health
@@ -499,7 +499,7 @@ gcloud secrets list
 ## File Locations
 
 ```
-examples-copier/
+github-copier/
 ├── README.md                 # Main documentation
 ├── QUICK-REFERENCE.md        # This file
 ├── docs/
@@ -529,8 +529,8 @@ examples-copier/
 - [ ] Set required environment variables
 - [ ] Create `copier-config.yaml` in source repo
 - [ ] Validate config: `./config-validator validate -config copier-config.yaml`
-- [ ] Test in dry-run: `DRY_RUN=true ./examples-copier`
-- [ ] Deploy: `./examples-copier`
+- [ ] Test in dry-run: `DRY_RUN=true ./github-copier`
+- [ ] Deploy: `./github-copier`
 - [ ] Configure GitHub webhook
 - [ ] Monitor: `curl http://localhost:8080/health`
 

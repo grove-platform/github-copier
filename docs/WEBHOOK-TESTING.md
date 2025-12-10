@@ -1,6 +1,6 @@
 # Webhook Testing Guide
 
-This guide explains how to test the examples-copier application with webhooks using real PR data or example payloads.
+This guide explains how to test the github-copier application with webhooks using real PR data or example payloads.
 
 ## Quick Start
 
@@ -45,7 +45,7 @@ Test your configuration changes locally before deploying:
 
 ```bash
 # Terminal 1: Start app in dry-run mode
-DRY_RUN=true ./examples-copier
+DRY_RUN=true ./github-copier
 
 # Terminal 2: Send test webhook
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -125,7 +125,7 @@ cat > test-go-only.json <<EOF
 EOF
 
 # Test
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 ./test-webhook -payload test-go-only.json
 ```
 
@@ -425,7 +425,7 @@ Add webhook testing to your CI pipeline:
 - name: Test webhook processing
   run: |
     # Start app in background
-    DRY_RUN=true ./examples-copier &
+    DRY_RUN=true ./github-copier &
     APP_PID=$!
     
     # Wait for app to start

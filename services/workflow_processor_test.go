@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,12 +111,12 @@ func createRegexTransformation(pattern, transform string) types.Transformation {
 
 func TestWorkflowProcessor_MoveTransformation(t *testing.T) {
 	tests := []struct {
-		name         string
-		from         string
-		to           string
-		sourcePath   string
-		wantMatch    bool
-		wantTarget   string
+		name       string
+		from       string
+		to         string
+		sourcePath string
+		wantMatch  bool
+		wantTarget string
 	}{
 		{
 			name:       "simple directory move",
@@ -411,7 +411,6 @@ func TestWorkflowProcessor_RegexTransformation(t *testing.T) {
 	}
 }
 
-
 // ============================================================================
 // Tests for Exclude Patterns
 // ============================================================================
@@ -627,7 +626,6 @@ func TestWorkflowProcessor_NoTransformations(t *testing.T) {
 	assert.Empty(t, deprecated, "expected no files to be processed with no transformations")
 }
 
-
 // ============================================================================
 // Tests for Invalid Patterns
 // ============================================================================
@@ -724,23 +722,23 @@ func TestWorkflowProcessor_CustomDeprecationFile(t *testing.T) {
 
 func TestWorkflowProcessor_FileStatusHandling(t *testing.T) {
 	tests := []struct {
-		name           string
-		status         string
+		name             string
+		status           string
 		expectDeprecated bool
 	}{
 		{
-			name:           "removed file goes to deprecation",
-			status:         "removed",
+			name:             "removed file goes to deprecation",
+			status:           "removed",
 			expectDeprecated: true,
 		},
 		{
-			name:           "added file does not go to deprecation",
-			status:         "added",
+			name:             "added file does not go to deprecation",
+			status:           "added",
 			expectDeprecated: false,
 		},
 		{
-			name:           "modified file does not go to deprecation",
-			status:         "modified",
+			name:             "modified file does not go to deprecation",
+			status:           "modified",
 			expectDeprecated: false,
 		},
 	}
@@ -852,4 +850,3 @@ func TestWorkflowProcessor_PathTransformationEdgeCases(t *testing.T) {
 		})
 	}
 }
-

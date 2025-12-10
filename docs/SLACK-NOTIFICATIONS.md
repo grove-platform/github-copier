@@ -1,6 +1,6 @@
 # Slack Notifications
 
-The examples-copier supports sending notifications to Slack when PRs are processed, files are copied, or errors occur.
+The github-copier supports sending notifications to Slack when PRs are processed, files are copied, or errors occur.
 
 ## Features
 
@@ -283,7 +283,7 @@ To reduce notification frequency:
 Add environment variables to your Cloud Run service:
 
 ```bash
-gcloud run services update examples-copier \
+gcloud run services update github-copier \
   --set-env-vars="SLACK_WEBHOOK_URL=https://hooks.slack.com/services/..." \
   --set-env-vars="SLACK_CHANNEL=#code-examples"
 ```
@@ -294,7 +294,7 @@ Add to your `docker-compose.yml`:
 
 ```yaml
 services:
-  examples-copier:
+  github-copier:
     environment:
       - SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
       - SLACK_CHANNEL=#code-examples

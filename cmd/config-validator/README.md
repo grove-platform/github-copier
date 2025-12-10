@@ -1,6 +1,6 @@
 # config-validator
 
-Command-line tool for validating and testing examples-copier workflow configurations.
+Command-line tool for validating and testing github-copier workflow configurations.
 
 > **Note:** This tool validates individual workflow config files. It does not validate main config files. Main config validation is built into the application itself.
 
@@ -15,7 +15,7 @@ The `config-validator` tool helps you:
 ## Installation
 
 ```bash
-cd examples-copier
+cd github-copier
 go build -o config-validator ./cmd/config-validator
 ```
 

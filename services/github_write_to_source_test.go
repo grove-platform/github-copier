@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	. "github.com/mongodb/code-example-tooling/code-copier/types"
+	. "github.com/grove-platform/github-copier/types"
 )
 
 func TestUpdateDeprecationFile_EmptyList(t *testing.T) {

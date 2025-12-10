@@ -9,8 +9,8 @@ import (
 	"github.com/google/go-github/v48/github"
 	"gopkg.in/yaml.v3"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // DefaultMainConfigLoader implements the ConfigLoader interface with main config support
@@ -421,7 +421,7 @@ func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref st
 	// Supports:
 	// - Relative paths: "strategies/pr-strategy.yaml"
 	// - Repo references: "repo://owner/repo/path/to/file.yaml@branch"
-	
+
 	if strings.HasPrefix(ref, "repo://") {
 		// Remote repo reference
 		return mcl.resolveRemoteReference(ctx, ref)
@@ -435,7 +435,7 @@ func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref st
 func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, ref string) (string, error) {
 	// Parse: repo://owner/repo/path/to/file.yaml@branch
 	ref = strings.TrimPrefix(ref, "repo://")
-	
+
 	// Split by @ to get branch
 	parts := strings.Split(ref, "@")
 	branch := "main"
@@ -517,4 +517,3 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 
 	return fileContent.GetContent()
 }
-

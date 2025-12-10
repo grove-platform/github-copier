@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
+	"github.com/grove-platform/github-copier/services"
 	"github.com/stretchr/testify/require"
 
-	test "github.com/mongodb/code-example-tooling/code-copier/tests"
+	test "github.com/grove-platform/github-copier/tests"
 )
 
 // Helper to b64-encode inline strings

@@ -15,7 +15,7 @@ import (
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 	"github.com/shurcooL/graphql"
 	"golang.org/x/oauth2"
 )
