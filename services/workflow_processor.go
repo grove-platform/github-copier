@@ -127,7 +127,8 @@ func (wp *workflowProcessor) processFileForWorkflow(
 		})
 
 		// Handle file based on status
-		if file.Status == "removed" {
+		// GitHub GraphQL API returns uppercase status: "DELETED", "ADDED", "MODIFIED", etc.
+		if file.Status == "DELETED" || file.Status == "removed" {
 			// Add to deprecation map
 			wp.addToDeprecationMap(workflow, targetPath)
 		} else {

@@ -732,6 +732,11 @@ func TestWorkflowProcessor_FileStatusHandling(t *testing.T) {
 			expectDeprecated: true,
 		},
 		{
+			name:             "DELETED file goes to deprecation (GraphQL API format)",
+			status:           "DELETED",
+			expectDeprecated: true,
+		},
+		{
 			name:             "added file does not go to deprecation",
 			status:           "added",
 			expectDeprecated: false,
