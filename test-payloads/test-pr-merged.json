@@ -1,0 +1,67 @@
+{
+  "action": "closed",
+  "number": 1,
+  "pull_request": {
+    "number": 1,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "test123abc456def",
+    "title": "Test PR for integration testing",
+    "head": {
+      "ref": "test-branch",
+      "sha": "abc123test",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/go/main.go",
+      "status": "added",
+      "additions": 20,
+      "deletions": 0,
+      "changes": 20
+    },
+    {
+      "filename": "examples/go/utils/helper.go",
+      "status": "added",
+      "additions": 15,
+      "deletions": 0,
+      "changes": 15
+    },
+    {
+      "filename": "examples/python/app.py",
+      "status": "added",
+      "additions": 30,
+      "deletions": 0,
+      "changes": 30
+    },
+    {
+      "filename": "docs/README.md",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 2,
+      "changes": 7
+    }
+  ]
+}
+
