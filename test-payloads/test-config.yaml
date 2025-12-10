@@ -1,0 +1,66 @@
+# Test configuration for local integration testing
+# Source: cbullinger/copier-app-source-test
+# Destinations: cbullinger/copier-app-dest-1, cbullinger/copier-app-dest-2
+
+workflows:
+  # Workflow 1: Copy Go files to dest-1
+  - name: "test-go-to-dest1"
+    source:
+      repo: "cbullinger/copier-app-source-test"
+      branch: "main"
+      patterns:
+        - type: glob
+          pattern: "examples/go/**"
+    destination:
+      repo: "cbullinger/copier-app-dest-1"
+      branch: "main"
+    transformations:
+      - type: move
+        from: "examples/go/"
+        to: "go-examples/"
+    commit:
+      strategy: pr
+      message: "Sync Go examples from source"
+      pr_title: "[Test] Sync Go examples"
+      auto_merge: false
+
+  # Workflow 2: Copy Python files to dest-2
+  - name: "test-python-to-dest2"
+    source:
+      repo: "cbullinger/copier-app-source-test"
+      branch: "main"
+      patterns:
+        - type: glob
+          pattern: "examples/python/**"
+    destination:
+      repo: "cbullinger/copier-app-dest-2"
+      branch: "main"
+    transformations:
+      - type: move
+        from: "examples/python/"
+        to: "python-examples/"
+    commit:
+      strategy: pr
+      message: "Sync Python examples from source"
+      pr_title: "[Test] Sync Python examples"
+      auto_merge: false
+
+  # Workflow 3: Copy docs to both destinations
+  - name: "test-docs-to-dest1"
+    source:
+      repo: "cbullinger/copier-app-source-test"
+      branch: "main"
+      patterns:
+        - type: glob
+          pattern: "docs/**"
+    destination:
+      repo: "cbullinger/copier-app-dest-1"
+      branch: "main"
+    transformations:
+      - type: move
+        from: "docs/"
+        to: "documentation/"
+    commit:
+      strategy: direct
+      message: "Sync docs from source"
+
