@@ -294,12 +294,16 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	container.FileStateService.ClearFilesToUpload()
 
 	// Update deprecation file - copy from FileStateService to global map for legacy function
+	// The deprecationMap is keyed by deprecation file name, with a slice of entries per file
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
 	FilesToDeprecate = make(map[string]types.Configs)
-	for _, entry := range deprecationMap {
-		FilesToDeprecate[entry.FileName] = types.Configs{
-			TargetRepo:   entry.Repo,
-			TargetBranch: entry.Branch,
+	for _, entries := range deprecationMap {
+		// Iterate over all entries for each deprecation file
+		for _, entry := range entries {
+			FilesToDeprecate[entry.FileName] = types.Configs{
+				TargetRepo:   entry.Repo,
+				TargetBranch: entry.Branch,
+			}
 		}
 	}
 	UpdateDeprecationFile()
