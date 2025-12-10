@@ -40,13 +40,13 @@ A GitHub app that automatically copies code examples and files from source repos
 ```bash
 # Clone the repository
 git clone https://github.com/your-org/code-example-tooling.git
-cd code-example-tooling/examples-copier
+cd code-example-tooling/github-copier
 
 # Install dependencies
 go mod download
 
 # Build the application
-go build -o examples-copier .
+go build -o github-copier .
 
 # Build CLI tools
 go build -o config-validator ./cmd/config-validator
@@ -137,16 +137,16 @@ workflows:
 
 ```bash
 # Run with default settings
-./examples-copier
+./github-copier
 
 # Run with custom environment file
-./examples-copier -env ./configs/.env.production
+./github-copier -env ./configs/.env.production
 
 # Run in dry-run mode (no actual commits)
-./examples-copier -dry-run
+./github-copier -dry-run
 
 # Validate configuration only
-./examples-copier -validate
+./github-copier -validate
 ```
 
 ## Configuration
@@ -467,7 +467,7 @@ go tool cover -html=coverage.out
 Test without making actual changes:
 
 ```bash
-DRY_RUN=true ./examples-copier
+DRY_RUN=true ./github-copier
 ```
 
 In dry-run mode:
@@ -481,9 +481,9 @@ In dry-run mode:
 Enable detailed logging:
 
 ```bash
-LOG_LEVEL=debug ./examples-copier
+LOG_LEVEL=debug ./github-copier
 # or
-COPIER_DEBUG=true ./examples-copier
+COPIER_DEBUG=true ./github-copier
 ```
 
 ## Architecture
@@ -491,7 +491,7 @@ COPIER_DEBUG=true ./examples-copier
 ### Project Structure
 
 ```
-examples-copier/
+github-copier/
 ├── app.go                    # Main application entry point
 ├── cmd/
 │   ├── config-validator/     # CLI validation tool
@@ -540,15 +540,15 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete deployment guide.
 ### Google Cloud Run
 
 ```bash
-cd examples-copier
+cd github-copier
 ./scripts/deploy-cloudrun.sh
 ```
 
 ### Docker
 
 ```bash
-docker build -t examples-copier .
-docker run -p 8080:8080 --env-file env.yaml examples-copier
+docker build -t github-copier .
+docker run -p 8080:8080 --env-file env.yaml github-copier
 ```
 
 ## Security

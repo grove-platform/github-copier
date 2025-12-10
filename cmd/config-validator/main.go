@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 )
 
 func main() {

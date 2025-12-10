@@ -1,14 +1,14 @@
 # Frequently Asked Questions (FAQ)
 
-Common questions about the examples-copier application.
+Common questions about the github-copier application.
 
 ## General Questions
 
-### What is examples-copier?
+### What is github-copier?
 
 Examples-copier is a GitHub app that automatically copies code examples and files from a source repository to one or more target repositories when pull requests are merged. It features advanced pattern matching, path transformations, and audit logging.
 
-### Why use examples-copier?
+### Why use github-copier?
 
 - **Automate file synchronization** between repositories
 - **Maintain consistency** across multiple documentation repos
@@ -74,7 +74,7 @@ Yes. A file can match multiple workflows and be copied to multiple targets. This
 
 **Workflow configs:** Store in `.copier/workflows/config.yaml` in source repositories, or reference them from the main config.
 
-**For local testing:** Store config files in the examples-copier directory and set appropriate environment variables.
+**For local testing:** Store config files in the github-copier directory and set appropriate environment variables.
 
 ## Pattern Matching
 

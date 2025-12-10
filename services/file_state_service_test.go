@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -377,4 +377,3 @@ func TestFileStateService_CommitStrategyTypes(t *testing.T) {
 		})
 	}
 }
-

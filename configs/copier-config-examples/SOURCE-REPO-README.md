@@ -401,11 +401,11 @@ The deprecation file is stored in **this repository** (source):
 
 ## Need Help?
 
-- **Full Documentation**: [Code Example Tooling Repository](https://github.com/mongodb/code-example-tooling)
-- **Configuration Examples**: See `examples-copier/configs/copier-config-examples/`
-- **Pattern Matching Guide**: See `examples-copier/docs/PATTERN-MATCHING-GUIDE.md`
-- **Main Config Architecture**: See `examples-copier/configs/copier-config-examples/MAIN-CONFIG-README.md`
-- **Deprecation Tracking**: See `examples-copier/docs/DEPRECATION-TRACKING-EXPLAINED.md`
+- **Full Documentation**: [Code Example Tooling Repository](https://github.com/grove-platform/github-copier)
+- **Configuration Examples**: See `github-copier/configs/copier-config-examples/`
+- **Pattern Matching Guide**: See `github-copier/docs/PATTERN-MATCHING-GUIDE.md`
+- **Main Config Architecture**: See `github-copier/configs/copier-config-examples/MAIN-CONFIG-README.md`
+- **Deprecation Tracking**: See `github-copier/docs/DEPRECATION-TRACKING-EXPLAINED.md`
 
 ## Example: Complete Workflow
 
@@ -506,5 +506,5 @@ workflows:
 
 ## Questions?
 
-Contact the Developer Docs team or open an issue in the [code-example-tooling repository](https://github.com/mongodb/code-example-tooling/issues).
+Contact the Developer Docs team or open an issue in the [code-example-tooling repository](https://github.com/grove-platform/github-copier/issues).
 

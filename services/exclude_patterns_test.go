@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 func TestExcludePatterns_PrefixPattern(t *testing.T) {
@@ -318,4 +318,3 @@ func TestExcludePatterns_ComplexScenarios(t *testing.T) {
 		})
 	}
 }
-

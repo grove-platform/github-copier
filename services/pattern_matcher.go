@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // PatternMatcher handles pattern matching for file paths
@@ -56,20 +56,20 @@ func (pm *DefaultPatternMatcher) Match(filePath string, pattern types.SourcePatt
 func (pm *DefaultPatternMatcher) matchPrefix(filePath, pattern string) types.MatchResult {
 	// Normalize paths (remove trailing slashes)
 	pattern = strings.TrimSuffix(pattern, "/")
-	
+
 	if strings.HasPrefix(filePath, pattern) {
 		// Extract the relative path after the prefix
 		relPath := strings.TrimPrefix(filePath, pattern)
 		relPath = strings.TrimPrefix(relPath, "/")
-		
+
 		variables := map[string]string{
 			"matched_prefix": pattern,
 			"relative_path":  relPath,
 		}
-		
+
 		return types.NewMatchResult(true, variables)
 	}
-	
+
 	return types.NewMatchResult(false, nil)
 }
 
@@ -94,8 +94,6 @@ func (pm *DefaultPatternMatcher) matchGlob(filePath, pattern string) types.Match
 
 	return types.NewMatchResult(false, nil)
 }
-
-
 
 // matchRegex matches using regular expressions with named capture groups
 func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.MatchResult {
@@ -148,14 +146,14 @@ func (pt *DefaultPathTransformer) Transform(sourcePath string, template string, 
 	// Create transformation context
 	ctx := types.NewTransformContext(sourcePath, variables)
 	ctx.AddBuiltInVariables()
-	
+
 	// Replace variables in template
 	result := template
 	for key, value := range ctx.Variables {
 		placeholder := fmt.Sprintf("${%s}", key)
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
-	
+
 	// Check for unreplaced variables
 	if strings.Contains(result, "${") {
 		// Extract unreplaced variable names for better error message
@@ -164,7 +162,7 @@ func (pt *DefaultPathTransformer) Transform(sourcePath string, template string, 
 			return "", fmt.Errorf("unreplaced variables in template: %v", unreplaced)
 		}
 	}
-	
+
 	return result, nil
 }
 
@@ -215,7 +213,7 @@ func (mt *DefaultMessageTemplater) RenderPRTitle(template string, ctx *types.Mes
 // RenderPRBody renders a PR body template
 func (mt *DefaultMessageTemplater) RenderPRBody(template string, ctx *types.MessageContext) string {
 	if template == "" {
-		return fmt.Sprintf("Automated update of %d file(s) from %s (PR #%d)", 
+		return fmt.Sprintf("Automated update of %d file(s) from %s (PR #%d)",
 			ctx.FileCount, ctx.SourceRepo, ctx.PRNumber)
 	}
 	return mt.render(template, ctx)
@@ -224,7 +222,7 @@ func (mt *DefaultMessageTemplater) RenderPRBody(template string, ctx *types.Mess
 // render performs the actual template rendering
 func (mt *DefaultMessageTemplater) render(template string, ctx *types.MessageContext) string {
 	result := template
-	
+
 	// Built-in context variables
 	replacements := map[string]string{
 		"${rule_name}":     ctx.RuleName,
@@ -236,18 +234,18 @@ func (mt *DefaultMessageTemplater) render(template string, ctx *types.MessageCon
 		"${pr_number}":     fmt.Sprintf("%d", ctx.PRNumber),
 		"${commit_sha}":    ctx.CommitSHA,
 	}
-	
+
 	// Apply built-in replacements
 	for placeholder, value := range replacements {
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
-	
+
 	// Apply custom variables from pattern matching
 	for key, value := range ctx.Variables {
 		placeholder := fmt.Sprintf("${%s}", key)
 		result = strings.ReplaceAll(result, placeholder, value)
 	}
-	
+
 	return result
 }
 
@@ -273,4 +271,3 @@ func (pm *DefaultPatternMatcher) shouldExclude(filePath string, excludePatterns 
 
 	return false
 }
-

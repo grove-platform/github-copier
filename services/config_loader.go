@@ -8,8 +8,8 @@ import (
 	"github.com/google/go-github/v48/github"
 	"gopkg.in/yaml.v3"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // ConfigLoader handles loading and parsing configuration files

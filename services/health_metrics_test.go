@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,11 +228,11 @@ func TestMetricsCollector_ZeroValues(t *testing.T) {
 
 func TestMetricsCollector_SuccessRateCalculation(t *testing.T) {
 	tests := []struct {
-		name        string
-		received    int
-		processed   int
-		failed      int
-		wantRate    float64
+		name      string
+		received  int
+		processed int
+		failed    int
+		wantRate  float64
 	}{
 		{
 			name:      "all success",
@@ -319,4 +319,3 @@ func TestMetricsCollector_ConcurrentAccess(t *testing.T) {
 	metrics := collector.GetMetrics(fileStateService)
 	assert.Greater(t, metrics.Webhooks.Received, int64(0))
 }
-

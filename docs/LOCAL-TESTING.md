@@ -1,6 +1,6 @@
 # Local Testing Guide
 
-This guide explains how to run and test the examples-copier application locally without requiring Google Cloud or MongoDB.
+This guide explains how to run and test the github-copier application locally without requiring Google Cloud or MongoDB.
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ make run-local
 
 ```bash
 # One-liner for quick testing
-COPIER_DISABLE_CLOUD_LOGGING=true DRY_RUN=true ./examples-copier
+COPIER_DISABLE_CLOUD_LOGGING=true DRY_RUN=true ./github-copier
 ```
 
 ### Option 3: Use Makefile
@@ -311,7 +311,7 @@ AUDIT_COLLECTION=audit_events
 **Solution:**
 ```bash
 # Disable cloud logging for local testing
-COPIER_DISABLE_CLOUD_LOGGING=true ./examples-copier
+COPIER_DISABLE_CLOUD_LOGGING=true ./github-copier
 ```
 
 ### Error: "connection refused" when sending webhook
@@ -324,7 +324,7 @@ COPIER_DISABLE_CLOUD_LOGGING=true ./examples-copier
 make run-local-quick
 
 # Terminal 2: In a NEW terminal window, send the webhook
-cd examples-copier
+cd github-copier
 make test-webhook-example
 
 # Or manually:

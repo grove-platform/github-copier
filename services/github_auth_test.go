@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 )
 
 func TestGenerateGitHubJWT_EmptyAppID(t *testing.T) {

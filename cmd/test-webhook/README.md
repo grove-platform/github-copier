@@ -1,6 +1,6 @@
 # test-webhook
 
-Command-line tool for testing the examples-copier webhook endpoint with example or real PR data.
+Command-line tool for testing the github-copier webhook endpoint with example or real PR data.
 
 ## Overview
 
@@ -14,7 +14,7 @@ The `test-webhook` tool helps you:
 ## Installation
 
 ```bash
-cd examples-copier
+cd github-copier
 go build -o test-webhook ./cmd/test-webhook
 ```
 
@@ -139,7 +139,7 @@ Verify files are copied to correct locations:
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # 2. Send test webhook
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -155,7 +155,7 @@ Test Slack integration:
 ```bash
 # 1. Start app with Slack enabled
 export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
-./examples-copier &
+./github-copier &
 
 # 2. Send test webhook
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -170,7 +170,7 @@ Debug webhook processing:
 ```bash
 # 1. Enable debug logging
 export LOG_LEVEL=debug
-./examples-copier &
+./github-copier &
 
 # 2. Send test webhook
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -234,7 +234,7 @@ vim test-payloads/my-test.json
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # 2. Test with example payload
 ./test-webhook -payload test-payloads/example-pr-merged.json
@@ -274,7 +274,7 @@ Response: 401 Unauthorized
 **Solution:** Disable webhook signature verification for testing:
 ```bash
 unset WEBHOOK_SECRET
-./examples-copier &
+./github-copier &
 ```
 
 ### 404 Not Found
@@ -344,7 +344,7 @@ cat > run-tests.sh << 'EOF'
 set -e
 
 echo "Starting app..."
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 APP_PID=$!
 sleep 2
 
@@ -385,12 +385,12 @@ jobs:
       
       - name: Build
         run: |
-          go build -o examples-copier .
+          go build -o github-copier .
           go build -o test-webhook ./cmd/test-webhook
       
       - name: Test
         run: |
-          DRY_RUN=true ./examples-copier &
+          DRY_RUN=true ./github-copier &
           sleep 2
           ./test-webhook -payload test-payloads/example-pr-merged.json
 ```

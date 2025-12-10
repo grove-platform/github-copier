@@ -1,12 +1,12 @@
 # Helper Scripts
 
-Collection of helper scripts for testing and running the examples-copier application.
+Collection of helper scripts for testing and running the github-copier application.
 
 ## Scripts
 
 ### run-local.sh
 
-Start the examples-copier application locally with proper environment configuration.
+Start the github-copier application locally with proper environment configuration.
 
 **Usage:**
 ```bash
