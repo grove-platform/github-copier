@@ -106,7 +106,10 @@ func RetrieveFileContents(filePath string) (github.RepositoryContent, error) {
 			})
 
 	if err != nil {
-		LogCritical(fmt.Sprintf("Error getting file content: %v", err))
+		return github.RepositoryContent{}, fmt.Errorf("failed to get file content for %s: %w", filePath, err)
+	}
+	if fileContent == nil {
+		return github.RepositoryContent{}, fmt.Errorf("file content is nil for path: %s", filePath)
 	}
 	return *fileContent, nil
 }
