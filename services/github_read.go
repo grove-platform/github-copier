@@ -21,10 +21,15 @@ import (
 func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFile, error) {
 	if InstallationAccessToken == "" {
 		log.Println("No installation token provided")
-		ConfigurePermissions()
+		if err := ConfigurePermissions(); err != nil {
+			return nil, fmt.Errorf("failed to configure permissions: %w", err)
+		}
 	}
 
-	client := GetGraphQLClient()
+	client, err := GetGraphQLClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GraphQL client: %w", err)
+	}
 	ctx := context.Background()
 
 	var changedFiles []ChangedFile

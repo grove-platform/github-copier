@@ -210,7 +210,11 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// Configure GitHub permissions
 	if InstallationAccessToken == "" {
-		ConfigurePermissions()
+		if err := ConfigurePermissions(); err != nil {
+			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
+			container.MetricsCollector.RecordWebhookFailed()
+			return
+		}
 	}
 
 	// Load configuration using new loader

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -241,7 +240,10 @@ func addFilesViaPR(ctx context.Context, client *github.Client, key UploadKey,
 		if err = mergePR(ctx, client, key.RepoName, pr.GetNumber()); err != nil {
 			return fmt.Errorf("merge PR: %w", err)
 		}
-		deleteBranchIfExists(ctx, client, key.RepoName, &github.Reference{Ref: github.String("refs/heads/" + tempBranch)})
+		if err = deleteBranchIfExists(ctx, client, key.RepoName, &github.Reference{Ref: github.String("refs/heads/" + tempBranch)}); err != nil {
+			// Log but don't fail - branch cleanup is not critical
+			LogWarning(fmt.Sprintf("Failed to delete temp branch after merge: %v", err))
+		}
 	} else {
 		LogInfo(fmt.Sprintf("PR created and awaiting review: #%d", pr.GetNumber()))
 	}
@@ -290,7 +292,9 @@ func createBranch(ctx context.Context, client *github.Client, repo, newBranch st
 
 	// *** Check if branch (newBranchRef) already exists and delete it ***
 	newBranchRef, _, err := client.Git.GetRef(ctx, owner, repoName, fmt.Sprintf("%s%s", "refs/heads/", newBranch))
-	deleteBranchIfExists(ctx, client, normalizedRepo, newBranchRef)
+	if err := deleteBranchIfExists(ctx, client, normalizedRepo, newBranchRef); err != nil {
+		return nil, fmt.Errorf("failed to delete existing branch %s: %w", newBranch, err)
+	}
 
 	newRef := &github.Reference{
 		Ref: github.String(fmt.Sprintf("%s%s", "refs/heads/", newBranch)),
@@ -441,10 +445,11 @@ func mergePR(ctx context.Context, client *github.Client, repo string, pr_number 
 }
 
 // deleteBranchIfExists deletes the specified branch if it exists, except for 'main'.
-func deleteBranchIfExists(backgroundContext context.Context, client *github.Client, repo string, ref *github.Reference) {
+// Returns an error if attempting to delete the main branch or if deletion fails.
+func deleteBranchIfExists(backgroundContext context.Context, client *github.Client, repo string, ref *github.Reference) error {
 	// Early return if ref is nil (branch doesn't exist)
 	if ref == nil {
-		return
+		return nil
 	}
 
 	// Normalize repo name for consistent logging
@@ -453,7 +458,7 @@ func deleteBranchIfExists(backgroundContext context.Context, client *github.Clie
 
 	if ref.GetRef() == "refs/heads/main" {
 		LogError("I refuse to delete branch 'main'.")
-		log.Fatal()
+		return fmt.Errorf("refusing to delete protected branch 'main'")
 	}
 
 	LogInfo(fmt.Sprintf("Deleting branch %s on %s", ref.GetRef(), normalizedRepo))
@@ -463,13 +468,15 @@ func deleteBranchIfExists(backgroundContext context.Context, client *github.Clie
 		_, err = client.Git.DeleteRef(backgroundContext, owner, repoName, ref.GetRef())
 		if err != nil {
 			LogCritical(fmt.Sprintf("Error deleting branch: %v\n", err))
+			return fmt.Errorf("failed to delete branch %s: %w", ref.GetRef(), err)
 		}
 	}
+	return nil
 }
 
 // DeleteBranchIfExistsExported is an exported wrapper for testing deleteBranchIfExists
-func DeleteBranchIfExistsExported(ctx context.Context, client *github.Client, repo string, ref *github.Reference) {
-	deleteBranchIfExists(ctx, client, repo, ref)
+func DeleteBranchIfExistsExported(ctx context.Context, client *github.Client, repo string, ref *github.Reference) error {
+	return deleteBranchIfExists(ctx, client, repo, ref)
 }
 
 // parseIntWithDefault parses a string to int, returning defaultValue on error
