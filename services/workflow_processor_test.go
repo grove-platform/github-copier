@@ -14,30 +14,6 @@ import (
 // Mock implementations
 // ============================================================================
 
-// mockPatternMatcher is a mock implementation of PatternMatcher
-type mockPatternMatcher struct {
-	matchFunc func(filePath string, pattern types.SourcePattern) types.MatchResult
-}
-
-func (m *mockPatternMatcher) Match(filePath string, pattern types.SourcePattern) types.MatchResult {
-	if m.matchFunc != nil {
-		return m.matchFunc(filePath, pattern)
-	}
-	return types.NewMatchResult(false, nil)
-}
-
-// mockPathTransformer is a mock implementation of PathTransformer
-type mockPathTransformer struct {
-	transformFunc func(sourcePath string, template string, variables map[string]string) (string, error)
-}
-
-func (m *mockPathTransformer) Transform(sourcePath string, template string, variables map[string]string) (string, error) {
-	if m.transformFunc != nil {
-		return m.transformFunc(sourcePath, template, variables)
-	}
-	return template, nil
-}
-
 // mockMessageTemplater is a mock implementation of MessageTemplater
 type mockMessageTemplater struct{}
 

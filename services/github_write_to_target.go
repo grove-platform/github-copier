@@ -289,7 +289,7 @@ func createBranch(ctx context.Context, client *github.Client, repo, newBranch st
 	}
 
 	// *** Check if branch (newBranchRef) already exists and delete it ***
-	newBranchRef, _, err := client.Git.GetRef(ctx, owner, repoName, fmt.Sprintf("%s%s", "refs/heads/", newBranch))
+	newBranchRef, _, _ := client.Git.GetRef(ctx, owner, repoName, fmt.Sprintf("%s%s", "refs/heads/", newBranch))
 	if err := deleteBranchIfExists(ctx, client, normalizedRepo, newBranchRef); err != nil {
 		return nil, fmt.Errorf("failed to delete existing branch %s: %w", newBranch, err)
 	}

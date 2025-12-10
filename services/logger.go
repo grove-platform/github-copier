@@ -14,6 +14,12 @@ import (
 	"github.com/grove-platform/github-copier/configs"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+// requestIDKey is the context key for request IDs
+const requestIDKey contextKey = "request_id"
+
 var googleInfoLogger *log.Logger
 var googleWarningLogger *log.Logger
 var googleErrorLogger *log.Logger
@@ -196,7 +202,7 @@ func LogAndReturnError(ctx context.Context, operation string, message string, er
 
 // formatLogMessage formats a log message with context and fields
 func formatLogMessage(ctx context.Context, message string, fields map[string]interface{}) string {
-	if fields == nil || len(fields) == 0 {
+	if len(fields) == 0 {
 		return message
 	}
 
@@ -214,8 +220,8 @@ func WithRequestID(r *http.Request) (context.Context, string) {
 	// Generate a simple request ID
 	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
 
-	// Add to context
-	ctx := context.WithValue(r.Context(), "request_id", requestID)
+	// Add to context using typed key to avoid collisions
+	ctx := context.WithValue(r.Context(), requestIDKey, requestID)
 
 	return ctx, requestID
 }

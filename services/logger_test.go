@@ -13,11 +13,11 @@ import (
 
 func TestLogDebug(t *testing.T) {
 	tests := []struct {
-		name          string
-		logLevel      string
-		copierDebug   string
-		message       string
-		shouldLog     bool
+		name        string
+		logLevel    string
+		copierDebug string
+		message     string
+		shouldLog   bool
 	}{
 		{
 			name:        "debug enabled via LOG_LEVEL",
@@ -289,15 +289,15 @@ func TestLogFileOperation(t *testing.T) {
 
 func TestWithRequestID(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
-	
+
 	ctx, requestID := WithRequestID(req)
-	
+
 	if requestID == "" {
 		t.Error("Expected non-empty request ID")
 	}
 
-	// Check that request ID is in context
-	ctxValue := ctx.Value("request_id")
+	// Check that request ID is in context using the typed key
+	ctxValue := ctx.Value(requestIDKey)
 	if ctxValue == nil {
 		t.Error("Expected request_id in context")
 	}
@@ -405,4 +405,3 @@ func TestIsCloudLoggingDisabled(t *testing.T) {
 		})
 	}
 }
-

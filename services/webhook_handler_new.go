@@ -184,7 +184,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	w.Write([]byte(`{"status":"accepted"}`))
+	_, _ = w.Write([]byte(`{"status":"accepted"}`))
 
 	LogInfoCtx(ctx, "response sent", map[string]interface{}{
 		"elapsed_ms": time.Since(startTime).Milliseconds(),
@@ -226,7 +226,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		container.MetricsCollector.RecordWebhookFailed()
 
 		// Send error notification to Slack
-		container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
 			Operation:  "config_load",
 			Error:      err,
 			PRNumber:   prNumber,
@@ -271,7 +271,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		container.MetricsCollector.RecordWebhookFailed()
 
 		// Send error notification to Slack
-		container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
 			Operation:  "get_files",
 			Error:      err,
 			PRNumber:   prNumber,
@@ -325,7 +325,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	})
 
 	// Send success notification to Slack
-	container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
+	_ = container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
 		PRNumber:       prNumber,
 		PRTitle:        fmt.Sprintf("PR #%d", prNumber), // TODO: Get actual PR title from GitHub
 		PRURL:          fmt.Sprintf("https://github.com/%s/pull/%d", webhookRepo, prNumber),
