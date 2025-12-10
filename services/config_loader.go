@@ -93,6 +93,9 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 	if err != nil {
 		return "", fmt.Errorf("failed to get config file: %w", err)
 	}
+	if fileContent == nil {
+		return "", fmt.Errorf("config file content is nil for path: %s", filePath)
+	}
 
 	// Decode content
 	content, err := fileContent.GetContent()

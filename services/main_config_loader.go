@@ -246,6 +246,9 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow config file: %w", err)
 	}
+	if fileContent == nil {
+		return nil, fmt.Errorf("workflow config file content is nil for path: %s", ref.Path)
+	}
 
 	content, err = fileContent.GetContent()
 	if err != nil {
@@ -294,6 +297,9 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow config file from %s: %w", ref.Repo, err)
+	}
+	if fileContent == nil {
+		return nil, fmt.Errorf("workflow config file content is nil for path: %s in repo %s", ref.Path, ref.Repo)
 	}
 
 	content, err := fileContent.GetContent()
@@ -466,6 +472,9 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 	if err != nil {
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
+	if fileContent == nil {
+		return "", fmt.Errorf("referenced file content is nil for path: %s", filePath)
+	}
 
 	return fileContent.GetContent()
 }
@@ -501,6 +510,9 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
+	}
+	if fileContent == nil {
+		return "", fmt.Errorf("referenced file content is nil for path: %s", resolvedPath)
 	}
 
 	return fileContent.GetContent()
