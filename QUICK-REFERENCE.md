@@ -317,10 +317,10 @@ go test ./services -cover
 go build -o test-webhook ./cmd/test-webhook
 
 # Send example payload
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # Dry-run (see payload without sending)
-./test-webhook -payload test-payloads/example-pr-merged.json -dry-run
+./test-webhook -payload testdata/example-pr-merged.json -dry-run
 ```
 
 #### Option 2: Use Real PR Data

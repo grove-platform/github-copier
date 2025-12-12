@@ -47,7 +47,7 @@ CONFIG_FILE=copier-config.yaml \
 make run-local-quick
 
 # Send a test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 You should see a notification in your Slack channel!
@@ -217,7 +217,7 @@ export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
 CONFIG_FILE=copier-config.yaml make run-local-quick
 
 # Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ### Test with Real PR

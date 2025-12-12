@@ -18,10 +18,10 @@ go build -o test-webhook ./cmd/test-webhook
 
 ```bash
 # Send example payload to local server
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # See payload without sending
-./test-webhook -payload test-payloads/example-pr-merged.json -dry-run
+./test-webhook -payload testdata/example-pr-merged.json -dry-run
 ```
 
 ### 3. Test with Real PR Data
@@ -48,7 +48,7 @@ Test your configuration changes locally before deploying:
 DRY_RUN=true ./github-copier
 
 # Terminal 2: Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # Check Terminal 1 for processing logs
 ```
@@ -231,7 +231,7 @@ chmod +x scripts/test-with-pr.sh
 
 ### Complete Payload
 
-See `test-payloads/example-pr-merged.json` for a complete example with:
+See `testdata/example-pr-merged.json` for a complete example with:
 - Multiple file changes (added, modified, removed)
 - Full PR metadata
 - Repository information
@@ -432,7 +432,7 @@ Add webhook testing to your CI pipeline:
     sleep 5
     
     # Run webhook tests
-    ./test-webhook -payload test-payloads/example-pr-merged.json
+    ./test-webhook -payload testdata/example-pr-merged.json
     
     # Stop app
     kill $APP_PID

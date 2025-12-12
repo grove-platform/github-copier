@@ -25,7 +25,7 @@ Start the github-copier application locally with proper environment configuratio
 ./scripts/run-local.sh
 
 # In another terminal, test it
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 **Environment:**
@@ -61,7 +61,7 @@ Send a test webhook and check the metrics.
 ```
 Testing webhook with example payload...
 
-✓ Loaded payload from test-payloads/example-pr-merged.json
+✓ Loaded payload from testdata/example-pr-merged.json
 ✓ Response: 200 OK
 ✓ Webhook sent successfully
 

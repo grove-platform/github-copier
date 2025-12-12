@@ -241,7 +241,7 @@ pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
 
 3. **Test with curl:**
    ```bash
-   ./test-webhook -payload test-payloads/example-pr-merged.json
+   ./test-webhook -payload testdata/example-pr-merged.json
    ```
 
 ## Deployment Issues
@@ -456,7 +456,7 @@ curl http://localhost:8080/metrics | jq
 
 ```bash
 DRY_RUN=true ./github-copier &
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ### Check Audit Logs

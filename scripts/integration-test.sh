@@ -10,7 +10,7 @@
 # Environment:
 #   APP_URL         - App URL (default: http://localhost:8080)
 #   WEBHOOK_SECRET  - Webhook secret (default: reads from .env.test)
-#   PAYLOAD_FILE    - Payload file (default: test-payloads/test-pr-merged.json)
+#   PAYLOAD_FILE    - Payload file (default: testdata/test-pr-merged.json)
 
 set -e
 
@@ -22,7 +22,7 @@ fi
 # Configuration
 APP_URL="${APP_URL:-http://localhost:8080}"
 WEBHOOK_SECRET="${WEBHOOK_SECRET:-test-secret}"
-PAYLOAD_FILE="${PAYLOAD_FILE:-test-payloads/test-pr-merged.json}"
+PAYLOAD_FILE="${PAYLOAD_FILE:-testdata/test-pr-merged.json}"
 
 # Colors
 RED='\033[0;31m'
