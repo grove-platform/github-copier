@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## December 2024
+## December 2025
 
 ### Added
 - CI/CD pipeline with GitHub Actions (`.github/workflows/ci.yml`)
@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
   - Lint job with golangci-lint
   - Security scanning with gosec
   - Build verification
+  - Automated deployment to Cloud Run on merge to main (via Workload Identity Federation)
 - Pre-commit hooks for secrets detection and Go linting (`.pre-commit-config.yaml`)
 - AGENT.md for AI agent context
 - Comprehensive test suite for `workflow_processor.go` (843 lines, 94%+ coverage)
@@ -19,6 +20,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Renamed module from `github.com/mongodb/code-example-tooling/code-copier` to `github.com/grove-platform/github-copier`
 - Renamed binary from `examples-copier` to `github-copier`
+- Renamed `test-payloads/` to `testdata/` (Go convention)
 - All `log.Fatal` calls replaced with proper error returns for graceful error handling
 - `FileStateService.filesToDeprecate` changed from single-entry map to slice-based accumulation
 
