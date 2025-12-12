@@ -2,14 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
+## December 2024
 
 ### Added
 - CI/CD pipeline with GitHub Actions (`.github/workflows/ci.yml`)
-  - Test job with race detection
+  - Test job
   - Lint job with golangci-lint
   - Security scanning with gosec
   - Build verification
@@ -20,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test environment configuration (`test-payloads/.env.test`)
 
 ### Changed
-- **BREAKING**: Renamed module from `github.com/mongodb/code-example-tooling/code-copier` to `github.com/grove-platform/github-copier`
+- Renamed module from `github.com/mongodb/code-example-tooling/code-copier` to `github.com/grove-platform/github-copier`
 - Renamed binary from `examples-copier` to `github-copier`
 - All `log.Fatal` calls replaced with proper error returns for graceful error handling
 - `FileStateService.filesToDeprecate` changed from single-entry map to slice-based accumulation
@@ -32,15 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `services/github_write_to_source.go`
   - `services/main_config_loader.go`
   - `services/config_loader.go`
+- DELETED file status handling: GitHub GraphQL API returns uppercase `DELETED` but code checked for lowercase `removed`
 
 ### Security
 - Added gitleaks pre-commit hook for secrets detection
 - Added gosec security scanning in CI pipeline
 
-## [1.0.0] - 2024-12-01
+## Initial Release (Migration from mongodb/code-example-tooling)
 
-### Added
-- Initial release after migration from `mongodb/code-example-tooling` monorepo
+### Features
 - Webhook service for automated file copying on PR merge
 - Pattern matching support: prefix, glob, regex
 - Transformation types: move, copy, glob, regex
@@ -51,7 +48,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MongoDB audit logging (optional)
 - Google Cloud Logging integration
 - Dry-run mode for testing
-
-[Unreleased]: https://github.com/grove-platform/github-copier/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/grove-platform/github-copier/releases/tag/v1.0.0
 
