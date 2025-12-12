@@ -93,7 +93,7 @@ make test-webhook-example
 
 # Or send webhook manually with secret
 export WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret=webhook-secret)
-./test-webhook -payload test-payloads/example-pr-merged.json -secret "$WEBHOOK_SECRET"
+./test-webhook -payload testdata/example-pr-merged.json -secret "$WEBHOOK_SECRET"
 
 # Or test with real PR
 export GITHUB_TOKEN=ghp_...
@@ -155,7 +155,7 @@ nano .copier/workflows/main.yaml
 make run-local
 
 # 4. Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 5. Check logs to verify changes work
 ```
@@ -329,7 +329,7 @@ make test-webhook-example
 
 # Or manually:
 export WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret=webhook-secret)
-./test-webhook -payload test-payloads/example-pr-merged.json -secret "$WEBHOOK_SECRET"
+./test-webhook -payload testdata/example-pr-merged.json -secret "$WEBHOOK_SECRET"
 ```
 
 **Note:** The `make test-webhook-example` command requires the server to be running in a separate terminal. You cannot run both commands in the same terminal unless you background the server process.
@@ -384,7 +384,7 @@ make build
 make run-local
 
 # 5. In Terminal 2, test with example payload
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 6. Check metrics
 curl http://localhost:8080/metrics | jq
@@ -438,7 +438,7 @@ make test-webhook-example
 
 # Or test manually with webhook secret
 export WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret=webhook-secret)
-./test-webhook -payload test-payloads/example-pr-merged.json -secret "$WEBHOOK_SECRET"
+./test-webhook -payload testdata/example-pr-merged.json -secret "$WEBHOOK_SECRET"
 
 # Test with real PR
 export GITHUB_TOKEN=ghp_...

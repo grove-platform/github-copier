@@ -6,11 +6,11 @@ Test files for local integration testing of the github-copier app.
 
 ```bash
 # 1. Copy and configure test environment
-cp test-payloads/.env.test .env.test
+cp testdata/.env.test .env.test
 # Edit .env.test with your GitHub App credentials
 
 # 2. Copy config to your test source repo (cbullinger/copier-app-source-test)
-# Upload test-payloads/source-repo-files/.copier/main.yaml to .copier/main.yaml
+# Upload testdata/source-repo-files/.copier/main.yaml to .copier/main.yaml
 
 # 3. Start the app with test config
 ENV_FILE=.env.test go run app.go
@@ -24,7 +24,7 @@ smee --url https://smee.io/YOUR_CHANNEL --target http://localhost:8080/webhook
 ## Directory Structure
 
 ```
-test-payloads/
+testdata/
 ├── .env.test                    # Test environment variables (copy to .env.test)
 ├── source-repo-files/           # Files to copy to your test source repo
 │   └── .copier/
@@ -70,7 +70,7 @@ A complete example of a merged PR webhook payload with:
 go build -o test-webhook ./cmd/test-webhook
 
 # Send example payload
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ### Option 2: Fetch Real PR Data
@@ -177,7 +177,7 @@ Test without making actual commits:
 DRY_RUN=true ./github-copier &
 
 # Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # Check logs for pattern matching and transformations
 ```
@@ -214,7 +214,7 @@ After sending a test webhook:
 
 ### Test Case 1: New Go Examples
 ```bash
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 Expected: Files copied to target repo with transformed paths
 
@@ -228,7 +228,7 @@ Expected: Real PR data fetched and processed
 ### Test Case 3: Dry-Run Validation
 ```bash
 DRY_RUN=true ./github-copier &
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 Expected: Processing logged but no commits made
 

@@ -204,7 +204,7 @@ The app uses Google Cloud Secret Manager for storing GitHub credentials. You cou
 
 2. Send a test webhook:
    ```bash
-   ./test-webhook -payload test-payloads/example-pr-merged.json
+   ./test-webhook -payload testdata/example-pr-merged.json
    ```
 
 See [Local Testing](LOCAL-TESTING.md) for details.

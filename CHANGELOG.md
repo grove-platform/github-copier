@@ -14,7 +14,7 @@ All notable changes to this project will be documented in this file.
 - AGENT.md for AI agent context
 - Comprehensive test suite for `workflow_processor.go` (843 lines, 94%+ coverage)
 - Integration test harness for local testing (`scripts/integration-test.sh`)
-- Test environment configuration (`test-payloads/.env.test`)
+- Test environment configuration (`testdata/.env.test`)
 
 ### Changed
 - Renamed module from `github.com/mongodb/code-example-tooling/code-copier` to `github.com/grove-platform/github-copier`

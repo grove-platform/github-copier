@@ -15,7 +15,7 @@ echo -e "${BLUE}Testing webhook with example payload...${NC}"
 echo ""
 
 # Send webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 echo ""
 echo -e "${GREEN}Webhook sent! Waiting 2 seconds for processing...${NC}"
