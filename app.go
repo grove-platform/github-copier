@@ -173,27 +173,50 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// Handle graceful shutdown
+	// Channel to signal server errors
+	serverErr := make(chan error, 1)
+
+	// Start server in goroutine
 	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-		<-sigChan
-
-		log.Println("Shutting down server...")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		if err := server.Shutdown(ctx); err != nil {
-			log.Printf("Server shutdown error: %v\n", err)
+		services.LogInfo(fmt.Sprintf("Starting web server on port %s", port))
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			serverErr <- fmt.Errorf("server error: %w", err)
 		}
+		close(serverErr)
 	}()
 
-	// Start server
-	services.LogInfo(fmt.Sprintf("Starting web server on port %s", port))
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		return fmt.Errorf("server error: %w", err)
+	// Wait for interrupt signal
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Block until we receive a signal or server error
+	select {
+	case err := <-serverErr:
+		if err != nil {
+			return err
+		}
+	case sig := <-sigChan:
+		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
 	}
 
+	// Graceful shutdown with timeout
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	log.Println("Waiting for in-flight requests to complete...")
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Printf("Server shutdown error: %v", err)
+	} else {
+		log.Println("Server stopped accepting new connections")
+	}
+
+	// Cleanup resources (flush audit logs, close connections)
+	log.Println("Cleaning up resources...")
+	if err := container.Close(shutdownCtx); err != nil {
+		log.Printf("Cleanup error: %v", err)
+	}
+
+	log.Println("Shutdown complete")
 	return nil
 }
 

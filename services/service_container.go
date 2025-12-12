@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/grove-platform/github-copier/configs"
@@ -25,6 +26,10 @@ type ServiceContainer struct {
 
 	// Server state
 	StartTime time.Time
+
+	// Shutdown state
+	closeOnce sync.Once
+	closed    bool
 }
 
 // NewServiceContainer creates and initializes all services
@@ -84,10 +89,19 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	}, nil
 }
 
-// Close cleans up resources
+// Close cleans up resources. Safe to call multiple times.
 func (sc *ServiceContainer) Close(ctx context.Context) error {
-	if sc.AuditLogger != nil {
-		return sc.AuditLogger.Close(ctx)
-	}
-	return nil
+	var closeErr error
+	sc.closeOnce.Do(func() {
+		if sc.AuditLogger != nil {
+			closeErr = sc.AuditLogger.Close(ctx)
+		}
+		sc.closed = true
+	})
+	return closeErr
+}
+
+// IsClosed returns true if the container has been closed
+func (sc *ServiceContainer) IsClosed() bool {
+	return sc.closed
 }
