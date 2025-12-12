@@ -30,6 +30,7 @@ All notable changes to this project will be documented in this file.
   - `services/main_config_loader.go`
   - `services/config_loader.go`
 - DELETED file status handling: GitHub GraphQL API returns uppercase `DELETED` but code checked for lowercase `removed`
+- Graceful shutdown now properly waits for in-flight requests and cleans up resources
 
 ### Security
 - Added gitleaks pre-commit hook for secrets detection
