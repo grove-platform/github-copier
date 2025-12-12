@@ -69,3 +69,59 @@ jobs:
       - name: Build
         run: go build -v ./...
 
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, security]
+    # Only deploy on push to main (not on PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Required GitHub secrets:
+    #   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/1054147886816/locations/global/workloadIdentityPools/POOL_NAME/providers/PROVIDER_NAME
+    #   GCP_SERVICE_ACCOUNT: SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com
+    # See docs/DEPLOYMENT.md for setup instructions
+
+    permissions:
+      contents: read
+      id-token: write  # Required for Workload Identity Federation
+
+    env:
+      PROJECT_ID: "github-copy-code-examples"
+      PROJECT_NUMBER: "1054147886816"
+      SERVICE_NAME: "examples-copier"
+      REGION: "us-central1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --source . \
+            --region $REGION \
+            --project $PROJECT_ID \
+            --allow-unauthenticated \
+            --max-instances=10 \
+            --cpu=1 \
+            --memory=512Mi \
+            --timeout=300s \
+            --concurrency=80 \
+            --port=8080 \
+            --platform=managed
+
+      - name: Show deployment URL
+        run: |
+          URL=$(gcloud run services describe $SERVICE_NAME \
+            --region $REGION \
+            --project $PROJECT_ID \
+            --format='value(status.url)')
+          echo "🚀 Deployed to: $URL"
+
