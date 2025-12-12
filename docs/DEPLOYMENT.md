@@ -432,7 +432,7 @@ curl ${SERVICE_URL}/health
    - Go to: `https://github.com/YOUR_ORG/YOUR_REPO/settings/hooks`
 
 2. **Add or edit webhook**
-   - **Payload URL:** `https://github-copier-XXXXXXXXXX-uc.a.run.app/events` (use your Cloud Run URL)
+   - **Payload URL:** `https://examples-copier-XXXXXXXXXX-uc.a.run.app/events` (use your Cloud Run URL)
    - **Content type:** `application/json`
    - **Secret:** (the webhook secret from Secret Manager)
    - **Events:** Select "Pull requests"
