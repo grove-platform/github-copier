@@ -506,5 +506,5 @@ workflows:
 
 ## Questions?
 
-Contact the Developer Docs team or open an issue in the [code-example-tooling repository](https://github.com/grove-platform/github-copier/issues).
+Contact the Developer Docs team or open an issue in the [github-copier repository](https://github.com/grove-platform/github-copier/issues).
 

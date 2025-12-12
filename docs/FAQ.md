@@ -6,7 +6,7 @@ Common questions about the github-copier application.
 
 ### What is github-copier?
 
-Examples-copier is a GitHub app that automatically copies code examples and files from a source repository to one or more target repositories when pull requests are merged. It features advanced pattern matching, path transformations, and audit logging.
+The GitHub copier is a GitHub app that automatically copies code examples and files from a source repository to one or more target repositories when pull requests are merged. It features advanced pattern matching, path transformations, and audit logging.
 
 ### Why use github-copier?
 

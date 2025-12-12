@@ -1,4 +1,4 @@
-# Examples Copier Architecture
+# GitHub Copier Architecture
 
 This document describes the architecture and design of the github-copier application, including its core components, main config system, pattern matching, configuration management, deprecation tracking, and operational features.
 
