@@ -1,0 +1,36 @@
+# Cloud Run environment variables
+# Format: KEY: "VALUE" (no env_variables wrapper needed)
+# Note: PORT is automatically set by Cloud Run, don't override it
+
+# GitHub Configuration
+GITHUB_APP_ID: "1166559"
+INSTALLATION_ID: "95537167" # grove-platform
+
+# Config Repository (where main config file is stored)
+CONFIG_REPO_OWNER: "grove-platform"
+CONFIG_REPO_NAME: "github-copier"
+CONFIG_REPO_BRANCH: "main"
+
+# Secret Manager References
+GITHUB_APP_PRIVATE_KEY_SECRET_NAME: "projects/1054147886816/secrets/CODE_COPIER_PEM/versions/latest"
+WEBHOOK_SECRET_NAME: "projects/1054147886816/secrets/webhook-secret/versions/latest"
+MONGO_URI_SECRET_NAME: "projects/1054147886816/secrets/mongo-uri/versions/latest"
+
+# Application Settings
+WEBSERVER_PATH: "/events"
+MAIN_CONFIG_FILE: ".copier/main.yaml"
+USE_MAIN_CONFIG: "true"
+DEPRECATION_FILE: "deprecated_examples.json"
+
+# Committer Information
+COMMITTER_NAME: "GitHub Copier App"
+COMMITTER_EMAIL: "bot@mongodb.com"
+
+# Google Cloud Configuration
+GOOGLE_CLOUD_PROJECT_ID: "github-copy-code-examples"
+COPIER_LOG_NAME: "code-copier-log"
+
+# Feature Flags
+AUDIT_ENABLED: "false"
+METRICS_ENABLED: "true"
+

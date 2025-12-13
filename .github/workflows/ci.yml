@@ -75,18 +75,12 @@ jobs:
     # Only deploy on push to main (not on PRs)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
-    # Required GitHub secrets:
-    #   GCP_WORKLOAD_IDENTITY_PROVIDER: projects/1054147886816/locations/global/workloadIdentityPools/POOL_NAME/providers/PROVIDER_NAME
-    #   GCP_SERVICE_ACCOUNT: SERVICE_ACCOUNT@PROJECT_ID.iam.gserviceaccount.com
-    # See docs/DEPLOYMENT.md for setup instructions
-
     permissions:
       contents: read
       id-token: write  # Required for Workload Identity Federation
 
     env:
       PROJECT_ID: "github-copy-code-examples"
-      PROJECT_NUMBER: "1054147886816"
       SERVICE_NAME: "examples-copier"
       REGION: "us-central1"
 
@@ -109,6 +103,7 @@ jobs:
             --region $REGION \
             --project $PROJECT_ID \
             --allow-unauthenticated \
+            --env-vars-file=env-cloudrun.yaml \
             --max-instances=10 \
             --cpu=1 \
             --memory=512Mi \
