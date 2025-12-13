@@ -8,7 +8,7 @@ This directory contains workflow configurations for automatically copying code e
 
 **What do I need to know?**
 1. When you **merge a PR** in this repo, the copier automatically runs
-2. Files are **matched against patterns** in `.copier/workflows.yaml`
+2. Files are **matched against patterns** in `.copier/config.yaml`
 3. Matched files are **copied to destination repositories**
 4. A **PR is created** in each destination repository (usually)
 5. Someone needs to **review and merge** the destination PRs (unless auto-merge is enabled)
@@ -31,7 +31,7 @@ gcloud app logs read --limit=100 | grep "your-repo-name"
 
 ### File Location
 
-Place your workflow configuration at: `.copier/workflows.yaml`
+Place your workflow configuration at: `.copier/config.yaml`
 
 ### Basic Workflow Structure
 
@@ -51,7 +51,7 @@ workflows:
 
 **All file paths in transformations are relative to the repository root**, not to the config file location.
 
-Even though your config is at `.copier/workflows.yaml`, patterns and paths are matched against the full repository path:
+Even though your config is at `.copier/config.yaml`, patterns and paths are matched against the full repository path:
 
 ```yaml
 # ✅ Correct - paths from repository root
@@ -69,7 +69,7 @@ transformations:
 
 ## Adding a New Workflow
 
-1. **Edit `.copier/workflows.yaml`** in your repository
+1. **Edit `.copier/config.yaml`** in your repository
 
 2. **Add a new workflow entry:**
 
@@ -89,7 +89,7 @@ workflows:
 
 ## Modifying an Existing Workflow
 
-Simply edit the workflow in `.copier/workflows.yaml` and commit your changes. The updated configuration will be used for the next PR merge.
+Simply edit the workflow in `.copier/config.yaml` and commit your changes. The updated configuration will be used for the next PR merge.
 
 ## Common Transformation Types
 
@@ -262,7 +262,7 @@ Before committing, you can validate your configuration:
 
 ```bash
 # Validate syntax
-./config-validator validate -config .copier/workflows.yaml
+./config-validator validate -config .copier/config.yaml
 
 # Test a pattern match
 ./config-validator test-pattern \
@@ -277,7 +277,7 @@ Before committing, you can validate your configuration:
 
 1. **You merge a PR** in this repository
 2. **GitHub sends a webhook** to the copier application
-3. **Copier loads your workflows** from `.copier/workflows.yaml`
+3. **Copier loads your workflows** from `.copier/config.yaml`
 4. **Files are matched** against transformation patterns
 5. **Files are copied** to destination repositories
 6. **PRs are created** in destination repositories (or committed directly)
@@ -410,7 +410,7 @@ The deprecation file is stored in **this repository** (source):
 ## Example: Complete Workflow
 
 ```yaml
-# .copier/workflows.yaml
+# .copier/config.yaml
 
 defaults:
   commit_strategy:
@@ -450,7 +450,7 @@ workflows:
 1. Was it a merged PR? (not just closed)
 2. Do the changed files match your transformation patterns?
 3. Check the copier logs (see below)
-4. Verify `.copier/workflows.yaml` is valid YAML
+4. Verify `.copier/config.yaml` is valid YAML
 
 ### How do I view the logs?
 
@@ -469,7 +469,7 @@ gcloud app logs read --limit=200 | grep "your-repo-name"
 
 ```bash
 # Validate YAML syntax
-./config-validator validate -config .copier/workflows.yaml
+./config-validator validate -config .copier/config.yaml
 
 # Test a pattern match
 ./config-validator test-pattern \
