@@ -3,8 +3,8 @@ package services_test
 import (
 	"testing"
 
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,9 +13,9 @@ func TestPatternMatcher_Prefix(t *testing.T) {
 	matcher := services.NewPatternMatcher()
 
 	tests := []struct {
-		name     string
-		pattern  types.SourcePattern
-		filePath string
+		name      string
+		pattern   types.SourcePattern
+		filePath  string
 		wantMatch bool
 	}{
 		{

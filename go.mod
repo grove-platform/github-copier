@@ -1,4 +1,4 @@
-module github.com/mongodb/code-example-tooling/code-copier
+module github.com/grove-platform/github-copier
 
 go 1.24.0
 

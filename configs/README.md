@@ -142,7 +142,7 @@ REPO_OWNER: "mongodb"
 cp configs/env.yaml.production env-cloudrun.yaml
 # Remove the 'env_variables:' wrapper
 # Edit env-cloudrun.yaml with your values
-gcloud run deploy examples-copier --source . --env-vars-file=env-cloudrun.yaml
+gcloud run deploy github-copier --source . --env-vars-file=env-cloudrun.yaml
 ```
 
 **Best for:** Cost-effective, scales to zero, serverless
@@ -299,7 +299,7 @@ diff configs/env.yaml.production configs/env.yaml.example
 ## File Locations
 
 ```
-examples-copier/
+github-copier/
 ├── configs/
 │   ├── env.yaml.example          # ← Complete reference (all variables)
 │   ├── env.yaml.production       # ← Production template (essential only)

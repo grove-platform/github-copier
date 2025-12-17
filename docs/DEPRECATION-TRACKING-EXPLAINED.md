@@ -218,7 +218,7 @@ After cleanup, remove the entry from `deprecated_examples.json`.
 In dry-run mode, deprecation tracking is **simulated**:
 
 ```bash
-DRY_RUN=true ./examples-copier
+DRY_RUN=true ./github-copier
 ```
 
 **Output:**

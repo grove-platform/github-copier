@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	. "github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	. "github.com/grove-platform/github-copier/types"
 	"github.com/shurcooL/githubv4"
 )
 
@@ -21,10 +21,15 @@ import (
 func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFile, error) {
 	if InstallationAccessToken == "" {
 		log.Println("No installation token provided")
-		ConfigurePermissions()
+		if err := ConfigurePermissions(); err != nil {
+			return nil, fmt.Errorf("failed to configure permissions: %w", err)
+		}
 	}
 
-	client := GetGraphQLClient()
+	client, err := GetGraphQLClient()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GraphQL client: %w", err)
+	}
 	ctx := context.Background()
 
 	var changedFiles []ChangedFile
@@ -106,7 +111,10 @@ func RetrieveFileContents(filePath string) (github.RepositoryContent, error) {
 			})
 
 	if err != nil {
-		LogCritical(fmt.Sprintf("Error getting file content: %v", err))
+		return github.RepositoryContent{}, fmt.Errorf("failed to get file content for %s: %w", filePath, err)
+	}
+	if fileContent == nil {
+		return github.RepositoryContent{}, fmt.Errorf("file content is nil for path: %s", filePath)
 	}
 	return *fileContent, nil
 }

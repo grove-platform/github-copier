@@ -69,7 +69,7 @@ gcloud config get-value project
 ┌─────────────────────────────────────────────────────────────┐
 │              Google Cloud Run                               │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  examples-copier Service (Container)                 │   │
+│  │  github-copier Service (Container)                 │   │
 │  │  - Receives webhook                                  │   │
 │  │  - Validates signature                               │   │
 │  │  - Loads config from source repo                     │   │
@@ -108,7 +108,7 @@ This application uses **Google Cloud Run** (serverless containers):
 
 **Deployment:**
 ```bash
-gcloud run deploy examples-copier \
+gcloud run deploy github-copier \
   --source . \
   --region us-central1 \
   --env-vars-file=env-cloudrun.yaml
@@ -191,7 +191,7 @@ gcloud secrets add-iam-policy-binding mongo-uri \
 
 **Or use the provided script:**
 ```bash
-cd examples-copier
+cd github-copier
 ./scripts/grant-secret-access.sh
 ```
 
@@ -215,7 +215,7 @@ gcloud secrets get-iam-policy CODE_COPIER_PEM
 The `env-cloudrun.yaml` file contains environment variables for Cloud Run deployment.
 
 ```bash
-cd examples-copier
+cd github-copier
 
 # Copy from example or create new
 cp env.yaml env-cloudrun.yaml
@@ -335,7 +335,7 @@ services.LoadMongoURI(config)       // Loads from Secret Manager
 The simplest way to deploy is using the provided script:
 
 ```bash
-cd examples-copier
+cd github-copier
 
 # Deploy to default region (us-central1)
 ./scripts/deploy-cloudrun.sh
@@ -356,9 +356,9 @@ The script will:
 If you prefer to run the command directly:
 
 ```bash
-cd examples-copier
+cd github-copier
 
-gcloud run deploy examples-copier \
+gcloud run deploy github-copier \
   --source . \
   --region us-central1 \
   --env-vars-file=env-cloudrun.yaml \
@@ -390,16 +390,16 @@ gcloud run deploy examples-copier \
 gcloud run services list --region=us-central1
 
 # Get service URL
-SERVICE_URL=$(gcloud run services describe examples-copier \
+SERVICE_URL=$(gcloud run services describe github-copier \
   --region=us-central1 \
   --format="value(status.url)")
 echo "Service URL: ${SERVICE_URL}"
 
 # View logs
-gcloud run services logs read examples-copier --region=us-central1 --limit=50
+gcloud run services logs read github-copier --region=us-central1 --limit=50
 
 # Or tail logs in real-time
-gcloud run services logs tail examples-copier --region=us-central1
+gcloud run services logs tail github-copier --region=us-central1
 ```
 
 ### Test Health Endpoint
@@ -608,7 +608,7 @@ echo -n "mongodb+srv://..." | gcloud secrets create mongo-uri \
 
 ```bash
 # Run the grant script
-cd examples-copier
+cd github-copier
 ./scripts/grant-secret-access.sh
 ```
 
@@ -641,7 +641,7 @@ gcloud secrets get-iam-policy mongo-uri | grep @appspot
 ### ☐ 5. Create env.yaml
 
 ```bash
-cd examples-copier
+cd github-copier
 
 # Copy from template
 cp configs/env.yaml.production env.yaml
@@ -698,7 +698,7 @@ env: flex
 ### ☐ 8. Deploy to Cloud Run
 
 ```bash
-cd examples-copier
+cd github-copier
 
 # Deploy using the deployment script
 ./scripts/deploy-cloudrun.sh

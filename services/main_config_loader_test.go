@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	test "github.com/mongodb/code-example-tooling/code-copier/tests"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/services"
+	test "github.com/grove-platform/github-copier/tests"
 )
 
 // Helper to encode YAML content to base64 for main config tests
@@ -980,4 +980,3 @@ workflow_configs:
 	assert.Equal(t, "mongodb/working-repo", workflow.Source.Repo)
 	assert.Equal(t, "mongodb/dest-repo", workflow.Destination.Repo)
 }
-

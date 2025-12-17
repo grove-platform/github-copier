@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 )
 
 func TestSimpleVerifySignature(t *testing.T) {
@@ -87,8 +87,8 @@ func TestHandleWebhookWithContainer_MissingEventType(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
 		ConfigRepoName:  "test-repo",
-		
-		AuditEnabled:   false,
+
+		AuditEnabled: false,
 	}
 
 	container, err := NewServiceContainer(config)
@@ -117,9 +117,9 @@ func TestHandleWebhookWithContainer_InvalidSignature(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
 		ConfigRepoName:  "test-repo",
-		
-		WebhookSecret:  "test-secret",
-		AuditEnabled:   false,
+
+		WebhookSecret: "test-secret",
+		AuditEnabled:  false,
 	}
 
 	container, err := NewServiceContainer(config)
@@ -146,9 +146,9 @@ func TestHandleWebhookWithContainer_ValidSignature(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
 		ConfigRepoName:  "test-repo",
-		
-		WebhookSecret:  secret,
-		AuditEnabled:   false,
+
+		WebhookSecret: secret,
+		AuditEnabled:  false,
 	}
 
 	container, err := NewServiceContainer(config)
@@ -190,8 +190,8 @@ func TestHandleWebhookWithContainer_NonPREvent(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
 		ConfigRepoName:  "test-repo",
-		
-		AuditEnabled:   false,
+
+		AuditEnabled: false,
 	}
 
 	container, err := NewServiceContainer(config)
@@ -222,8 +222,8 @@ func TestHandleWebhookWithContainer_NonMergedPR(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
 		ConfigRepoName:  "test-repo",
-		
-		AuditEnabled:   false,
+
+		AuditEnabled: false,
 	}
 
 	container, err := NewServiceContainer(config)
@@ -328,7 +328,7 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 
 	// Check response body
 	var response map[string]string
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
@@ -404,7 +404,7 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 
 	// Check response body
 	var response map[string]string
-	json.Unmarshal(w.Body.Bytes(), &response)
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
@@ -509,7 +509,7 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 
 			// Check response body
 			var response map[string]string
-			json.Unmarshal(w.Body.Bytes(), &response)
+			_ = json.Unmarshal(w.Body.Bytes(), &response)
 			if response["status"] != "accepted" {
 				t.Errorf("Response status = %v, want accepted", response["status"])
 			}
@@ -543,4 +543,3 @@ func TestStatusDeleted(t *testing.T) {
 		t.Errorf("statusDeleted = %s, want DELETED", statusDeleted)
 	}
 }
-

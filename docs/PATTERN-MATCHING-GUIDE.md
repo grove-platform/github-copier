@@ -1,6 +1,6 @@
 # Pattern Matching Guide
 
-Complete guide to pattern matching and path transformation in the examples-copier.
+Complete guide to pattern matching and path transformation in the github-copier.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Complete guide to pattern matching and path transformation in the examples-copie
 
 ## Overview
 
-The examples-copier uses a powerful pattern matching system to:
+The github-copier uses a powerful pattern matching system to:
 1. **Match files** from merged PRs based on their paths
 2. **Extract variables** from file paths (e.g., language, category)
 3. **Transform paths** to determine where files should be copied

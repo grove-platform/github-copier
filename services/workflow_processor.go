@@ -9,7 +9,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/google/go-github/v48/github"
-	. "github.com/mongodb/code-example-tooling/code-copier/types"
+	. "github.com/grove-platform/github-copier/types"
 )
 
 // WorkflowProcessor processes workflows and applies transformations
@@ -52,10 +52,10 @@ func (wp *workflowProcessor) ProcessWorkflow(
 	sourceCommitSHA string,
 ) error {
 	LogInfoCtx(ctx, "Processing workflow", map[string]interface{}{
-		"workflow_name":   workflow.Name,
-		"source_repo":     workflow.Source.Repo,
+		"workflow_name":    workflow.Name,
+		"source_repo":      workflow.Source.Repo,
 		"destination_repo": workflow.Destination.Repo,
-		"file_count":      len(changedFiles),
+		"file_count":       len(changedFiles),
 	})
 
 	// Track files matched and skipped
@@ -81,9 +81,9 @@ func (wp *workflowProcessor) ProcessWorkflow(
 	}
 
 	LogInfoCtx(ctx, "Workflow processing complete", map[string]interface{}{
-		"workflow_name":  workflow.Name,
-		"files_matched":  filesMatched,
-		"files_skipped":  filesSkipped,
+		"workflow_name": workflow.Name,
+		"files_matched": filesMatched,
+		"files_skipped": filesSkipped,
 	})
 
 	return nil
@@ -119,15 +119,16 @@ func (wp *workflowProcessor) processFileForWorkflow(
 
 		// File matched this transformation
 		LogInfoCtx(ctx, "File matched transformation", map[string]interface{}{
-			"workflow_name":      workflow.Name,
-			"transformation_idx": i,
+			"workflow_name":       workflow.Name,
+			"transformation_idx":  i,
 			"transformation_type": transformation.GetType(),
-			"source_path":        file.Path,
-			"target_path":        targetPath,
+			"source_path":         file.Path,
+			"target_path":         targetPath,
 		})
 
 		// Handle file based on status
-		if file.Status == "removed" {
+		// GitHub GraphQL API returns uppercase status: "DELETED", "ADDED", "MODIFIED", etc.
+		if file.Status == "DELETED" || file.Status == "removed" {
 			// Add to deprecation map
 			wp.addToDeprecationMap(workflow, targetPath)
 		} else {
@@ -178,12 +179,12 @@ func (wp *workflowProcessor) applyMoveTransformation(
 ) (matched bool, targetPath string, err error) {
 	// Check if source path starts with the "from" prefix
 	from := strings.TrimSuffix(move.From, "/")
-	
+
 	if sourcePath == from {
 		// Exact match - move the file to the "to" path
 		return true, move.To, nil
 	}
-	
+
 	if strings.HasPrefix(sourcePath, from+"/") {
 		// Path is under the "from" directory - preserve relative path
 		relativePath := strings.TrimPrefix(sourcePath, from+"/")
@@ -242,7 +243,7 @@ func (wp *workflowProcessor) applyRegexTransformation(
 		Type:    PatternTypeRegex,
 		Pattern: regex.Pattern,
 	}
-	
+
 	matchResult := wp.patternMatcher.Match(sourcePath, sourcePattern)
 	if !matchResult.Matched {
 		return false, "", nil
@@ -260,11 +261,11 @@ func (wp *workflowProcessor) applyRegexTransformation(
 // extractGlobVariables extracts variables from a glob pattern match
 func (wp *workflowProcessor) extractGlobVariables(pattern, path string) map[string]string {
 	variables := make(map[string]string)
-	
+
 	// Extract common variables
 	// For pattern "mflix/server/**" matching "mflix/server/java-spring/src/main.java"
 	// Extract relative_path = "java-spring/src/main.java"
-	
+
 	// Find the ** in the pattern
 	starStarIdx := strings.Index(pattern, "**")
 	if starStarIdx >= 0 {
@@ -275,7 +276,7 @@ func (wp *workflowProcessor) extractGlobVariables(pattern, path string) map[stri
 			variables["relative_path"] = relativePath
 		}
 	}
-	
+
 	return variables
 }
 
@@ -404,27 +405,6 @@ func getCommitStrategyType(workflow Workflow) string {
 		return workflow.CommitStrategy.Type
 	}
 	return "pull_request" // default
-}
-
-func getCommitMessage(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.CommitMessage != "" {
-		return workflow.CommitStrategy.CommitMessage
-	}
-	return fmt.Sprintf("Update from workflow: %s", workflow.Name)
-}
-
-func getPRTitle(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.PRTitle != "" {
-		return workflow.CommitStrategy.PRTitle
-	}
-	return getCommitMessage(workflow)
-}
-
-func getPRBody(workflow Workflow) string {
-	if workflow.CommitStrategy != nil && workflow.CommitStrategy.PRBody != "" {
-		return workflow.CommitStrategy.PRBody
-	}
-	return ""
 }
 
 func getUsePRTemplate(workflow Workflow) bool {

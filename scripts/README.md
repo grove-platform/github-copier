@@ -1,12 +1,12 @@
 # Helper Scripts
 
-Collection of helper scripts for testing and running the examples-copier application.
+Collection of helper scripts for testing and running the github-copier application.
 
 ## Scripts
 
 ### run-local.sh
 
-Start the examples-copier application locally with proper environment configuration.
+Start the github-copier application locally with proper environment configuration.
 
 **Usage:**
 ```bash
@@ -25,7 +25,7 @@ Start the examples-copier application locally with proper environment configurat
 ./scripts/run-local.sh
 
 # In another terminal, test it
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 **Environment:**
@@ -61,7 +61,7 @@ Send a test webhook and check the metrics.
 ```
 Testing webhook with example payload...
 
-✓ Loaded payload from test-payloads/example-pr-merged.json
+✓ Loaded payload from testdata/example-pr-merged.json
 ✓ Response: 200 OK
 ✓ Webhook sent successfully
 

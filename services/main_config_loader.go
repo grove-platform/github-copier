@@ -9,8 +9,8 @@ import (
 	"github.com/google/go-github/v48/github"
 	"gopkg.in/yaml.v3"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // DefaultMainConfigLoader implements the ConfigLoader interface with main config support
@@ -246,6 +246,9 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow config file: %w", err)
 	}
+	if fileContent == nil {
+		return nil, fmt.Errorf("workflow config file content is nil for path: %s", ref.Path)
+	}
 
 	content, err = fileContent.GetContent()
 	if err != nil {
@@ -294,6 +297,9 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow config file from %s: %w", ref.Repo, err)
+	}
+	if fileContent == nil {
+		return nil, fmt.Errorf("workflow config file content is nil for path: %s in repo %s", ref.Path, ref.Repo)
 	}
 
 	content, err := fileContent.GetContent()
@@ -415,7 +421,7 @@ func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref st
 	// Supports:
 	// - Relative paths: "strategies/pr-strategy.yaml"
 	// - Repo references: "repo://owner/repo/path/to/file.yaml@branch"
-	
+
 	if strings.HasPrefix(ref, "repo://") {
 		// Remote repo reference
 		return mcl.resolveRemoteReference(ctx, ref)
@@ -429,7 +435,7 @@ func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref st
 func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, ref string) (string, error) {
 	// Parse: repo://owner/repo/path/to/file.yaml@branch
 	ref = strings.TrimPrefix(ref, "repo://")
-	
+
 	// Split by @ to get branch
 	parts := strings.Split(ref, "@")
 	branch := "main"
@@ -465,6 +471,9 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
+	}
+	if fileContent == nil {
+		return "", fmt.Errorf("referenced file content is nil for path: %s", filePath)
 	}
 
 	return fileContent.GetContent()
@@ -502,7 +511,9 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 	if err != nil {
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
+	if fileContent == nil {
+		return "", fmt.Errorf("referenced file content is nil for path: %s", resolvedPath)
+	}
 
 	return fileContent.GetContent()
 }
-

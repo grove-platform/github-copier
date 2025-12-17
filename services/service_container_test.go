@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
+	"github.com/grove-platform/github-copier/configs"
 )
 
 func TestNewServiceContainer(t *testing.T) {
@@ -46,7 +46,7 @@ func TestNewServiceContainer(t *testing.T) {
 				ConfigRepoOwner: "test-owner",
 				ConfigRepoName:  "test-repo",
 				AuditEnabled:    true,
-				MongoURI:       "",
+				MongoURI:        "",
 			},
 			wantErr:       true,
 			checkServices: false,
@@ -126,9 +126,9 @@ func TestNewServiceContainer(t *testing.T) {
 
 func TestServiceContainer_Close(t *testing.T) {
 	tests := []struct {
-		name        string
-		config      *configs.Config
-		wantErr     bool
+		name    string
+		config  *configs.Config
+		wantErr bool
 	}{
 		{
 			name: "close with NoOp audit logger",
@@ -196,12 +196,12 @@ func TestServiceContainer_ConfigPropagation(t *testing.T) {
 
 func TestServiceContainer_SlackNotifierConfiguration(t *testing.T) {
 	tests := []struct {
-		name            string
-		webhookURL      string
-		channel         string
-		username        string
-		iconEmoji       string
-		wantEnabled     bool
+		name        string
+		webhookURL  string
+		channel     string
+		username    string
+		iconEmoji   string
+		wantEnabled bool
 	}{
 		{
 			name:        "Slack enabled",
@@ -276,8 +276,8 @@ func TestServiceContainer_AuditLoggerConfiguration(t *testing.T) {
 				ConfigRepoOwner: "test-owner",
 				ConfigRepoName:  "test-repo",
 				AuditEnabled:    tt.auditEnabled,
-				MongoURI:       tt.mongoURI,
-				AuditDatabase:  "test-db",
+				MongoURI:        tt.mongoURI,
+				AuditDatabase:   "test-db",
 				AuditCollection: "test-coll",
 			}
 
@@ -357,4 +357,3 @@ func TestServiceContainer_StartTimeTracking(t *testing.T) {
 		t.Error("StartTime is after container creation")
 	}
 }
-
