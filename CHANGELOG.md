@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## December 2025
+## 17 Dec 2025
 
 ### Added
 - CI/CD pipeline with GitHub Actions (`.github/workflows/ci.yml`)
