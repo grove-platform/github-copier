@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 )
 
 func main() {
@@ -37,7 +37,7 @@ func main() {
 
 	switch os.Args[1] {
 	case "validate":
-		validateCmd.Parse(os.Args[2:])
+		_ = validateCmd.Parse(os.Args[2:])
 		if *validateFile == "" {
 			fmt.Println("Error: -config is required")
 			validateCmd.Usage()
@@ -46,7 +46,7 @@ func main() {
 		validateConfig(*validateFile, *validateVerbose)
 
 	case "test-pattern":
-		testPatternCmd.Parse(os.Args[2:])
+		_ = testPatternCmd.Parse(os.Args[2:])
 		if *pattern == "" || *filePath == "" {
 			fmt.Println("Error: -pattern and -file are required")
 			testPatternCmd.Usage()
@@ -55,7 +55,7 @@ func main() {
 		testPattern(*patternType, *pattern, *filePath)
 
 	case "test-transform":
-		testTransformCmd.Parse(os.Args[2:])
+		_ = testTransformCmd.Parse(os.Args[2:])
 		if *transformSource == "" || *transformTemplate == "" {
 			fmt.Println("Error: -source and -template are required")
 			testTransformCmd.Usage()
@@ -64,7 +64,7 @@ func main() {
 		testTransform(*transformSource, *transformTemplate, *transformVars)
 
 	case "init":
-		initCmd.Parse(os.Args[2:])
+		_ = initCmd.Parse(os.Args[2:])
 		initConfig(*initTemplate, *initOutput)
 
 	default:

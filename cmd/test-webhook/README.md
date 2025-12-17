@@ -1,6 +1,6 @@
 # test-webhook
 
-Command-line tool for testing the examples-copier webhook endpoint with example or real PR data.
+Command-line tool for testing the github-copier webhook endpoint with example or real PR data.
 
 ## Overview
 
@@ -14,7 +14,7 @@ The `test-webhook` tool helps you:
 ## Installation
 
 ```bash
-cd examples-copier
+cd github-copier
 go build -o test-webhook ./cmd/test-webhook
 ```
 
@@ -37,10 +37,10 @@ Send a pre-made example payload to the webhook endpoint.
 
 ```bash
 # Use example payload
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # Use custom URL
-./test-webhook -payload test-payloads/example-pr-merged.json \
+./test-webhook -payload testdata/example-pr-merged.json \
   -url http://localhost:8080/webhook
 ```
 
@@ -48,7 +48,7 @@ Send a pre-made example payload to the webhook endpoint.
 ```
 Testing webhook with example payload...
 
-✓ Loaded payload from test-payloads/example-pr-merged.json
+✓ Loaded payload from testdata/example-pr-merged.json
 ✓ Response: 200 OK
 ✓ Webhook sent successfully
 
@@ -111,7 +111,7 @@ Test your configuration locally before deploying:
 DRY_RUN=true make run-local-quick
 
 # 2. In another terminal, send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Check logs
 tail -f logs/app.log
@@ -139,10 +139,10 @@ Verify files are copied to correct locations:
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # 2. Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Check logs for transformed paths
 grep "transformed path" logs/app.log
@@ -155,10 +155,10 @@ Test Slack integration:
 ```bash
 # 1. Start app with Slack enabled
 export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
-./examples-copier &
+./github-copier &
 
 # 2. Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Check Slack channel for notification
 ```
@@ -170,10 +170,10 @@ Debug webhook processing:
 ```bash
 # 1. Enable debug logging
 export LOG_LEVEL=debug
-./examples-copier &
+./github-copier &
 
 # 2. Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Review detailed logs
 grep "DEBUG" logs/app.log
@@ -181,7 +181,7 @@ grep "DEBUG" logs/app.log
 
 ## Example Payloads
 
-The `test-payloads/` directory contains example webhook payloads:
+The `testdata/` directory contains example webhook payloads:
 
 ### example-pr-merged.json
 
@@ -192,7 +192,7 @@ A complete merged PR payload with:
 
 **Usage:**
 ```bash
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ### Creating Custom Payloads
@@ -201,13 +201,13 @@ Create custom payloads for specific test scenarios:
 
 ```bash
 # Copy example
-cp test-payloads/example-pr-merged.json test-payloads/my-test.json
+cp testdata/example-pr-merged.json testdata/my-test.json
 
 # Edit to match your test case
-vim test-payloads/my-test.json
+vim testdata/my-test.json
 
 # Test with custom payload
-./test-webhook -payload test-payloads/my-test.json
+./test-webhook -payload testdata/my-test.json
 ```
 
 **Example custom payload:**
@@ -234,10 +234,10 @@ vim test-payloads/my-test.json
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 
 # 2. Test with example payload
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Check metrics
 curl http://localhost:8080/metrics | jq
@@ -274,7 +274,7 @@ Response: 401 Unauthorized
 **Solution:** Disable webhook signature verification for testing:
 ```bash
 unset WEBHOOK_SECRET
-./examples-copier &
+./github-copier &
 ```
 
 ### 404 Not Found
@@ -311,7 +311,7 @@ Error: invalid JSON payload
 
 **Solution:** Validate your JSON:
 ```bash
-cat test-payloads/my-test.json | jq
+cat testdata/my-test.json | jq
 ```
 
 ## Advanced Usage
@@ -344,12 +344,12 @@ cat > run-tests.sh << 'EOF'
 set -e
 
 echo "Starting app..."
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 APP_PID=$!
 sleep 2
 
 echo "Running tests..."
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 echo "Checking metrics..."
 curl -s http://localhost:8080/metrics | jq '.files.matched'
@@ -385,14 +385,14 @@ jobs:
       
       - name: Build
         run: |
-          go build -o examples-copier .
+          go build -o github-copier .
           go build -o test-webhook ./cmd/test-webhook
       
       - name: Test
         run: |
-          DRY_RUN=true ./examples-copier &
+          DRY_RUN=true ./github-copier &
           sleep 2
-          ./test-webhook -payload test-payloads/example-pr-merged.json
+          ./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ## Exit Codes
@@ -404,6 +404,6 @@ jobs:
 
 - [Webhook Testing Guide](../../docs/WEBHOOK-TESTING.md) - Comprehensive testing guide
 - [Local Testing](../../docs/LOCAL-TESTING.md) - Local development
-- [Test Payloads](../../test-payloads/README.md) - Example payloads
+- [Test Payloads](../../testdata/README.md) - Example payloads
 - [Quick Reference](../../QUICK-REFERENCE.md) - All commands
 

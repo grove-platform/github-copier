@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/services"
-	"github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/services"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -61,11 +61,87 @@ func TestFileStateService_AddAndGetFilesToDeprecate(t *testing.T) {
 	files := service.GetFilesToDeprecate()
 	require.Len(t, files, 1)
 
-	retrieved, exists := files["deprecated.json"]
+	entries, exists := files["deprecated.json"]
 	require.True(t, exists)
-	assert.Equal(t, "old_example.go", retrieved.FileName)
-	assert.Equal(t, "org/repo", retrieved.Repo)
-	assert.Equal(t, "main", retrieved.Branch)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "old_example.go", entries[0].FileName)
+	assert.Equal(t, "org/repo", entries[0].Repo)
+	assert.Equal(t, "main", entries[0].Branch)
+}
+
+func TestFileStateService_MultipleDeprecatedFilesAccumulate(t *testing.T) {
+	service := services.NewFileStateService()
+
+	// Add multiple files to the same deprecation file
+	entry1 := types.DeprecatedFileEntry{
+		FileName: "file1.go",
+		Repo:     "org/repo",
+		Branch:   "main",
+	}
+	entry2 := types.DeprecatedFileEntry{
+		FileName: "file2.go",
+		Repo:     "org/repo",
+		Branch:   "main",
+	}
+	entry3 := types.DeprecatedFileEntry{
+		FileName: "file3.go",
+		Repo:     "org/repo",
+		Branch:   "main",
+	}
+
+	service.AddFileToDeprecate("deprecated.json", entry1)
+	service.AddFileToDeprecate("deprecated.json", entry2)
+	service.AddFileToDeprecate("deprecated.json", entry3)
+
+	// Get files - should have all 3 entries
+	files := service.GetFilesToDeprecate()
+	require.Len(t, files, 1) // One deprecation file
+
+	entries, exists := files["deprecated.json"]
+	require.True(t, exists)
+	require.Len(t, entries, 3) // Three entries accumulated
+
+	// Verify all entries are present
+	fileNames := make([]string, len(entries))
+	for i, e := range entries {
+		fileNames[i] = e.FileName
+	}
+	assert.Contains(t, fileNames, "file1.go")
+	assert.Contains(t, fileNames, "file2.go")
+	assert.Contains(t, fileNames, "file3.go")
+}
+
+func TestFileStateService_MultipleDeprecationFiles(t *testing.T) {
+	service := services.NewFileStateService()
+
+	// Add entries to different deprecation files
+	entry1 := types.DeprecatedFileEntry{
+		FileName: "file1.go",
+		Repo:     "org/repo1",
+		Branch:   "main",
+	}
+	entry2 := types.DeprecatedFileEntry{
+		FileName: "file2.go",
+		Repo:     "org/repo2",
+		Branch:   "develop",
+	}
+
+	service.AddFileToDeprecate("deprecated_repo1.json", entry1)
+	service.AddFileToDeprecate("deprecated_repo2.json", entry2)
+
+	// Get files - should have 2 deprecation files
+	files := service.GetFilesToDeprecate()
+	require.Len(t, files, 2)
+
+	entries1, exists := files["deprecated_repo1.json"]
+	require.True(t, exists)
+	require.Len(t, entries1, 1)
+	assert.Equal(t, "file1.go", entries1[0].FileName)
+
+	entries2, exists := files["deprecated_repo2.json"]
+	require.True(t, exists)
+	require.Len(t, entries2, 1)
+	assert.Equal(t, "file2.go", entries2[0].FileName)
 }
 
 func TestFileStateService_ClearFilesToUpload(t *testing.T) {
@@ -301,4 +377,3 @@ func TestFileStateService_CommitStrategyTypes(t *testing.T) {
 		})
 	}
 }
-

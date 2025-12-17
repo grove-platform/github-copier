@@ -9,18 +9,18 @@ import (
 
 // HealthStatus represents the health status of the application
 type HealthStatus struct {
-	Status              string                 `json:"status"`
-	Started             bool                   `json:"started"`
-	GitHub              GitHubHealthStatus     `json:"github"`
-	Queues              QueueHealthStatus      `json:"queues"`
-	AuditLogger         AuditLoggerHealthStatus `json:"audit_logger,omitempty"`
-	Uptime              string                 `json:"uptime"`
+	Status      string                  `json:"status"`
+	Started     bool                    `json:"started"`
+	GitHub      GitHubHealthStatus      `json:"github"`
+	Queues      QueueHealthStatus       `json:"queues"`
+	AuditLogger AuditLoggerHealthStatus `json:"audit_logger,omitempty"`
+	Uptime      string                  `json:"uptime"`
 }
 
 // GitHubHealthStatus represents GitHub API health
 type GitHubHealthStatus struct {
-	Status       string `json:"status"`
-	Authenticated bool  `json:"authenticated"`
+	Status        string `json:"status"`
+	Authenticated bool   `json:"authenticated"`
 }
 
 // QueueHealthStatus represents queue health
@@ -37,40 +37,40 @@ type AuditLoggerHealthStatus struct {
 
 // MetricsData represents application metrics
 type MetricsData struct {
-	Webhooks   WebhookMetrics   `json:"webhooks"`
-	Files      FileMetrics      `json:"files"`
-	GitHubAPI  GitHubAPIMetrics `json:"github_api"`
-	Queues     QueueMetrics     `json:"queues"`
-	System     SystemMetrics    `json:"system"`
+	Webhooks  WebhookMetrics   `json:"webhooks"`
+	Files     FileMetrics      `json:"files"`
+	GitHubAPI GitHubAPIMetrics `json:"github_api"`
+	Queues    QueueMetrics     `json:"queues"`
+	System    SystemMetrics    `json:"system"`
 }
 
 // WebhookMetrics represents webhook processing metrics
 type WebhookMetrics struct {
-	Received       int64              `json:"received"`
-	Processed      int64              `json:"processed"`
-	Failed         int64              `json:"failed"`
-	Ignored        int64              `json:"ignored"` // Non-PR events
-	EventTypes     map[string]int64   `json:"event_types"` // Count by event type
-	SuccessRate    float64            `json:"success_rate"`
+	Received       int64               `json:"received"`
+	Processed      int64               `json:"processed"`
+	Failed         int64               `json:"failed"`
+	Ignored        int64               `json:"ignored"`     // Non-PR events
+	EventTypes     map[string]int64    `json:"event_types"` // Count by event type
+	SuccessRate    float64             `json:"success_rate"`
 	ProcessingTime ProcessingTimeStats `json:"processing_time"`
 }
 
 // FileMetrics represents file operation metrics
 type FileMetrics struct {
-	Matched          int64              `json:"matched"`
-	Uploaded         int64              `json:"uploaded"`
-	UploadFailed     int64              `json:"upload_failed"`
-	Deprecated       int64              `json:"deprecated"`
-	UploadSuccessRate float64           `json:"upload_success_rate"`
-	UploadTime       ProcessingTimeStats `json:"upload_time"`
+	Matched           int64               `json:"matched"`
+	Uploaded          int64               `json:"uploaded"`
+	UploadFailed      int64               `json:"upload_failed"`
+	Deprecated        int64               `json:"deprecated"`
+	UploadSuccessRate float64             `json:"upload_success_rate"`
+	UploadTime        ProcessingTimeStats `json:"upload_time"`
 }
 
 // GitHubAPIMetrics represents GitHub API usage metrics
 type GitHubAPIMetrics struct {
-	Calls      int64              `json:"calls"`
-	Errors     int64              `json:"errors"`
-	ErrorRate  float64            `json:"error_rate"`
-	RateLimit  RateLimitInfo      `json:"rate_limit"`
+	Calls     int64         `json:"calls"`
+	Errors    int64         `json:"errors"`
+	ErrorRate float64       `json:"error_rate"`
+	RateLimit RateLimitInfo `json:"rate_limit"`
 }
 
 // RateLimitInfo represents GitHub API rate limit info
@@ -103,21 +103,21 @@ type ProcessingTimeStats struct {
 
 // MetricsCollector collects and manages application metrics
 type MetricsCollector struct {
-	mu              sync.RWMutex
-	startTime       time.Time
-	webhookReceived int64
-	webhookProcessed int64
-	webhookFailed   int64
-	webhookIgnored  int64 // Non-PR events that were ignored
-	eventTypes      map[string]int64 // Count by event type
-	filesMatched    int64
-	filesUploaded   int64
+	mu                sync.RWMutex
+	startTime         time.Time
+	webhookReceived   int64
+	webhookProcessed  int64
+	webhookFailed     int64
+	webhookIgnored    int64            // Non-PR events that were ignored
+	eventTypes        map[string]int64 // Count by event type
+	filesMatched      int64
+	filesUploaded     int64
 	filesUploadFailed int64
-	filesDeprecated int64
-	githubAPICalls  int64
-	githubAPIErrors int64
-	processingTimes []time.Duration
-	uploadTimes     []time.Duration
+	filesDeprecated   int64
+	githubAPICalls    int64
+	githubAPIErrors   int64
+	processingTimes   []time.Duration
+	uploadTimes       []time.Duration
 }
 
 // NewMetricsCollector creates a new metrics collector
@@ -143,7 +143,7 @@ func (mc *MetricsCollector) RecordWebhookProcessed(duration time.Duration) {
 	defer mc.mu.Unlock()
 	mc.webhookProcessed++
 	mc.processingTimes = append(mc.processingTimes, duration)
-	
+
 	// Keep only last 1000 entries
 	if len(mc.processingTimes) > 1000 {
 		mc.processingTimes = mc.processingTimes[len(mc.processingTimes)-1000:]
@@ -178,7 +178,7 @@ func (mc *MetricsCollector) RecordFileUploaded(duration time.Duration) {
 	defer mc.mu.Unlock()
 	mc.filesUploaded++
 	mc.uploadTimes = append(mc.uploadTimes, duration)
-	
+
 	// Keep only last 1000 entries
 	if len(mc.uploadTimes) > 1000 {
 		mc.uploadTimes = mc.uploadTimes[len(mc.uploadTimes)-1000:]
@@ -276,12 +276,12 @@ func (mc *MetricsCollector) GetMetrics(fileStateService FileStateService) Metric
 			ProcessingTime: calculateStats(mc.processingTimes),
 		},
 		Files: FileMetrics{
-			Matched:          mc.filesMatched,
-			Uploaded:         mc.filesUploaded,
-			UploadFailed:     mc.filesUploadFailed,
-			Deprecated:       mc.filesDeprecated,
+			Matched:           mc.filesMatched,
+			Uploaded:          mc.filesUploaded,
+			UploadFailed:      mc.filesUploadFailed,
+			Deprecated:        mc.filesDeprecated,
 			UploadSuccessRate: uploadSuccessRate,
-			UploadTime:       calculateStats(mc.uploadTimes),
+			UploadTime:        calculateStats(mc.uploadTimes),
 		},
 		GitHubAPI: GitHubAPIMetrics{
 			Calls:     mc.githubAPICalls,
@@ -351,7 +351,7 @@ func HealthHandler(fileStateService FileStateService, startTime time.Time) http.
 			Status:  "healthy",
 			Started: true,
 			GitHub: GitHubHealthStatus{
-				Status:       "healthy",
+				Status:        "healthy",
 				Authenticated: true,
 			},
 			Queues: QueueHealthStatus{
@@ -362,7 +362,7 @@ func HealthHandler(fileStateService FileStateService, startTime time.Time) http.
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(health)
+		_ = json.NewEncoder(w).Encode(health)
 	}
 }
 
@@ -371,7 +371,6 @@ func MetricsHandler(metricsCollector *MetricsCollector, fileStateService FileSta
 	return func(w http.ResponseWriter, r *http.Request) {
 		metrics := metricsCollector.GetMetrics(fileStateService)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(metrics)
+		_ = json.NewEncoder(w).Encode(metrics)
 	}
 }
-

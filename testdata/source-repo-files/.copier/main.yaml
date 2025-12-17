@@ -1,0 +1,61 @@
+# Main config for test source repo: cbullinger/copier-app-source-test
+# Copy this file to .copier/main.yaml in your source repo
+
+defaults:
+  commit_strategy:
+    type: "pull_request"
+    auto_merge: false
+
+workflow_configs:
+  - source: "inline"
+    workflows:
+      # Workflow 1: Copy Go files to dest-1
+      - name: "test-go-to-dest1"
+        source:
+          patterns:
+            - "examples/go/**"
+        destination:
+          repo: "cbullinger/copier-app-dest-1"
+          branch: "main"
+        transformations:
+          - move:
+              from: "examples/go/"
+              to: "go-examples/"
+        commit_strategy:
+          type: "pull_request"
+          pr_title: "[Test] Sync Go examples"
+          auto_merge: false
+
+      # Workflow 2: Copy Python files to dest-2
+      - name: "test-python-to-dest2"
+        source:
+          patterns:
+            - "examples/python/**"
+        destination:
+          repo: "cbullinger/copier-app-dest-2"
+          branch: "main"
+        transformations:
+          - move:
+              from: "examples/python/"
+              to: "python-examples/"
+        commit_strategy:
+          type: "pull_request"
+          pr_title: "[Test] Sync Python examples"
+          auto_merge: false
+
+      # Workflow 3: Copy shared docs to both destinations
+      - name: "test-docs-to-dest1"
+        source:
+          patterns:
+            - "docs/**"
+        destination:
+          repo: "cbullinger/copier-app-dest-1"
+          branch: "main"
+        transformations:
+          - move:
+              from: "docs/"
+              to: "documentation/"
+        commit_strategy:
+          type: "direct"
+          message: "Sync docs from source"
+

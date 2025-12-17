@@ -1,6 +1,6 @@
 # Troubleshooting Guide
 
-Common issues and solutions for the examples-copier application.
+Common issues and solutions for the github-copier application.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ Common issues and solutions for the examples-copier application.
    cp copier-config.yaml /path/to/source-repo/copier-config.yaml
    cd /path/to/source-repo
    git add copier-config.yaml
-   git commit -m "Add examples-copier config"
+   git commit -m "Add github-copier config"
    git push
    ```
 
@@ -221,7 +221,7 @@ pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
 
 3. **Test with dry-run mode:**
    ```bash
-   DRY_RUN=true ./examples-copier
+   DRY_RUN=true ./github-copier
    ```
 
 ### No Response from Webhook
@@ -241,7 +241,7 @@ pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
 
 3. **Test with curl:**
    ```bash
-   ./test-webhook -payload test-payloads/example-pr-merged.json
+   ./test-webhook -payload testdata/example-pr-merged.json
    ```
 
 ## Deployment Issues
@@ -256,7 +256,7 @@ pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
 **Solution:** Disable cloud logging for local testing:
 ```bash
 export COPIER_DISABLE_CLOUD_LOGGING=true
-./examples-copier
+./github-copier
 ```
 
 ### MongoDB Connection Failed
@@ -305,7 +305,7 @@ export COPIER_DISABLE_CLOUD_LOGGING=true
 
 3. **For testing, use dry-run mode:**
    ```bash
-   DRY_RUN=true ./examples-copier
+   DRY_RUN=true ./github-copier
    ```
 
 ## Slack Notification Issues
@@ -394,7 +394,7 @@ export SLACK_CHANNEL="#your-channel"
 1. **Check for memory leaks:**
    ```bash
    # Monitor memory usage
-   top -p $(pgrep examples-copier)
+   top -p $(pgrep github-copier)
    ```
 
 2. **Common causes:**
@@ -413,7 +413,7 @@ export SLACK_CHANNEL="#your-channel"
 
 ```bash
 export LOG_LEVEL=debug
-./examples-copier
+./github-copier
 ```
 
 ### Check Health Endpoint
@@ -455,8 +455,8 @@ curl http://localhost:8080/metrics | jq
 ### Test with Dry-Run Mode
 
 ```bash
-DRY_RUN=true ./examples-copier &
-./test-webhook -payload test-payloads/example-pr-merged.json
+DRY_RUN=true ./github-copier &
+./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ### Check Audit Logs

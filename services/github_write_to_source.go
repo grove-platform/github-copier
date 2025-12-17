@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	. "github.com/mongodb/code-example-tooling/code-copier/types"
+	"github.com/grove-platform/github-copier/configs"
+	. "github.com/grove-platform/github-copier/types"
 )
 
 func UpdateDeprecationFile() {
@@ -34,6 +34,10 @@ func UpdateDeprecationFile() {
 	)
 	if err != nil {
 		LogError(fmt.Sprintf("Error getting deprecation file: %v", err))
+		return
+	}
+	if fileContent == nil {
+		LogError("Deprecation file content is nil")
 		return
 	}
 
@@ -80,6 +84,11 @@ func uploadDeprecationFileChanges(message string, newDeprecationFileContents str
 
 	if err != nil {
 		LogError(fmt.Sprintf("Error getting deprecation file contents: %v", err))
+		return
+	}
+	if targetFileContent == nil {
+		LogError("Target deprecation file content is nil")
+		return
 	}
 
 	options := &github.RepositoryContentFileOptions{
@@ -96,5 +105,5 @@ func uploadDeprecationFileChanges(message string, newDeprecationFileContents str
 		LogError(fmt.Sprintf("Cannot update deprecation file: %v", err))
 	}
 
-	LogInfo(fmt.Sprintf("Deprecation file updated."))
+	LogInfo("Deprecation file updated.")
 }

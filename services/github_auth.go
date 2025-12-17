@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"time"
@@ -16,8 +15,7 @@ import (
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/go-github/v48/github"
-	"github.com/mongodb/code-example-tooling/code-copier/configs"
-	"github.com/pkg/errors"
+	"github.com/grove-platform/github-copier/configs"
 	"github.com/shurcooL/graphql"
 	"golang.org/x/oauth2"
 )
@@ -40,32 +38,36 @@ var jwtExpiry time.Time
 // ConfigurePermissions sets up the necessary permissions to interact with the GitHub API.
 // It retrieves the GitHub App's private key from Google Secret Manager, generates a JWT,
 // and exchanges it for an installation access token.
-func ConfigurePermissions() {
+func ConfigurePermissions() error {
 	envFilePath := os.Getenv("ENV_FILE")
 
 	_, err := configs.LoadEnvironment(envFilePath)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "Failed to load environment"))
-
+		return fmt.Errorf("failed to load environment: %w", err)
 	}
 
-	pemKey := getPrivateKeyFromSecret()
+	pemKey, err := getPrivateKeyFromSecret()
+	if err != nil {
+		return fmt.Errorf("failed to get private key: %w", err)
+	}
+
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(pemKey)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "Unable to parse RSA private key"))
+		return fmt.Errorf("unable to parse RSA private key: %w", err)
 	}
 
 	// Generate JWT — use the numeric GitHub App ID (GITHUB_APP_ID) as "iss"
 	token, err := generateGitHubJWT(os.Getenv(configs.AppId), privateKey)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "Error generating JWT"))
+		return fmt.Errorf("error generating JWT: %w", err)
 	}
 
 	installationToken, err := getInstallationAccessToken("", token, HTTPClient)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "Error getting installation access token"))
+		return fmt.Errorf("error getting installation access token: %w", err)
 	}
 	InstallationAccessToken = installationToken
+	return nil
 }
 
 // generateGitHubJWT creates a JWT for GitHub App authentication.
@@ -88,25 +90,25 @@ func generateGitHubJWT(appID string, privateKey *rsa.PrivateKey) (string, error)
 
 // getPrivateKeyFromSecret retrieves the GitHub App's private key from Google Secret Manager.
 // It supports local testing by allowing the key to be provided via environment variables.
-func getPrivateKeyFromSecret() []byte {
+func getPrivateKeyFromSecret() ([]byte, error) {
 	if os.Getenv("SKIP_SECRET_MANAGER") == "true" { // for tests and local runs
 		if pem := os.Getenv("GITHUB_APP_PRIVATE_KEY"); pem != "" {
-			return []byte(pem)
+			return []byte(pem), nil
 		}
 		if b64 := os.Getenv("GITHUB_APP_PRIVATE_KEY_B64"); b64 != "" {
 			dec, err := base64.StdEncoding.DecodeString(b64)
 			if err != nil {
-				log.Fatalf("Invalid base64 private key: %v", err)
+				return nil, fmt.Errorf("invalid base64 private key: %w", err)
 			}
-			return dec
+			return dec, nil
 		}
-		log.Fatalf("SKIP_SECRET_MANAGER=true but no GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_B64 set")
+		return nil, fmt.Errorf("SKIP_SECRET_MANAGER=true but no GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_B64 set")
 	}
 	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 
 	if err != nil {
-		log.Fatalf("Failed to create Secret Manager client: %v", err)
+		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
 	defer client.Close()
 
@@ -120,9 +122,9 @@ func getPrivateKeyFromSecret() []byte {
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
-		log.Fatalf("Failed to access secret version: %v", err)
+		return nil, fmt.Errorf("failed to access secret version: %w", err)
 	}
-	return result.Payload.Data
+	return result.Payload.Data, nil
 }
 
 // getWebhookSecretFromSecretManager retrieves the webhook secret from Google Cloud Secret Manager
@@ -273,14 +275,16 @@ func GetRestClient() *github.Client {
 	return github.NewClient(httpClient)
 }
 
-func GetGraphQLClient() *graphql.Client {
+func GetGraphQLClient() (*graphql.Client, error) {
 	if InstallationAccessToken == "" {
-		ConfigurePermissions()
+		if err := ConfigurePermissions(); err != nil {
+			return nil, fmt.Errorf("failed to configure permissions: %w", err)
+		}
 	}
 	client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
 		Transport: &transport{token: InstallationAccessToken},
 	})
-	return client
+	return client, nil
 }
 
 // getOrRefreshJWT returns a valid JWT token, generating a new one if expired
@@ -291,7 +295,11 @@ func getOrRefreshJWT() (string, error) {
 	}
 
 	// Generate new JWT
-	pemKey := getPrivateKeyFromSecret()
+	pemKey, err := getPrivateKeyFromSecret()
+	if err != nil {
+		return "", fmt.Errorf("failed to get private key: %w", err)
+	}
+
 	privateKey, err := jwt.ParseRSAPrivateKeyFromPEM(pemKey)
 	if err != nil {
 		return "", fmt.Errorf("unable to parse RSA private key: %w", err)

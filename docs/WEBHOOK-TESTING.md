@@ -1,6 +1,6 @@
 # Webhook Testing Guide
 
-This guide explains how to test the examples-copier application with webhooks using real PR data or example payloads.
+This guide explains how to test the github-copier application with webhooks using real PR data or example payloads.
 
 ## Quick Start
 
@@ -18,10 +18,10 @@ go build -o test-webhook ./cmd/test-webhook
 
 ```bash
 # Send example payload to local server
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # See payload without sending
-./test-webhook -payload test-payloads/example-pr-merged.json -dry-run
+./test-webhook -payload testdata/example-pr-merged.json -dry-run
 ```
 
 ### 3. Test with Real PR Data
@@ -45,10 +45,10 @@ Test your configuration changes locally before deploying:
 
 ```bash
 # Terminal 1: Start app in dry-run mode
-DRY_RUN=true ./examples-copier
+DRY_RUN=true ./github-copier
 
 # Terminal 2: Send test webhook
-./test-webhook -payload test-payloads/example-pr-merged.json
+./test-webhook -payload testdata/example-pr-merged.json
 
 # Check Terminal 1 for processing logs
 ```
@@ -125,7 +125,7 @@ cat > test-go-only.json <<EOF
 EOF
 
 # Test
-DRY_RUN=true ./examples-copier &
+DRY_RUN=true ./github-copier &
 ./test-webhook -payload test-go-only.json
 ```
 
@@ -231,7 +231,7 @@ chmod +x scripts/test-with-pr.sh
 
 ### Complete Payload
 
-See `test-payloads/example-pr-merged.json` for a complete example with:
+See `testdata/example-pr-merged.json` for a complete example with:
 - Multiple file changes (added, modified, removed)
 - Full PR metadata
 - Repository information
@@ -425,14 +425,14 @@ Add webhook testing to your CI pipeline:
 - name: Test webhook processing
   run: |
     # Start app in background
-    DRY_RUN=true ./examples-copier &
+    DRY_RUN=true ./github-copier &
     APP_PID=$!
     
     # Wait for app to start
     sleep 5
     
     # Run webhook tests
-    ./test-webhook -payload test-payloads/example-pr-merged.json
+    ./test-webhook -payload testdata/example-pr-merged.json
     
     # Stop app
     kill $APP_PID

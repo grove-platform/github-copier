@@ -1,5 +1,5 @@
 # Binaries
-examples-copier
+github-copier
 code-copier
 copier
 *.exe
@@ -23,19 +23,21 @@ go.work
 # Environment files with secrets (working files - create from templates in configs/)
 # Working files (create from templates):
 #   env.yaml - App Engine deployment config (from configs/env.yaml.*)
-#   env-cloudrun.yaml - Cloud Run deployment config (from configs/env.yaml.*)
 #   .env - Local development config (from configs/.env.local.example)
+#   .env.test - Test config (from testdata/.env.test)
+# Note: env-cloudrun.yaml is committed (contains no secrets, only Secret Manager references)
 env.yaml
-env-cloudrun.yaml
 .env
 .env.local
+.env.test
 .env.production
 .env.*.local
 
-# Explicitly keep template files in configs/ directory (these should be tracked)
+# Explicitly keep template files (these should be tracked)
 !configs/env.yaml.example
 !configs/env.yaml.production
 !configs/.env.local.example
+!testdata/.env.test
 
 # Private keys
 *.pem
@@ -58,3 +60,4 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+RECOMMENDATIONS.md
