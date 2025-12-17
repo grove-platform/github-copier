@@ -37,7 +37,7 @@ env.yaml
 !configs/env.yaml.example
 !configs/env.yaml.production
 !configs/.env.local.example
-!test-payloads/.env.test
+!testdata/.env.test
 
 # Private keys
 *.pem
