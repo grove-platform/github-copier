@@ -45,6 +45,25 @@ func normalizeRepoName(repoName string) string {
 	return repoOwner() + "/" + repoName
 }
 
+// normalizeRefPath ensures a ref path is in the correct format for different GitHub API calls.
+// For GetRef: expects "heads/main" (no "refs/" prefix)
+// For UpdateRef: expects "refs/heads/main" (full ref path)
+func normalizeRefPath(branchPath string, fullPath bool) string {
+	// Strip "refs/" prefix if present
+	refPath := strings.TrimPrefix(branchPath, "refs/")
+
+	// Ensure "heads/" prefix exists (unless it's a tag)
+	if !strings.HasPrefix(refPath, "heads/") && !strings.HasPrefix(refPath, "tags/") {
+		refPath = "heads/" + refPath
+	}
+
+	// Add "refs/" prefix back if full path is needed
+	if fullPath {
+		return "refs/" + refPath
+	}
+	return refPath
+}
+
 // AddFilesToTargetRepoBranch uploads files to the target repository branch
 // using the specified commit strategy (direct or via pull request).
 func AddFilesToTargetRepoBranch() {
@@ -344,8 +363,11 @@ func createCommitTree(ctx context.Context, client *github.Client, targetBranch U
 
 	retryDelay := time.Duration(initialRetryDelay) * time.Millisecond
 
+	// GetRef expects "heads/main" format (no "refs/" prefix)
+	refPath := normalizeRefPath(targetBranch.BranchPath, false)
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		ref, _, err = client.Git.GetRef(ctx, owner, repoName, targetBranch.BranchPath)
+		ref, _, err = client.Git.GetRef(ctx, owner, repoName, refPath)
 		if err == nil && ref != nil {
 			break // Success
 		}
@@ -405,8 +427,10 @@ func createCommit(ctx context.Context, client *github.Client, targetBranch Uploa
 	}
 
 	// Update branch ref directly (no second GET)
+	// UpdateRef expects full ref path "refs/heads/main"
+	fullRefPath := normalizeRefPath(targetBranch.BranchPath, true)
 	ref := &github.Reference{
-		Ref:    github.String(targetBranch.BranchPath), // e.g., "refs/heads/main"
+		Ref:    github.String(fullRefPath),
 		Object: &github.GitObject{SHA: github.String(newCommit.GetSHA())},
 	}
 	if _, _, err := client.Git.UpdateRef(ctx, owner, repoName, ref, false); err != nil {

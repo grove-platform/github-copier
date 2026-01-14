@@ -287,6 +287,44 @@ func GetGraphQLClient() (*graphql.Client, error) {
 	return client, nil
 }
 
+// GetGraphQLClientForOrg returns a GitHub GraphQL API client authenticated for a specific organization
+func GetGraphQLClientForOrg(org string) (*graphql.Client, error) {
+	// Check if we have a cached token for this org
+	if token, ok := installationTokenCache[org]; ok && token != "" {
+		client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
+			Transport: &transport{token: token},
+		})
+		return client, nil
+	}
+
+	// Get installation ID for the organization
+	installationID, err := getInstallationIDForOrg(org)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get installation ID for org %s: %w", org, err)
+	}
+
+	// Get JWT token
+	token, err := getOrRefreshJWT()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JWT: %w", err)
+	}
+
+	// Get installation access token
+	installationToken, err := getInstallationAccessToken(installationID, token, HTTPClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get installation token for org %s: %w", org, err)
+	}
+
+	// Cache the token
+	installationTokenCache[org] = installationToken
+
+	// Create and return client
+	client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
+		Transport: &transport{token: installationToken},
+	})
+	return client, nil
+}
+
 // getOrRefreshJWT returns a valid JWT token, generating a new one if expired
 func getOrRefreshJWT() (string, error) {
 	// Check if we have a valid cached JWT

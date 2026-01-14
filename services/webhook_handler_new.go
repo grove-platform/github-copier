@@ -45,7 +45,11 @@ func simpleVerifySignature(sigHeader string, body, secret []byte) bool {
 
 // RetrieveFileContentsWithConfigAndBranch fetches file contents from a specific branch
 func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
-	client := GetRestClient()
+	// Use org-specific client to ensure we have the right installation token
+	client, err := GetRestClientForOrg(repoOwner)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", repoOwner, err)
+	}
 
 	fileContent, _, _, err := client.Repositories.GetContents(
 		ctx,

@@ -26,9 +26,10 @@ func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFil
 		}
 	}
 
-	client, err := GetGraphQLClient()
+	// Use org-specific client to ensure we have the right installation token
+	client, err := GetGraphQLClientForOrg(owner)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get GraphQL client: %w", err)
+		return nil, fmt.Errorf("failed to get GraphQL client for org %s: %w", owner, err)
 	}
 	ctx := context.Background()
 
