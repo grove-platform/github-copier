@@ -340,7 +340,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	// Create upload key
 	key := UploadKey{
 		RepoName:   workflow.Destination.Repo,
-		BranchPath: "refs/heads/" + workflow.Destination.Branch,
+		BranchPath: workflow.Destination.Branch,
 	}
 
 	// Get existing entries from FileStateService
