@@ -62,6 +62,11 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 		// Fall back to fetching from repository
 		content, err = retrieveConfigFileContent(ctx, configFile, config)
 		if err != nil {
+			// Check if this is an authentication error and make it more prominent
+			errStr := err.Error()
+			if strings.Contains(errStr, "GITHUB APP AUTHENTICATION FAILED") || strings.Contains(errStr, "401") || strings.Contains(errStr, "Bad credentials") {
+				return nil, fmt.Errorf("GITHUB APP AUTHENTICATION FAILED: Unable to retrieve main config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager and redeploy the service. Original error: %w", err)
+			}
 			return nil, fmt.Errorf("failed to retrieve main config file: %w", err)
 		}
 	}
