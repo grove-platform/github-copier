@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/google/go-github/v48/github"
 	"gopkg.in/yaml.v3"
@@ -91,6 +92,11 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 		},
 	)
 	if err != nil {
+		// Check if this is an authentication error
+		errStr := err.Error()
+		if strings.Contains(errStr, "401") || strings.Contains(errStr, "Bad credentials") {
+			return "", fmt.Errorf("GITHUB APP AUTHENTICATION FAILED: Unable to fetch config file due to authentication error. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Original error: %w", err)
+		}
 		return "", fmt.Errorf("failed to get config file: %w", err)
 	}
 	if fileContent == nil {

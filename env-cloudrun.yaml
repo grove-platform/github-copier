@@ -13,6 +13,7 @@ CONFIG_REPO_BRANCH: "main"
 
 # Secret Manager References
 GITHUB_APP_PRIVATE_KEY_SECRET_NAME: "projects/1054147886816/secrets/CODE_COPIER_PEM/versions/latest"
+PEM_NAME: "projects/1054147886816/secrets/CODE_COPIER_PEM/versions/latest"
 WEBHOOK_SECRET_NAME: "projects/1054147886816/secrets/webhook-secret/versions/latest"
 MONGO_URI_SECRET_NAME: "projects/1054147886816/secrets/mongo-uri/versions/latest"
 

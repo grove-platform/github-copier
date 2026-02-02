@@ -246,6 +246,9 @@ func getInstallationAccessToken(installationId, jwtToken string, hc *http.Client
 
 	if resp.StatusCode != http.StatusCreated {
 		b, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", fmt.Errorf("GITHUB APP AUTHENTICATION FAILED (401): Failed to get installation access token. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", string(b))
+		}
 		return "", fmt.Errorf("status %d: %s", resp.StatusCode, string(b))
 	}
 	var out struct {
@@ -383,6 +386,9 @@ func getInstallationIDForOrg(org string) (string, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", fmt.Errorf("GITHUB APP AUTHENTICATION FAILED (401): The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", string(body))
+		}
 		return "", fmt.Errorf("GET %s: %d %s %s", url, resp.StatusCode, resp.Status, body)
 	}
 
