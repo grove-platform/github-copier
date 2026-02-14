@@ -58,7 +58,7 @@ func buildMergedPRWebhook(t *testing.T, owner, repo, branch string, prNumber int
 		t.Fatalf("marshal PR event: %v", err)
 	}
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 	req.Header.Set("X-GitHub-Delivery", "integration-test-delivery-1")
 

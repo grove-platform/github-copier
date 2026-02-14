@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "Examples Copier - Makefile"
+	@echo "GitHub Copier - Makefile"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make build              - Build all binaries"
@@ -27,8 +27,8 @@ help:
 
 # Build all binaries
 build:
-	@echo "Building examples-copier..."
-	@go build -o examples-copier .
+	@echo "Building github-copier..."
+	@go build -o github-copier .
 	@echo "Building config-validator..."
 	@go build -o config-validator ./cmd/config-validator
 	@echo "Building test-webhook..."
@@ -42,7 +42,7 @@ test: test-unit
 # Run unit tests
 test-unit:
 	@echo "Running unit tests..."
-	@go test ./services -v
+	@go test -race ./services -v
 
 # Run unit tests with coverage
 test-coverage:
@@ -100,28 +100,28 @@ test-pr:
 
 # Run application
 run: build
-	@echo "Starting examples-copier..."
-	@./examples-copier
+	@echo "Starting github-copier..."
+	@./github-copier
 
 # Run in dry-run mode
 run-dry: build
-	@echo "Starting examples-copier in dry-run mode..."
-	@DRY_RUN=true ./examples-copier
+	@echo "Starting github-copier in dry-run mode..."
+	@DRY_RUN=true ./github-copier
 
 # Run in local development mode (recommended)
 run-local: build
-	@echo "Starting examples-copier in local development mode..."
+	@echo "Starting github-copier in local development mode..."
 	@./scripts/run-local.sh
 
 # Run with cloud logging disabled (quick local testing)
 run-local-quick: build
-	@echo "Starting examples-copier (local, no cloud logging)..."
-	@COPIER_DISABLE_CLOUD_LOGGING=true DRY_RUN=true ./examples-copier
+	@echo "Starting github-copier (local, no cloud logging)..."
+	@COPIER_DISABLE_CLOUD_LOGGING=true DRY_RUN=true ./github-copier
 
 # Validate configuration
 validate: build
 	@echo "Validating configuration..."
-	@./examples-copier -validate
+	@./github-copier -validate
 
 # Install binaries to $GOPATH/bin
 install:
@@ -129,12 +129,13 @@ install:
 	@go install .
 	@go install ./cmd/config-validator
 	@go install ./cmd/test-webhook
+	@go install ./cmd/test-pem
 	@echo "✓ Binaries installed to \$$GOPATH/bin"
 
 # Clean built binaries
 clean:
 	@echo "Cleaning built binaries..."
-	@rm -f examples-copier config-validator test-webhook
+	@rm -f github-copier config-validator test-webhook test-pem
 	@rm -f coverage.out coverage.html
 	@echo "✓ Clean complete"
 

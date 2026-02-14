@@ -41,6 +41,6 @@ default_events:
 # and creates scoped installation access tokens for each org.
 
 # --- Webhook Configuration ---
-# The app listens on the root path "/" for webhook deliveries.
-# Configure the webhook URL to point to your Cloud Run service URL.
+# The app listens on /events for webhook deliveries.
+# Configure the webhook URL to point to your Cloud Run service URL + /events.
 # A webhook secret (WEBHOOK_SECRET) should always be configured in production.
