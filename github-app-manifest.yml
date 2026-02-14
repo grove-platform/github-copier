@@ -1,0 +1,46 @@
+# GitHub App Manifest
+# Documents the minimum permissions and events required by this GitHub App.
+# Reference: https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest
+#
+# This file serves as living documentation. It can also be used with GitHub's
+# "Register a GitHub App from a manifest" flow to create a correctly configured app.
+
+name: GitHub Copier
+description: Copies code examples between repositories when pull requests are merged.
+url: https://github.com/grove-platform/github-copier
+
+# --- Permissions ---
+# The minimum set of permissions needed for the app to function.
+
+default_permissions:
+  # Read & Write: read source files, create branches/trees/commits, push to target repos,
+  # read config repos, update deprecation files.
+  contents: write
+
+  # Read & Write: read changed files via GraphQL, create PRs in target repos,
+  # check mergeability, auto-merge PRs.
+  pull_requests: write
+
+  # Read: implicit for all GitHub Apps; required for basic repository access.
+  metadata: read
+
+# --- Webhook Events ---
+# The app only needs the pull_request event. It processes merged PRs
+# (action == "closed" && merged == true) and ignores all other events.
+
+default_events:
+  - pull_request
+
+# --- Installation ---
+# The app must be installed in every organization whose repositories it accesses:
+#   - Source repos (where PRs trigger the webhook)
+#   - Target repos (where files are copied to)
+#   - Config repo  (where workflow YAML files live)
+#
+# The app discovers per-org installation IDs at runtime via GET /app/installations
+# and creates scoped installation access tokens for each org.
+
+# --- Webhook Configuration ---
+# The app listens on the root path "/" for webhook deliveries.
+# Configure the webhook URL to point to your Cloud Run service URL.
+# A webhook secret (WEBHOOK_SECRET) should always be configured in production.
