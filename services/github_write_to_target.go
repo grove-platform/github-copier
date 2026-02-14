@@ -171,7 +171,10 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 	// 2) Commit files to temp branch
 	entries := make(map[string]string, len(files))
 	for _, f := range files {
-		content, _ := f.GetContent()
+		content, err := f.GetContent()
+		if err != nil {
+			return fmt.Errorf("decode content for %s: %w", f.GetName(), err)
+		}
 		entries[f.GetName()] = content
 	}
 
@@ -215,7 +218,7 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 		}
 		if mergeable != nil && !*mergeable || strings.EqualFold(mergeableState, "dirty") {
 			LogWarning(fmt.Sprintf("PR #%d is not mergeable (state=%s). Likely merge conflicts. Leaving PR open for manual resolution.", pr.GetNumber(), mergeableState))
-			return fmt.Errorf("pull request #%d has merge conflicts (state=%s)", pr.GetNumber(), mergeableState)
+			return fmt.Errorf("%w: pull request #%d has conflicts (state=%s)", ErrMergeConflict, pr.GetNumber(), mergeableState)
 		}
 		if err = mergePR(ctx, client, defaultOwner, key.RepoName, pr.GetNumber()); err != nil {
 			return fmt.Errorf("merge PR: %w", err)
@@ -236,7 +239,10 @@ func addFilesToBranch(ctx context.Context, config *configs.Config, client *githu
 
 	entries := make(map[string]string, len(files))
 	for _, f := range files {
-		content, _ := f.GetContent()
+		content, err := f.GetContent()
+		if err != nil {
+			return fmt.Errorf("decode content for %s: %w", f.GetName(), err)
+		}
 		entries[f.GetName()] = content
 	}
 
@@ -270,8 +276,8 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 		return nil, err
 	}
 
-	// *** Check if branch (newBranchRef) already exists and delete it ***
-	newBranchRef, _, _ := client.Git.GetRef(ctx, owner, repoName, fmt.Sprintf("%s%s", "refs/heads/", newBranch))
+	// Check if branch already exists and delete it (404 is expected when it doesn't exist)
+	newBranchRef, _, _ := client.Git.GetRef(ctx, owner, repoName, fmt.Sprintf("%s%s", "refs/heads/", newBranch)) //nolint:errcheck // 404 expected
 	if err := deleteBranchIfExists(ctx, client, defaultOwner, normalizedRepo, newBranchRef); err != nil {
 		return nil, fmt.Errorf("failed to delete existing branch %s: %w", newBranch, err)
 	}
@@ -386,7 +392,7 @@ func createCommit(ctx context.Context, client *github.Client, defaultOwner strin
 		// Detect non-fast-forward / conflict scenarios and provide a clearer error
 		if eresp, ok := err.(*github.ErrorResponse); ok {
 			if eresp.Response != nil && eresp.Response.StatusCode == http.StatusUnprocessableEntity {
-				return fmt.Errorf("failed to update ref: non-fast-forward (possible conflict). Consider using PR strategy: %w", err)
+				return fmt.Errorf("%w: failed to update ref: non-fast-forward. Consider using PR strategy: %v", ErrMergeConflict, err)
 			}
 		}
 		return fmt.Errorf("failed to update ref to new commit: %w", err)

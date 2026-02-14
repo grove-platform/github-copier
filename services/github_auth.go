@@ -84,11 +84,11 @@ func getPrivateKeyFromSecret(ctx context.Context, config *configs.Config) ([]byt
 			}
 			return dec, nil
 		}
-		return nil, fmt.Errorf("SKIP_SECRET_MANAGER=true but no GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_B64 set")
+		return nil, fmt.Errorf("%w: SKIP_SECRET_MANAGER=true but no GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_B64 set", ErrSecretAccess)
 	}
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
+		return nil, fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
 	defer client.Close()
 
@@ -97,7 +97,7 @@ func getPrivateKeyFromSecret(ctx context.Context, config *configs.Config) ([]byt
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to access secret version: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrSecretAccess, err)
 	}
 	return result.Payload.Data, nil
 }
@@ -108,12 +108,12 @@ func getWebhookSecretFromSecretManager(ctx context.Context, secretName string) (
 		if secret := os.Getenv(configs.WebhookSecret); secret != "" {
 			return secret, nil
 		}
-		return "", fmt.Errorf("SKIP_SECRET_MANAGER=true but no WEBHOOK_SECRET set")
+		return "", fmt.Errorf("%w: SKIP_SECRET_MANAGER=true but no WEBHOOK_SECRET set", ErrSecretAccess)
 	}
 
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to create Secret Manager client: %w", err)
+		return "", fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
 	defer client.Close()
 
@@ -122,7 +122,7 @@ func getWebhookSecretFromSecretManager(ctx context.Context, secretName string) (
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to access secret version: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrSecretAccess, err)
 	}
 	return string(result.Payload.Data), nil
 }
@@ -164,12 +164,12 @@ func getSecretFromSecretManager(ctx context.Context, secretName, envVarName stri
 		if secret := os.Getenv(envVarName); secret != "" {
 			return secret, nil
 		}
-		return "", fmt.Errorf("SKIP_SECRET_MANAGER=true but no %s set", envVarName)
+		return "", fmt.Errorf("%w: SKIP_SECRET_MANAGER=true but no %s set", ErrSecretAccess, envVarName)
 	}
 
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to create Secret Manager client: %w", err)
+		return "", fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
 	defer client.Close()
 
@@ -178,7 +178,7 @@ func getSecretFromSecretManager(ctx context.Context, secretName, envVarName stri
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to access secret version: %w", err)
+		return "", fmt.Errorf("%w: %v", ErrSecretAccess, err)
 	}
 	return string(result.Payload.Data), nil
 }
@@ -208,11 +208,14 @@ func getInstallationAccessToken(installationId, jwtTokenStr string, hc *http.Cli
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		b, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusUnauthorized {
-			return "", time.Time{}, fmt.Errorf("GITHUB APP AUTHENTICATION FAILED (401): Failed to get installation access token. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", string(b))
+		b, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			b = []byte(fmt.Sprintf("<failed to read body: %v>", readErr))
 		}
-		return "", time.Time{}, fmt.Errorf("status %d: %s", resp.StatusCode, string(b))
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", time.Time{}, fmt.Errorf("%w: failed to get installation access token (401). The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", ErrAuthentication, string(b))
+		}
+		return "", time.Time{}, fmt.Errorf("%w: status %d: %s", ErrAuthentication, resp.StatusCode, string(b))
 	}
 	var out struct {
 		Token     string    `json:"token"`
@@ -340,11 +343,14 @@ func getInstallationIDForOrg(ctx context.Context, config *configs.Config, org st
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		if resp.StatusCode == http.StatusUnauthorized {
-			return "", fmt.Errorf("GITHUB APP AUTHENTICATION FAILED (401): The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", string(body))
+		body, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			body = []byte(fmt.Sprintf("<failed to read body: %v>", readErr))
 		}
-		return "", fmt.Errorf("GET %s: %d %s %s", url, resp.StatusCode, resp.Status, body)
+		if resp.StatusCode == http.StatusUnauthorized {
+			return "", fmt.Errorf("%w: the GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Response: %s", ErrAuthentication, string(body))
+		}
+		return "", fmt.Errorf("%w: GET %s: %d %s %s", ErrAuthentication, url, resp.StatusCode, resp.Status, body)
 	}
 
 	var installations []struct {
@@ -365,7 +371,7 @@ func getInstallationIDForOrg(ctx context.Context, config *configs.Config, org st
 		}
 	}
 
-	return "", fmt.Errorf("no installation found for organization: %s", org)
+	return "", fmt.Errorf("%w: %s", ErrInstallationNotFound, org)
 }
 
 // SetInstallationTokenForOrg sets a cached installation token for an organization.

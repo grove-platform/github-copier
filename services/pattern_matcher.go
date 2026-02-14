@@ -10,6 +10,10 @@ import (
 	"github.com/grove-platform/github-copier/types"
 )
 
+// unreplacedVarRe matches ${var} placeholders that were not substituted.
+// Compiled once at package level to avoid repeated compilation.
+var unreplacedVarRe = regexp.MustCompile(`\$\{([^}]+)\}`)
+
 // PatternMatcher handles pattern matching for file paths
 type PatternMatcher interface {
 	Match(filePath string, pattern types.SourcePattern) types.MatchResult
@@ -169,8 +173,7 @@ func (pt *DefaultPathTransformer) Transform(sourcePath string, template string, 
 // extractUnreplacedVars extracts variable names that weren't replaced
 func extractUnreplacedVars(s string) []string {
 	var unreplaced []string
-	re := regexp.MustCompile(`\$\{([^}]+)\}`)
-	matches := re.FindAllStringSubmatch(s, -1)
+	matches := unreplacedVarRe.FindAllStringSubmatch(s, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
 			unreplaced = append(unreplaced, match[1])
