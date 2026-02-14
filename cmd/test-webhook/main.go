@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 )
 
 func main() {
@@ -185,9 +185,9 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 		"action": "closed",
 		"number": prNumber,
 		"pull_request": map[string]interface{}{
-			"number":       pr.GetNumber(),
-			"state":        pr.GetState(),
-			"merged":       pr.GetMerged(),
+			"number":           pr.GetNumber(),
+			"state":            pr.GetState(),
+			"merged":           pr.GetMerged(),
 			"merge_commit_sha": pr.GetMergeCommitSHA(),
 			"head": map[string]interface{}{
 				"ref": pr.GetHead().GetRef(),
@@ -223,9 +223,9 @@ func createExamplePayload() []byte {
 		"action": "closed",
 		"number": 42,
 		"pull_request": map[string]interface{}{
-			"number": 42,
-			"state":  "closed",
-			"merged": true,
+			"number":           42,
+			"state":            "closed",
+			"merged":           true,
 			"merge_commit_sha": "abc123def456",
 			"head": map[string]interface{}{
 				"ref": "feature-branch",
@@ -298,4 +298,3 @@ func generateSignature(payload []byte, secret string) string {
 	mac.Write(payload)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
-

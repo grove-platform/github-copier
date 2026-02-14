@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/grove-platform/github-copier/configs"
 	"github.com/grove-platform/github-copier/types"
 )
@@ -282,20 +282,18 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 		return nil, fmt.Errorf("failed to delete existing branch %s: %w", newBranch, err)
 	}
 
-	newRef := &github.Reference{
-		Ref: github.String(fmt.Sprintf("%s%s", "refs/heads/", newBranch)),
-		Object: &github.GitObject{
-			SHA: baseRef.Object.SHA,
-		},
+	createRef := github.CreateRef{
+		Ref: fmt.Sprintf("refs/heads/%s", newBranch),
+		SHA: baseRef.Object.GetSHA(),
 	}
 
-	newBranchRef, _, err = client.Git.CreateRef(ctx, owner, repoName, newRef)
+	newBranchRef, _, err = client.Git.CreateRef(ctx, owner, repoName, createRef)
 	if err != nil {
-		LogCritical(fmt.Sprintf("Failed to create newBranchRef %s:  %s", newRef, err))
+		LogCritical(fmt.Sprintf("Failed to create newBranchRef %s: %s", createRef.Ref, err))
 		return nil, err
 	}
 
-	LogInfo(fmt.Sprintf("Branch created successfully: %s on %s (from %s)", newRef, normalizedRepo, base))
+	LogInfo(fmt.Sprintf("Branch created successfully: %s on %s (from %s)", createRef.Ref, normalizedRepo, base))
 
 	return newBranchRef, nil
 }
@@ -369,26 +367,27 @@ func createCommit(ctx context.Context, client *github.Client, defaultOwner strin
 
 	owner, repoName := parseRepoPath(targetBranch.RepoName, defaultOwner)
 
-	parent := &github.Commit{SHA: github.String(baseSHA)}
-	commit := &github.Commit{
-		Message: github.String(message),
-		Tree:    &github.Tree{SHA: github.String(treeSHA)},
+	parent := &github.Commit{SHA: github.Ptr(baseSHA)}
+	commit := github.Commit{
+		Message: github.Ptr(message),
+		Tree:    &github.Tree{SHA: github.Ptr(treeSHA)},
 		Parents: []*github.Commit{parent},
 	}
 
-	newCommit, _, err := client.Git.CreateCommit(ctx, owner, repoName, commit)
+	newCommit, _, err := client.Git.CreateCommit(ctx, owner, repoName, commit, nil)
 	if err != nil {
 		return fmt.Errorf("could not create commit: %w", err)
 	}
 
 	// Update branch ref directly (no second GET)
-	// UpdateRef expects full ref path "refs/heads/main"
+	// UpdateRef expects ref path like "heads/main" (without "refs/" prefix)
 	fullRefPath := normalizeRefPath(targetBranch.BranchPath, true)
-	ref := &github.Reference{
-		Ref:    github.String(fullRefPath),
-		Object: &github.GitObject{SHA: github.String(newCommit.GetSHA())},
+	refPath := strings.TrimPrefix(fullRefPath, "refs/")
+	updateRef := github.UpdateRef{
+		SHA:   newCommit.GetSHA(),
+		Force: github.Ptr(false),
 	}
-	if _, _, err := client.Git.UpdateRef(ctx, owner, repoName, ref, false); err != nil {
+	if _, _, err := client.Git.UpdateRef(ctx, owner, repoName, refPath, updateRef); err != nil {
 		// Detect non-fast-forward / conflict scenarios and provide a clearer error
 		if eresp, ok := err.(*github.ErrorResponse); ok {
 			if eresp.Response != nil && eresp.Response.StatusCode == http.StatusUnprocessableEntity {

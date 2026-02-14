@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/require"
 )
@@ -256,4 +256,3 @@ func TestPRTemplateFetcher_StopsAtFirstMatch(t *testing.T) {
 		require.Equal(t, 0, info["GET https://api.github.com/repos/testowner/testrepo/contents/"+location])
 	}
 }
-
