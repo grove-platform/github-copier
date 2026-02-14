@@ -28,6 +28,9 @@ type ServiceContainer struct {
 	// Server state
 	StartTime time.Time
 
+	// Background goroutine tracking (for graceful shutdown and tests)
+	wg sync.WaitGroup
+
 	// Shutdown state
 	closeOnce sync.Once
 	closed    bool
@@ -89,6 +92,11 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		SlackNotifier:     slackNotifier,
 		StartTime:         time.Now(),
 	}, nil
+}
+
+// Wait blocks until all background goroutines tracked by this container have finished.
+func (sc *ServiceContainer) Wait() {
+	sc.wg.Wait()
 }
 
 // Close cleans up resources. Safe to call multiple times.

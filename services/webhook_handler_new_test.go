@@ -320,6 +320,9 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 
 	HandleWebhookWithContainer(w, req, config, container)
 
+	// Wait for background goroutine to finish to avoid race conditions during cleanup
+	container.Wait()
+
 	// Should return 202 Accepted for merged PRs
 	if w.Code != http.StatusAccepted {
 		t.Errorf("Status code = %d, want %d", w.Code, http.StatusAccepted)
@@ -331,9 +334,6 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
-
-	// Note: The background goroutine will continue running and will eventually fail
-	// when trying to access GitHub APIs. This is expected and doesn't affect the test result.
 }
 
 func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
@@ -396,6 +396,9 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 
 	HandleWebhookWithContainer(w, req, config, container)
 
+	// Wait for background goroutine to finish to avoid race conditions during cleanup
+	container.Wait()
+
 	// Should still return 202 Accepted (webhook accepts the event)
 	if w.Code != http.StatusAccepted {
 		t.Errorf("Status code = %d, want %d", w.Code, http.StatusAccepted)
@@ -407,11 +410,6 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 	if response["status"] != "accepted" {
 		t.Errorf("Response status = %v, want accepted", response["status"])
 	}
-
-	// Note: The background goroutine will fail to find matching workflows
-	// because the workflow config specifies main branch, not development.
-	// This is the expected behavior - the webhook accepts the event but
-	// no workflows will be processed.
 }
 
 func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) {
@@ -500,6 +498,9 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 			w := httptest.NewRecorder()
 
 			HandleWebhookWithContainer(w, req, config, container)
+
+			// Wait for background goroutine to finish to avoid race conditions during cleanup
+			container.Wait()
 
 			// Should return 202 Accepted for all merged PRs
 			if w.Code != http.StatusAccepted {

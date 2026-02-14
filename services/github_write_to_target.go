@@ -58,15 +58,13 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 
 // AddFilesToTargetRepos uploads files to target repository branches.
 // It accepts the upload map as a parameter for concurrency safety.
-func AddFilesToTargetRepos(filesToUpload map[UploadKey]UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
-	ctx := context.Background()
-
+func AddFilesToTargetRepos(ctx context.Context, filesToUpload map[UploadKey]UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
 	for key, value := range filesToUpload {
 		// Parse the repository to get the organization
 		owner, _ := parseRepoPath(key.RepoName)
 
 		// Get a client authenticated for this organization
-		client, err := GetRestClientForOrg(owner)
+		client, err := GetRestClientForOrg(ctx, owner)
 		if err != nil {
 			LogCritical(fmt.Sprintf("Failed to get GitHub client for org %s: %v", owner, err))
 			// Record failure for each file in this batch

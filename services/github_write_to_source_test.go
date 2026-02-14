@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/grove-platform/github-copier/types"
@@ -8,7 +9,7 @@ import (
 
 func TestUpdateDeprecationFile_EmptyMap(t *testing.T) {
 	// When the map is empty, UpdateDeprecationFile should return early without panic.
-	UpdateDeprecationFile(map[string]Configs{})
+	UpdateDeprecationFile(context.Background(), map[string]Configs{})
 }
 
 func TestUpdateDeprecationFile_WithFiles(t *testing.T) {

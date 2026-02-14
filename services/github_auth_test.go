@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"testing"
@@ -85,7 +86,7 @@ func TestLoadWebhookSecret_FromEnv(t *testing.T) {
 	defer os.Unsetenv("WEBHOOK_SECRET")
 
 	config := &configs.Config{WebhookSecret: ""}
-	_ = LoadWebhookSecret(config)
+	_ = LoadWebhookSecret(context.Background(), config)
 
 	envSecret := os.Getenv("WEBHOOK_SECRET")
 	if envSecret != testSecret {
@@ -189,7 +190,7 @@ func TestTokenManager_ThreadSafety(t *testing.T) {
 
 	done := make(chan bool, 10)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(n int) {
 			defer func() { done <- true }()
 			org := "org-" + string(rune('A'+n))
@@ -199,7 +200,7 @@ func TestTokenManager_ThreadSafety(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(n int) {
 			defer func() { done <- true }()
 			org := "org-" + string(rune('A'+n))

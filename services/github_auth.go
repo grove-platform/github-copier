@@ -28,7 +28,7 @@ type transport struct {
 // ConfigurePermissions sets up the necessary permissions to interact with the GitHub API.
 // It retrieves the GitHub App's private key from Google Secret Manager, generates a JWT,
 // and exchanges it for an installation access token stored in the TokenManager.
-func ConfigurePermissions() error {
+func ConfigurePermissions(ctx context.Context) error {
 	envFilePath := os.Getenv("ENV_FILE")
 
 	_, err := configs.LoadEnvironment(envFilePath)
@@ -36,7 +36,7 @@ func ConfigurePermissions() error {
 		return fmt.Errorf("failed to load environment: %w", err)
 	}
 
-	pemKey, err := getPrivateKeyFromSecret()
+	pemKey, err := getPrivateKeyFromSecret(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get private key: %w", err)
 	}
@@ -79,7 +79,7 @@ func generateGitHubJWT(appID string, privateKey *rsa.PrivateKey) (string, error)
 
 // getPrivateKeyFromSecret retrieves the GitHub App's private key from Google Secret Manager.
 // It supports local testing by allowing the key to be provided via environment variables.
-func getPrivateKeyFromSecret() ([]byte, error) {
+func getPrivateKeyFromSecret(ctx context.Context) ([]byte, error) {
 	if os.Getenv("SKIP_SECRET_MANAGER") == "true" {
 		if pem := os.Getenv("GITHUB_APP_PRIVATE_KEY"); pem != "" {
 			return []byte(pem), nil
@@ -93,20 +93,25 @@ func getPrivateKeyFromSecret() ([]byte, error) {
 		}
 		return nil, fmt.Errorf("SKIP_SECRET_MANAGER=true but no GITHUB_APP_PRIVATE_KEY or GITHUB_APP_PRIVATE_KEY_B64 set")
 	}
-	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
 	defer client.Close()
 
+	// Build the config to resolve the secret path using the project ID
+	cfg := configs.NewConfig()
 	secretName := os.Getenv(configs.PEMKeyName)
 	if secretName == "" {
-		secretName = configs.NewConfig().PEMKeyName
+		secretName = cfg.PEMKeyName
+	}
+	projectID := os.Getenv(configs.GoogleCloudProjectId)
+	if projectID != "" {
+		cfg.GoogleCloudProjectId = projectID
 	}
 
 	req := &secretmanagerpb.AccessSecretVersionRequest{
-		Name: secretName,
+		Name: cfg.SecretPath(secretName),
 	}
 	result, err := client.AccessSecretVersion(ctx, req)
 	if err != nil {
@@ -116,7 +121,7 @@ func getPrivateKeyFromSecret() ([]byte, error) {
 }
 
 // getWebhookSecretFromSecretManager retrieves the webhook secret from Google Cloud Secret Manager
-func getWebhookSecretFromSecretManager(secretName string) (string, error) {
+func getWebhookSecretFromSecretManager(ctx context.Context, secretName string) (string, error) {
 	if os.Getenv("SKIP_SECRET_MANAGER") == "true" {
 		if secret := os.Getenv(configs.WebhookSecret); secret != "" {
 			return secret, nil
@@ -124,7 +129,6 @@ func getWebhookSecretFromSecretManager(secretName string) (string, error) {
 		return "", fmt.Errorf("SKIP_SECRET_MANAGER=true but no WEBHOOK_SECRET set")
 	}
 
-	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create Secret Manager client: %w", err)
@@ -142,11 +146,12 @@ func getWebhookSecretFromSecretManager(secretName string) (string, error) {
 }
 
 // LoadWebhookSecret loads the webhook secret from Secret Manager or environment variable
-func LoadWebhookSecret(config *configs.Config) error {
+func LoadWebhookSecret(ctx context.Context, config *configs.Config) error {
 	if config.WebhookSecret != "" {
 		return nil
 	}
-	secret, err := getWebhookSecretFromSecretManager(config.WebhookSecretName)
+	resolvedName := config.SecretPath(config.WebhookSecretName)
+	secret, err := getWebhookSecretFromSecretManager(ctx, resolvedName)
 	if err != nil {
 		return fmt.Errorf("failed to load webhook secret: %w", err)
 	}
@@ -155,14 +160,15 @@ func LoadWebhookSecret(config *configs.Config) error {
 }
 
 // LoadMongoURI loads the MongoDB URI from Secret Manager or environment variable
-func LoadMongoURI(config *configs.Config) error {
+func LoadMongoURI(ctx context.Context, config *configs.Config) error {
 	if config.MongoURI != "" {
 		return nil
 	}
 	if config.MongoURISecretName == "" {
 		return nil
 	}
-	uri, err := getSecretFromSecretManager(config.MongoURISecretName, "MONGO_URI")
+	resolvedName := config.SecretPath(config.MongoURISecretName)
+	uri, err := getSecretFromSecretManager(ctx, resolvedName, "MONGO_URI")
 	if err != nil {
 		return fmt.Errorf("failed to load MongoDB URI: %w", err)
 	}
@@ -171,7 +177,7 @@ func LoadMongoURI(config *configs.Config) error {
 }
 
 // getSecretFromSecretManager is a generic function to retrieve any secret from Secret Manager
-func getSecretFromSecretManager(secretName, envVarName string) (string, error) {
+func getSecretFromSecretManager(ctx context.Context, secretName, envVarName string) (string, error) {
 	if os.Getenv("SKIP_SECRET_MANAGER") == "true" {
 		if secret := os.Getenv(envVarName); secret != "" {
 			return secret, nil
@@ -179,7 +185,6 @@ func getSecretFromSecretManager(secretName, envVarName string) (string, error) {
 		return "", fmt.Errorf("SKIP_SECRET_MANAGER=true but no %s set", envVarName)
 	}
 
-	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create Secret Manager client: %w", err)
@@ -262,9 +267,9 @@ func GetRestClient() *github.Client {
 }
 
 // GetGraphQLClient returns a GitHub GraphQL API client authenticated with the default installation access token.
-func GetGraphQLClient() (*graphql.Client, error) {
+func GetGraphQLClient(ctx context.Context) (*graphql.Client, error) {
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
-		if err := ConfigurePermissions(); err != nil {
+		if err := ConfigurePermissions(ctx); err != nil {
 			return nil, fmt.Errorf("failed to configure permissions: %w", err)
 		}
 	}
@@ -276,7 +281,7 @@ func GetGraphQLClient() (*graphql.Client, error) {
 
 // GetGraphQLClientForOrg returns a GitHub GraphQL API client authenticated for a specific organization.
 // Uses the TokenManager for thread-safe token caching with expiry tracking.
-func GetGraphQLClientForOrg(org string) (*graphql.Client, error) {
+func GetGraphQLClientForOrg(ctx context.Context, org string) (*graphql.Client, error) {
 	if token, ok := defaultTokenManager.GetTokenForOrg(org); ok {
 		client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
 			Transport: &transport{token: token},
@@ -284,12 +289,12 @@ func GetGraphQLClientForOrg(org string) (*graphql.Client, error) {
 		return client, nil
 	}
 
-	installationID, err := getInstallationIDForOrg(org)
+	installationID, err := getInstallationIDForOrg(ctx, org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get installation ID for org %s: %w", org, err)
 	}
 
-	token, err := getOrRefreshJWT()
+	token, err := getOrRefreshJWT(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get JWT: %w", err)
 	}
@@ -309,12 +314,12 @@ func GetGraphQLClientForOrg(org string) (*graphql.Client, error) {
 }
 
 // getOrRefreshJWT returns a valid JWT token, generating a new one if expired.
-func getOrRefreshJWT() (string, error) {
+func getOrRefreshJWT(ctx context.Context) (string, error) {
 	if cachedToken, ok := defaultTokenManager.GetCachedJWT(); ok {
 		return cachedToken, nil
 	}
 
-	pemKey, err := getPrivateKeyFromSecret()
+	pemKey, err := getPrivateKeyFromSecret(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get private key: %w", err)
 	}
@@ -334,8 +339,8 @@ func getOrRefreshJWT() (string, error) {
 }
 
 // getInstallationIDForOrg retrieves the installation ID for a specific organization
-func getInstallationIDForOrg(org string) (string, error) {
-	token, err := getOrRefreshJWT()
+func getInstallationIDForOrg(ctx context.Context, org string) (string, error) {
+	token, err := getOrRefreshJWT(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to get JWT: %w", err)
 	}
@@ -391,7 +396,7 @@ func SetInstallationTokenForOrg(org, token string) {
 }
 
 // GetRestClientForOrg returns a GitHub REST API client authenticated for a specific organization.
-func GetRestClientForOrg(org string) (*github.Client, error) {
+func GetRestClientForOrg(ctx context.Context, org string) (*github.Client, error) {
 	tm := defaultTokenManager
 	hc := tm.GetHTTPClient()
 
@@ -399,12 +404,12 @@ func GetRestClientForOrg(org string) (*github.Client, error) {
 		return newGitHubRESTClient(token, hc), nil
 	}
 
-	installationID, err := getInstallationIDForOrg(org)
+	installationID, err := getInstallationIDForOrg(ctx, org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get installation ID for org %s: %w", org, err)
 	}
 
-	token, err := getOrRefreshJWT()
+	token, err := getOrRefreshJWT(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get JWT: %w", err)
 	}

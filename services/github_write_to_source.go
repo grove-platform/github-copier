@@ -13,7 +13,7 @@ import (
 )
 
 // UpdateDeprecationFile updates the deprecation file with the provided data map.
-func UpdateDeprecationFile(filesToDeprecate map[string]Configs) {
+func UpdateDeprecationFile(ctx context.Context, filesToDeprecate map[string]Configs) {
 	// Early return if there are no files to deprecate - prevents blank commits
 	if len(filesToDeprecate) == 0 {
 		LogInfo("No deprecated files to record; skipping deprecation file update")
@@ -22,7 +22,6 @@ func UpdateDeprecationFile(filesToDeprecate map[string]Configs) {
 
 	// Fetch the deprecation file from the repository
 	client := GetRestClient()
-	ctx := context.Background()
 
 	fileContent, _, _, err := client.Repositories.GetContents(
 		ctx,
@@ -72,14 +71,13 @@ func UpdateDeprecationFile(filesToDeprecate map[string]Configs) {
 	}
 
 	message := fmt.Sprintf("Updating %s.", os.Getenv(configs.DeprecationFile))
-	uploadDeprecationFileChanges(message, string(updatedJSON))
+	uploadDeprecationFileChanges(ctx, message, string(updatedJSON))
 
 	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", os.Getenv(configs.DeprecationFile), len(filesToDeprecate)))
 }
 
-func uploadDeprecationFileChanges(message string, newDeprecationFileContents string) {
+func uploadDeprecationFileChanges(ctx context.Context, message string, newDeprecationFileContents string) {
 	client := GetRestClient()
-	ctx := context.Background()
 
 	targetFileContent, _, _, err := client.Repositories.GetContents(ctx, os.Getenv(configs.ConfigRepoOwner), os.Getenv(configs.ConfigRepoName),
 		os.Getenv(configs.DeprecationFile), &github.RepositoryContentGetOptions{Ref: os.Getenv(configs.ConfigRepoBranch)})
