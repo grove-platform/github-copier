@@ -13,6 +13,7 @@ import (
 type ServiceContainer struct {
 	Config           *configs.Config
 	FileStateService FileStateService
+	TokenManager     *TokenManager
 
 	// New services
 	ConfigLoader      ConfigLoader
@@ -77,6 +78,7 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	return &ServiceContainer{
 		Config:            config,
 		FileStateService:  fileStateService,
+		TokenManager:      defaultTokenManager,
 		ConfigLoader:      configLoader,
 		PatternMatcher:    patternMatcher,
 		PathTransformer:   pathTransformer,

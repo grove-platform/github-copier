@@ -284,5 +284,15 @@ func validateConfig(config *Config) error {
 		return fmt.Errorf("missing required environment variables: %s", strings.Join(missingVars, ", "))
 	}
 
+	// Warn if webhook secret is not configured.
+	// In production, webhook signature verification should always be enabled
+	// to prevent unauthorized requests from being processed.
+	env := getEnvWithDefault(EnvFile, "")
+	if config.WebhookSecret == "" && config.WebhookSecretName == "" {
+		if env == "production" || env == "prod" {
+			return fmt.Errorf("WEBHOOK_SECRET or WEBHOOK_SECRET_NAME is required in production to enable webhook signature verification")
+		}
+	}
+
 	return nil
 }

@@ -278,9 +278,8 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
 	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
-	// Set InstallationAccessToken to prevent ConfigurePermissions from being called
-	// We don't reset this because the background goroutine may still need it after the test completes
-	InstallationAccessToken = "test-token"
+	// Set installation access token to prevent ConfigurePermissions from being called
+	defaultTokenManager.SetInstallationAccessToken("test-token")
 
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
@@ -356,7 +355,7 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
 	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
-	InstallationAccessToken = "test-token"
+	defaultTokenManager.SetInstallationAccessToken("test-token")
 
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
@@ -459,7 +458,7 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
 	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
-	InstallationAccessToken = "test-token"
+	defaultTokenManager.SetInstallationAccessToken("test-token")
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
