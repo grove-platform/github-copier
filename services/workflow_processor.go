@@ -10,12 +10,12 @@ import (
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // WorkflowProcessor processes workflows and applies transformations
 type WorkflowProcessor interface {
-	ProcessWorkflow(ctx context.Context, workflow Workflow, changedFiles []ChangedFile, prNumber int, sourceCommitSHA string) error
+	ProcessWorkflow(ctx context.Context, workflow types.Workflow, changedFiles []types.ChangedFile, prNumber int, sourceCommitSHA string) error
 }
 
 // workflowProcessor implements WorkflowProcessor
@@ -50,8 +50,8 @@ func NewWorkflowProcessor(
 // ProcessWorkflow processes a single workflow
 func (wp *workflowProcessor) ProcessWorkflow(
 	ctx context.Context,
-	workflow Workflow,
-	changedFiles []ChangedFile,
+	workflow types.Workflow,
+	changedFiles []types.ChangedFile,
 	prNumber int,
 	sourceCommitSHA string,
 ) error {
@@ -96,8 +96,8 @@ func (wp *workflowProcessor) ProcessWorkflow(
 // processFileForWorkflow processes a single file for a workflow
 func (wp *workflowProcessor) processFileForWorkflow(
 	ctx context.Context,
-	workflow Workflow,
-	file ChangedFile,
+	workflow types.Workflow,
+	file types.ChangedFile,
 	prNumber int,
 	sourceCommitSHA string,
 ) (bool, error) {
@@ -158,18 +158,18 @@ func (wp *workflowProcessor) processFileForWorkflow(
 // applyTransformation applies a transformation to a file path
 func (wp *workflowProcessor) applyTransformation(
 	ctx context.Context,
-	workflow Workflow,
-	transformation Transformation,
+	workflow types.Workflow,
+	transformation types.Transformation,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	switch transformation.GetType() {
-	case TransformationTypeMove:
+	case types.TransformationTypeMove:
 		return wp.applyMoveTransformation(transformation.Move, sourcePath)
-	case TransformationTypeCopy:
+	case types.TransformationTypeCopy:
 		return wp.applyCopyTransformation(transformation.Copy, sourcePath)
-	case TransformationTypeGlob:
+	case types.TransformationTypeGlob:
 		return wp.applyGlobTransformation(transformation.Glob, sourcePath)
-	case TransformationTypeRegex:
+	case types.TransformationTypeRegex:
 		return wp.applyRegexTransformation(transformation.Regex, sourcePath)
 	default:
 		return false, "", fmt.Errorf("unknown transformation type: %s", transformation.GetType())
@@ -178,7 +178,7 @@ func (wp *workflowProcessor) applyTransformation(
 
 // applyMoveTransformation applies a move transformation
 func (wp *workflowProcessor) applyMoveTransformation(
-	move *MoveTransform,
+	move *types.MoveTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Check if source path starts with the "from" prefix
@@ -201,7 +201,7 @@ func (wp *workflowProcessor) applyMoveTransformation(
 
 // applyCopyTransformation applies a copy transformation
 func (wp *workflowProcessor) applyCopyTransformation(
-	copy *CopyTransform,
+	copy *types.CopyTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Copy only matches exact file path
@@ -213,7 +213,7 @@ func (wp *workflowProcessor) applyCopyTransformation(
 
 // applyGlobTransformation applies a glob transformation
 func (wp *workflowProcessor) applyGlobTransformation(
-	glob *GlobTransform,
+	glob *types.GlobTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Use doublestar for glob matching
@@ -239,12 +239,12 @@ func (wp *workflowProcessor) applyGlobTransformation(
 
 // applyRegexTransformation applies a regex transformation
 func (wp *workflowProcessor) applyRegexTransformation(
-	regex *RegexTransform,
+	regex *types.RegexTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Use existing pattern matcher for regex
-	sourcePattern := SourcePattern{
-		Type:    PatternTypeRegex,
+	sourcePattern := types.SourcePattern{
+		Type:    types.PatternTypeRegex,
 		Pattern: regex.Pattern,
 	}
 
@@ -300,13 +300,13 @@ func (wp *workflowProcessor) isExcluded(path string, excludePatterns []string) b
 }
 
 // addToDeprecationMap adds a file to the deprecation map
-func (wp *workflowProcessor) addToDeprecationMap(workflow Workflow, targetPath string) {
+func (wp *workflowProcessor) addToDeprecationMap(workflow types.Workflow, targetPath string) {
 	deprecationFile := "deprecated_examples.json"
 	if workflow.DeprecationCheck != nil && workflow.DeprecationCheck.File != "" {
 		deprecationFile = workflow.DeprecationCheck.File
 	}
 
-	entry := DeprecatedFileEntry{
+	entry := types.DeprecatedFileEntry{
 		FileName: targetPath,
 		Repo:     workflow.Destination.Repo,
 		Branch:   workflow.Destination.Branch,
@@ -318,8 +318,8 @@ func (wp *workflowProcessor) addToDeprecationMap(workflow Workflow, targetPath s
 // addToUploadQueue adds a file to the upload queue
 func (wp *workflowProcessor) addToUploadQueue(
 	ctx context.Context,
-	workflow Workflow,
-	file ChangedFile,
+	workflow types.Workflow,
+	file types.ChangedFile,
 	targetPath string,
 	prNumber int,
 	sourceCommitSHA string,
@@ -342,7 +342,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	fileContent.Name = github.String(targetPath)
 
 	// Create upload key
-	key := UploadKey{
+	key := types.UploadKey{
 		RepoName:   workflow.Destination.Repo,
 		BranchPath: workflow.Destination.Branch,
 	}
@@ -351,9 +351,9 @@ func (wp *workflowProcessor) addToUploadQueue(
 	filesToUpload := wp.fileStateService.GetFilesToUpload()
 	content, exists := filesToUpload[key]
 	if !exists {
-		content = UploadFileContent{
+		content = types.UploadFileContent{
 			Content:        []github.RepositoryContent{},
-			CommitStrategy: CommitStrategy(getCommitStrategyType(workflow)),
+			CommitStrategy: types.CommitStrategy(getCommitStrategyType(workflow)),
 			UsePRTemplate:  getUsePRTemplate(workflow),
 			AutoMergePR:    getAutoMerge(workflow),
 		}
@@ -363,7 +363,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	content.Content = append(content.Content, *fileContent)
 
 	// Render templates with message context
-	msgCtx := NewMessageContext()
+	msgCtx := types.NewMessageContext()
 	msgCtx.SourceRepo = workflow.Source.Repo
 	msgCtx.SourceBranch = workflow.Source.Branch
 	msgCtx.TargetRepo = workflow.Destination.Repo
@@ -404,21 +404,21 @@ func (wp *workflowProcessor) addToUploadQueue(
 
 // Helper functions to extract config values
 
-func getCommitStrategyType(workflow Workflow) string {
+func getCommitStrategyType(workflow types.Workflow) string {
 	if workflow.CommitStrategy != nil && workflow.CommitStrategy.Type != "" {
 		return workflow.CommitStrategy.Type
 	}
 	return "pull_request" // default
 }
 
-func getUsePRTemplate(workflow Workflow) bool {
+func getUsePRTemplate(workflow types.Workflow) bool {
 	if workflow.CommitStrategy != nil {
 		return workflow.CommitStrategy.UsePRTemplate
 	}
 	return false
 }
 
-func getAutoMerge(workflow Workflow) bool {
+func getAutoMerge(workflow types.Workflow) bool {
 	if workflow.CommitStrategy != nil {
 		return workflow.CommitStrategy.AutoMerge
 	}

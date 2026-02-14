@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // parseRepoPath parses a repository path in the format "owner/repo" and returns owner and repo separately.
@@ -54,7 +54,7 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 
 // AddFilesToTargetRepos uploads files to target repository branches.
 // It accepts the upload map as a parameter for concurrency safety.
-func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[UploadKey]UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
+func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
 	for key, value := range filesToUpload {
 		// Parse the repository to get the organization
 		owner, _ := parseRepoPath(key.RepoName, config.ConfigRepoOwner)
@@ -154,7 +154,7 @@ func createPullRequest(ctx context.Context, client *github.Client, defaultOwner,
 
 // addFilesViaPR creates a temporary branch, commits files to it using the provided commitMessage,
 // opens a pull request with prTitle and prBody, and optionally merges it automatically.
-func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.Client, key UploadKey,
+func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
 	files []github.RepositoryContent, commitMessage string, prTitle string, prBody string, mergeWithoutReview bool,
 ) error {
 	defaultOwner := config.ConfigRepoOwner
@@ -178,7 +178,7 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 		entries[f.GetName()] = content
 	}
 
-	tempKey := UploadKey{RepoName: key.RepoName, BranchPath: "refs/heads/" + tempBranch}
+	tempKey := types.UploadKey{RepoName: key.RepoName, BranchPath: "refs/heads/" + tempBranch}
 	treeSHA, baseSHA, err := createCommitTree(ctx, config, client, tempKey, entries)
 	if err != nil {
 		return fmt.Errorf("create tree on temp branch: %w", err)
@@ -234,7 +234,7 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 }
 
 // addFilesToBranch builds a tree, creates a commit, and updates the ref (direct to target branch)
-func addFilesToBranch(ctx context.Context, config *configs.Config, client *github.Client, key UploadKey,
+func addFilesToBranch(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
 	files []github.RepositoryContent, message string) error {
 
 	entries := make(map[string]string, len(files))
@@ -301,7 +301,7 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 }
 
 // createCommitTree looks up the branch ref once, then builds a tree on top of that base commit.
-func createCommitTree(ctx context.Context, config *configs.Config, client *github.Client, targetBranch UploadKey,
+func createCommitTree(ctx context.Context, config *configs.Config, client *github.Client, targetBranch types.UploadKey,
 	files map[string]string) (treeSHA string, baseSHA string, err error) {
 
 	defaultOwner := config.ConfigRepoOwner
@@ -364,7 +364,7 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 }
 
 // createCommit makes the commit using the provided baseSHA, and updates the branch ref to the new commit.
-func createCommit(ctx context.Context, client *github.Client, defaultOwner string, targetBranch UploadKey,
+func createCommit(ctx context.Context, client *github.Client, defaultOwner string, targetBranch types.UploadKey,
 	baseSHA string, treeSHA string, message string) error {
 
 	owner, repoName := parseRepoPath(targetBranch.RepoName, defaultOwner)

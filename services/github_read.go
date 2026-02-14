@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/grove-platform/github-copier/types"
 	"github.com/shurcooL/githubv4"
 )
 
@@ -16,7 +16,7 @@ import (
 //   - owner: The repository owner (e.g., "mongodb")
 //   - repo: The repository name (e.g., "docs-sample-apps")
 //   - pr_number: The pull request number
-func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner string, repo string, pr_number int) ([]ChangedFile, error) {
+func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner string, repo string, pr_number int) ([]types.ChangedFile, error) {
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
 		LogWarning("No installation token provided, configuring permissions")
 		if err := ConfigurePermissions(ctx, config); err != nil {
@@ -30,13 +30,13 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 		return nil, fmt.Errorf("failed to get GraphQL client for org %s: %w", owner, err)
 	}
 
-	var changedFiles []ChangedFile
+	var changedFiles []types.ChangedFile
 	var cursor *githubv4.String = nil
 	hasNextPage := true
 
 	// Paginate through all files
 	for hasNextPage {
-		var prQuery PullRequestQuery
+		var prQuery types.PullRequestQuery
 		variables := map[string]interface{}{
 			"owner":  githubv4.String(owner),
 			"name":   githubv4.String(repo),
@@ -52,7 +52,7 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 
 		// Append files from this page
 		for _, edge := range prQuery.Repository.PullRequest.Files.Edges {
-			changedFiles = append(changedFiles, ChangedFile{
+			changedFiles = append(changedFiles, types.ChangedFile{
 				Path:      string(edge.Node.Path),
 				Additions: int(edge.Node.Additions),
 				Deletions: int(edge.Node.Deletions),
@@ -67,29 +67,9 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 		}
 	}
 
-	LogInfo(fmt.Sprintf("PR has %d changed files.", len(changedFiles)))
-
-	// Log all files for debugging (especially to see if server files are included)
-	LogInfo("=== ALL FILES FROM GRAPHQL API ===")
-	for i, file := range changedFiles {
-		LogInfo(fmt.Sprintf("  [%d] %s (status: %s)", i, file.Path, file.Status))
-	}
-	LogInfo("=== END FILE LIST ===")
-
-	// Count files by directory for debugging
-	clientCount := 0
-	serverCount := 0
-	otherCount := 0
-	for _, file := range changedFiles {
-		if len(file.Path) >= 13 && file.Path[:13] == "mflix/client/" {
-			clientCount++
-		} else if len(file.Path) >= 13 && file.Path[:13] == "mflix/server/" {
-			serverCount++
-		} else {
-			otherCount++
-		}
-	}
-	LogInfo(fmt.Sprintf("File breakdown: client=%d, server=%d, other=%d", clientCount, serverCount, otherCount))
+	LogInfoCtx(ctx, "Retrieved changed files from PR", map[string]interface{}{
+		"file_count": len(changedFiles),
+	})
 
 	return changedFiles, nil
 }
