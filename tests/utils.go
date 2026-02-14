@@ -30,6 +30,22 @@ func EnvOwnerRepo(t testing.TB) (string, string) {
 	return owner, repo
 }
 
+// TestConfig returns a *configs.Config populated from the current environment variables.
+// This mirrors the values set in TestMain for test suites.
+func TestConfig() *configs.Config {
+	cfg := configs.NewConfig()
+	cfg.ConfigRepoOwner = os.Getenv(configs.ConfigRepoOwner)
+	cfg.ConfigRepoName = os.Getenv(configs.ConfigRepoName)
+	cfg.InstallationId = os.Getenv(configs.InstallationId)
+	cfg.AppId = os.Getenv(configs.AppId)
+	cfg.AppClientId = os.Getenv(configs.AppClientId)
+	cfg.ConfigRepoBranch = os.Getenv(configs.ConfigRepoBranch)
+	if cfg.ConfigRepoBranch == "" {
+		cfg.ConfigRepoBranch = "main"
+	}
+	return cfg
+}
+
 //
 // HTTP/test wiring helpers
 //

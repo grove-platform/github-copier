@@ -44,9 +44,9 @@ func simpleVerifySignature(sigHeader string, body, secret []byte) bool {
 }
 
 // RetrieveFileContentsWithConfigAndBranch fetches file contents from a specific branch
-func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
+func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, config *configs.Config, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
 	// Use org-specific client to ensure we have the right installation token
-	client, err := GetRestClientForOrg(ctx, repoOwner)
+	client, err := GetRestClientForOrg(ctx, config, repoOwner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", repoOwner, err)
 	}
@@ -232,7 +232,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// Configure GitHub permissions
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
-		if err := ConfigurePermissions(ctx); err != nil {
+		if err := ConfigurePermissions(ctx, config); err != nil {
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
 			container.MetricsCollector.RecordWebhookFailed()
 			return
@@ -287,7 +287,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	yamlConfig.Workflows = matchingWorkflows
 
 	// Get changed files from PR (from the source repository that triggered the webhook)
-	changedFiles, err := GetFilesChangedInPr(ctx, repoOwner, repoName, prNumber)
+	changedFiles, err := GetFilesChangedInPr(ctx, config, repoOwner, repoName, prNumber)
 	if err != nil {
 		LogAndReturnError(ctx, "get_files", "failed to get changed files", err)
 		container.MetricsCollector.RecordWebhookFailed()
@@ -312,11 +312,11 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
 
 	// Process files with workflow processor
-	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, container)
+	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
 
 	// Upload queued files using local data for concurrency safety
 	filesToUpload := container.FileStateService.GetFilesToUpload()
-	AddFilesToTargetRepos(ctx, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
+	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
 	// Update deprecation file using local data for concurrency safety
@@ -330,7 +330,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 			}
 		}
 	}
-	UpdateDeprecationFile(ctx, filesToDeprecate)
+	UpdateDeprecationFile(ctx, config, filesToDeprecate)
 	container.FileStateService.ClearFilesToDeprecate()
 
 	// Calculate metrics after processing
@@ -359,7 +359,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 // processFilesWithWorkflows processes changed files using the workflow system
 func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSHA string,
-	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, container *ServiceContainer) {
+	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, config *configs.Config, container *ServiceContainer) {
 
 	LogInfoCtx(ctx, "processing files with workflows", map[string]interface{}{
 		"file_count":     len(changedFiles),
@@ -373,6 +373,7 @@ func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSH
 		container.FileStateService,
 		container.MetricsCollector,
 		container.MessageTemplater,
+		config,
 	)
 
 	// Process each workflow

@@ -83,7 +83,7 @@ func TestAddFilesToTargetRepos_Direct_Succeeds(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), test.TestConfig(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -108,8 +108,9 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 
 	// Force fresh token
 	services.DefaultTokenManager().SetInstallationAccessToken("")
-	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions(context.Background())
+	cfg := test.TestConfig()
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -168,10 +169,10 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), cfg, filesToUpload, nil, nil)
 
 	require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST",
-		regexp.MustCompile(`/app/installations/`+regexp.QuoteMeta(os.Getenv(configs.InstallationId))+`/access_tokens$`),
+		regexp.MustCompile(`/app/installations/`+regexp.QuoteMeta(cfg.InstallationId)+`/access_tokens$`),
 	))
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["POST "+createRefURL])
@@ -240,7 +241,7 @@ func TestAddFiles_DirectConflict_NonFastForward(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), test.TestConfig(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -255,9 +256,10 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	owner, repo := test.EnvOwnerRepo(t)
 	baseBranch := "main"
 
+	cfg := test.TestConfig()
 	services.DefaultTokenManager().SetInstallationAccessToken("")
-	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions(context.Background())
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -317,7 +319,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), cfg, filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["POST "+createRefURL])
@@ -342,7 +344,8 @@ func TestPriority_Strategy_ConfigOverridesEnv_And_MessageFallbacks(t *testing.T)
 	baseRefURL, commitsURL, updateRefURL := test.MockGitHubWriteEndpoints(owner, repo, baseBranch)
 
 	wantMsg := "Env Default Commit Message"
-	t.Setenv(configs.DefaultCommitMessage, wantMsg)
+	testCfg := test.TestConfig()
+	testCfg.DefaultCommitMessage = wantMsg
 
 	httpmock.RegisterResponder("POST", commitsURL, func(req *http.Request) (*http.Response, error) {
 		defer req.Body.Close()
@@ -359,17 +362,17 @@ func TestPriority_Strategy_ConfigOverridesEnv_And_MessageFallbacks(t *testing.T)
 		Content: github.String(base64.StdEncoding.EncodeToString([]byte("x"))),
 	}}
 
-	cfg := types.Configs{
+	typeCfg := types.Configs{
 		TargetRepo:           repo,
 		TargetBranch:         baseBranch,
 		CopierCommitStrategy: "direct", // overrides env "pr"
 	}
 
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
-		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: cfg.CopierCommitStrategy}: {TargetBranch: baseBranch, Content: files},
+		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: typeCfg.CopierCommitStrategy}: {TargetBranch: baseBranch, Content: files},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), testCfg, filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -385,9 +388,10 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	owner, repo := test.EnvOwnerRepo(t)
 	baseBranch := "main"
 
+	cfg := test.TestConfig()
 	services.DefaultTokenManager().SetInstallationAccessToken("")
-	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions(context.Background())
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -412,7 +416,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	)
 	commitsURL := "https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"
 	want := "Env Fallback Message"
-	t.Setenv(configs.DefaultCommitMessage, want)
+	cfg.DefaultCommitMessage = want
 	httpmock.RegisterResponder("POST", commitsURL, func(req *http.Request) (*http.Response, error) {
 		b, _ := io.ReadAll(req.Body)
 		if !strings.Contains(string(b), want) {
@@ -444,7 +448,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, RuleName: "", CommitStrategy: "pr"}: {TargetBranch: baseBranch, Content: files, CommitStrategy: "pr"},
 	}
 
-	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), cfg, filesToUpload, nil, nil)
 
 	require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST", regexp.MustCompile(`/pulls$`)))
 	require.Equal(t, 0, test.CountByMethodAndURLRegexp("PUT", regexp.MustCompile(`/pulls/5/merge$`)))
@@ -453,15 +457,16 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 func TestDeleteBranchIfExists_NilReference(t *testing.T) {
 	_ = test.WithHTTPMock(t)
 
+	cfg := test.TestConfig()
 	services.DefaultTokenManager().SetInstallationAccessToken("")
-	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions(context.Background())
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	ctx := context.Background()
 	client := services.GetRestClient()
 
-	err = services.DeleteBranchIfExistsExported(ctx, client, "test-org/test-repo", nil)
+	err = services.DeleteBranchIfExistsExported(ctx, client, cfg.ConfigRepoOwner, "test-org/test-repo", nil)
 	require.NoError(t, err, "DeleteBranchIfExistsExported should succeed with nil ref")
 
 	require.Equal(t, 0, test.CountByMethodAndURLRegexp("DELETE", regexp.MustCompile(`/git/refs/`)))

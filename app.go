@@ -75,11 +75,11 @@ func main() {
 	}
 
 	// Initialize Google Cloud logging
-	services.InitializeGoogleLogger()
+	services.InitializeGoogleLogger(config)
 	defer services.CloseGoogleLogger()
 
 	// Configure GitHub permissions
-	if err := services.ConfigurePermissions(ctx); err != nil {
+	if err := services.ConfigurePermissions(ctx, config); err != nil {
 		fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
 		os.Exit(1)
 	}

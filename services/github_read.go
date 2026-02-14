@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
@@ -17,16 +16,16 @@ import (
 //   - owner: The repository owner (e.g., "mongodb")
 //   - repo: The repository name (e.g., "docs-sample-apps")
 //   - pr_number: The pull request number
-func GetFilesChangedInPr(ctx context.Context, owner string, repo string, pr_number int) ([]ChangedFile, error) {
+func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner string, repo string, pr_number int) ([]ChangedFile, error) {
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
 		LogWarning("No installation token provided, configuring permissions")
-		if err := ConfigurePermissions(ctx); err != nil {
+		if err := ConfigurePermissions(ctx, config); err != nil {
 			return nil, fmt.Errorf("failed to configure permissions: %w", err)
 		}
 	}
 
 	// Use org-specific client to ensure we have the right installation token
-	client, err := GetGraphQLClientForOrg(ctx, owner)
+	client, err := GetGraphQLClientForOrg(ctx, config, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GraphQL client for org %s: %w", owner, err)
 	}
@@ -97,15 +96,15 @@ func GetFilesChangedInPr(ctx context.Context, owner string, repo string, pr_numb
 
 // RetrieveFileContents fetches the contents of a file from the config repository at the specified path.
 // It returns a github.RepositoryContent object containing the file details.
-func RetrieveFileContents(ctx context.Context, filePath string) (github.RepositoryContent, error) {
-	owner := os.Getenv(configs.ConfigRepoOwner)
-	repo := os.Getenv(configs.ConfigRepoName)
+func RetrieveFileContents(ctx context.Context, config *configs.Config, filePath string) (github.RepositoryContent, error) {
+	owner := config.ConfigRepoOwner
+	repo := config.ConfigRepoName
 	client := GetRestClient()
 
 	fileContent, _, _, err :=
 		client.Repositories.GetContents(ctx, owner, repo,
 			filePath, &github.RepositoryContentGetOptions{
-				Ref: os.Getenv(configs.ConfigRepoBranch),
+				Ref: config.ConfigRepoBranch,
 			})
 
 	if err != nil {

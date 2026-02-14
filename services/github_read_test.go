@@ -100,7 +100,8 @@ func TestRetrieveFileContents_Success(t *testing.T) {
 	payload := "hello"
 	stubContentsForBothOwners(path, b64(payload), owner, repo)
 
-	rc, err := services.RetrieveFileContents(context.Background(), path)
+	cfg := test.TestConfig()
+	rc, err := services.RetrieveFileContents(context.Background(), cfg, path)
 	require.NoError(t, err, "expected RetrieveFileContents to succeed")
 	require.IsType(t, github.RepositoryContent{}, rc)
 	require.Equal(t, path, rc.GetPath())

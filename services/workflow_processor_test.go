@@ -8,6 +8,8 @@ import (
 	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	test "github.com/grove-platform/github-copier/tests"
 )
 
 // ============================================================================
@@ -154,6 +156,7 @@ func TestWorkflowProcessor_MoveTransformation(t *testing.T) {
 				fileStateService,
 				nil, // metrics collector
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -223,6 +226,7 @@ func TestWorkflowProcessor_CopyTransformation(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -297,6 +301,7 @@ func TestWorkflowProcessor_GlobTransformation(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -364,6 +369,7 @@ func TestWorkflowProcessor_RegexTransformation(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -452,6 +458,7 @@ func TestWorkflowProcessor_ExcludePatterns(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := types.Workflow{
@@ -503,6 +510,7 @@ func TestWorkflowProcessor_MultipleTransformations(t *testing.T) {
 		fileStateService,
 		nil,
 		&mockMessageTemplater{},
+		test.TestConfig(),
 	)
 
 	workflow := types.Workflow{
@@ -564,6 +572,7 @@ func TestWorkflowProcessor_EmptyChangedFiles(t *testing.T) {
 		fileStateService,
 		nil,
 		&mockMessageTemplater{},
+		test.TestConfig(),
 	)
 
 	workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -587,6 +596,7 @@ func TestWorkflowProcessor_NoTransformations(t *testing.T) {
 		fileStateService,
 		nil,
 		&mockMessageTemplater{},
+		test.TestConfig(),
 	)
 
 	workflow := createTestWorkflow("test-workflow", []types.Transformation{})
@@ -614,6 +624,7 @@ func TestWorkflowProcessor_InvalidExcludePattern(t *testing.T) {
 		fileStateService,
 		nil,
 		&mockMessageTemplater{},
+		test.TestConfig(),
 	)
 
 	workflow := types.Workflow{
@@ -658,6 +669,7 @@ func TestWorkflowProcessor_CustomDeprecationFile(t *testing.T) {
 		fileStateService,
 		nil,
 		&mockMessageTemplater{},
+		test.TestConfig(),
 	)
 
 	workflow := types.Workflow{
@@ -733,6 +745,7 @@ func TestWorkflowProcessor_FileStatusHandling(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
@@ -811,6 +824,7 @@ func TestWorkflowProcessor_PathTransformationEdgeCases(t *testing.T) {
 				fileStateService,
 				nil,
 				&mockMessageTemplater{},
+				test.TestConfig(),
 			)
 
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{tt.transform})
