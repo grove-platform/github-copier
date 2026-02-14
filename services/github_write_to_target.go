@@ -62,7 +62,7 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 		// Get a client authenticated for this organization
 		client, err := GetRestClientForOrg(ctx, config, owner)
 		if err != nil {
-			LogCritical(fmt.Sprintf("Failed to get GitHub client for org %s: %v", owner, err))
+			LogCritical("Failed to get GitHub client for org", "org", owner, "error", err)
 			// Record failure for each file in this batch
 			if metricsCollector != nil {
 				for range value.Content {
@@ -98,11 +98,11 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 			targetBranch := strings.TrimPrefix(key.BranchPath, "refs/heads/")
 			template, err := prTemplateFetcher.FetchPRTemplate(ctx, client, key.RepoName, targetBranch)
 			if err != nil {
-				LogWarning(fmt.Sprintf("Failed to fetch PR template for %s: %v", key.RepoName, err))
+				LogWarning("Failed to fetch PR template", "repo", key.RepoName, "error", err)
 			} else if template != "" {
 				// Merge configured body with template
 				prBody = MergePRBodyWithTemplate(prBody, template)
-				LogInfo(fmt.Sprintf("Merged PR template for %s", key.RepoName))
+				LogInfo("Merged PR template", "repo", key.RepoName)
 			}
 		}
 
@@ -111,9 +111,9 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 
 		switch strategy {
 		case "direct": // commits directly to the target branch
-			LogInfo(fmt.Sprintf("Using direct commit strategy for %s on branch %s", key.RepoName, key.BranchPath))
+			LogInfo("Using direct commit strategy", "repo", key.RepoName, "branch", key.BranchPath)
 			if err := addFilesToBranch(ctx, config, client, key, value.Content, commitMsg); err != nil {
-				LogCritical(fmt.Sprintf("Failed to add files to target branch: %v\n", err))
+				LogCritical("Failed to add files to target branch", "error", err)
 				// Record failure for each file in this batch
 				if metricsCollector != nil {
 					for range value.Content {
@@ -122,9 +122,9 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 				}
 			}
 		default: // "pr" or "pull_request" strategy
-			LogInfo(fmt.Sprintf("Using PR commit strategy for %s on branch %s (auto_merge=%v)", key.RepoName, key.BranchPath, mergeWithoutReview))
+			LogInfo("Using PR commit strategy", "repo", key.RepoName, "branch", key.BranchPath, "auto_merge", mergeWithoutReview)
 			if err := addFilesViaPR(ctx, config, client, key, value.Content, commitMsg, prTitle, prBody, mergeWithoutReview); err != nil {
-				LogCritical(fmt.Sprintf("Failed via PR path: %v\n", err))
+				LogCritical("Failed via PR path", "error", err)
 				// Record failure for each file in this batch
 				if metricsCollector != nil {
 					for range value.Content {
@@ -195,8 +195,8 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 	}
 
 	// 4) Optionally merge the PR without review if MergeWithoutReview is true
-	LogInfo(fmt.Sprintf("PR created: #%d from %s to %s", pr.GetNumber(), tempBranch, base))
-	LogInfo(fmt.Sprintf("PR URL: %s", pr.GetHTMLURL()))
+	LogInfo("PR created", "pr_number", pr.GetNumber(), "from_branch", tempBranch, "base_branch", base)
+	LogInfo("PR URL", "url", pr.GetHTMLURL())
 	if mergeWithoutReview {
 		// Poll PR for mergeability; GitHub may take a moment to compute it
 		maxAttempts := config.PRMergePollMaxAttempts
@@ -217,7 +217,7 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 			time.Sleep(time.Duration(pollInterval) * time.Millisecond)
 		}
 		if mergeable != nil && !*mergeable || strings.EqualFold(mergeableState, "dirty") {
-			LogWarning(fmt.Sprintf("PR #%d is not mergeable (state=%s). Likely merge conflicts. Leaving PR open for manual resolution.", pr.GetNumber(), mergeableState))
+			LogWarning("PR is not mergeable; likely merge conflicts, leaving PR open for manual resolution", "pr_number", pr.GetNumber(), "state", mergeableState)
 			return fmt.Errorf("%w: pull request #%d has conflicts (state=%s)", ErrMergeConflict, pr.GetNumber(), mergeableState)
 		}
 		if err = mergePR(ctx, client, defaultOwner, key.RepoName, pr.GetNumber()); err != nil {
@@ -225,10 +225,10 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 		}
 		if err = deleteBranchIfExists(ctx, client, defaultOwner, key.RepoName, &github.Reference{Ref: github.String("refs/heads/" + tempBranch)}); err != nil {
 			// Log but don't fail - branch cleanup is not critical
-			LogWarning(fmt.Sprintf("Failed to delete temp branch after merge: %v", err))
+			LogWarning("Failed to delete temp branch after merge", "error", err)
 		}
 	} else {
-		LogInfo(fmt.Sprintf("PR created and awaiting review: #%d", pr.GetNumber()))
+		LogInfo("PR created and awaiting review", "pr_number", pr.GetNumber())
 	}
 	return nil
 }
@@ -248,11 +248,11 @@ func addFilesToBranch(ctx context.Context, config *configs.Config, client *githu
 
 	treeSHA, baseSHA, err := createCommitTree(ctx, config, client, key, entries)
 	if err != nil {
-		LogCritical(fmt.Sprintf("Error creating commit tree: %v\n", err))
+		LogCritical("Error creating commit tree", "error", err)
 		return err
 	}
 	if err := createCommit(ctx, client, config.ConfigRepoOwner, key, baseSHA, treeSHA, message); err != nil {
-		LogCritical(fmt.Sprintf("Error creating commit: %v\n", err))
+		LogCritical("Error creating commit", "error", err)
 		return err
 	}
 	return nil
@@ -272,7 +272,7 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 
 	baseRef, _, err := client.Git.GetRef(ctx, owner, repoName, "refs/heads/"+base)
 	if err != nil {
-		LogCritical(fmt.Sprintf("Failed to get '%s' baseRef: %s", base, err))
+		LogCritical("Failed to get baseRef", "base", base, "error", err)
 		return nil, err
 	}
 
@@ -289,11 +289,11 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 
 	newBranchRef, _, err = client.Git.CreateRef(ctx, owner, repoName, createRef)
 	if err != nil {
-		LogCritical(fmt.Sprintf("Failed to create newBranchRef %s: %s", createRef.Ref, err))
+		LogCritical("Failed to create newBranchRef", "ref", createRef.Ref, "error", err)
 		return nil, err
 	}
 
-	LogInfo(fmt.Sprintf("Branch created successfully: %s on %s (from %s)", createRef.Ref, normalizedRepo, base))
+	LogInfo("Branch created successfully", "ref", createRef.Ref, "repo", normalizedRepo, "base", base)
 
 	return newBranchRef, nil
 }
@@ -306,8 +306,7 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 	// Normalize repo name for consistent logging
 	normalizedRepo := normalizeRepoName(targetBranch.RepoName, defaultOwner)
 	owner, repoName := parseRepoPath(normalizedRepo, defaultOwner)
-	LogInfo(fmt.Sprintf("DEBUG createCommitTree: targetBranch.RepoName=%q, normalized=%q, parsed owner=%q, repoName=%q",
-		targetBranch.RepoName, normalizedRepo, owner, repoName))
+	LogInfo("DEBUG createCommitTree", "target_repo_name", targetBranch.RepoName, "normalized", normalizedRepo, "owner", owner, "repo_name", repoName)
 
 	// 1) Get current ref with retry logic to handle GitHub API eventual consistency
 	// When a branch is just created, it may take a moment to be visible
@@ -326,8 +325,7 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 		}
 
 		if attempt < maxRetries {
-			LogWarning(fmt.Sprintf("Failed to get ref for %s (attempt %d/%d): %v. Retrying in %v...",
-				normalizedRepo, attempt, maxRetries, err, retryDelay))
+			LogWarning("Failed to get ref; retrying", "repo", normalizedRepo, "attempt", attempt, "max_retries", maxRetries, "error", err, "retry_delay", retryDelay)
 			time.Sleep(retryDelay)
 			retryDelay *= 2 // Exponential backoff
 		}
@@ -337,7 +335,7 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 		if err == nil {
 			err = fmt.Errorf("targetRef is nil after %d attempts", maxRetries)
 		}
-		LogCritical(fmt.Sprintf("Failed to get ref for %s after %d attempts: %v\n", normalizedRepo, maxRetries, err))
+		LogCritical("Failed to get ref after max attempts", "repo", normalizedRepo, "attempts", maxRetries, "error", err)
 		return "", "", err
 	}
 	baseSHA = ref.GetObject().GetSHA()
@@ -408,14 +406,14 @@ func mergePR(ctx context.Context, client *github.Client, defaultOwner, repo stri
 	}
 	result, _, err := client.PullRequests.Merge(ctx, owner, repoName, pr_number, "Merging the pull request", options)
 	if err != nil {
-		LogCritical(fmt.Sprintf("Failed to merge PR: %v\n", err))
+		LogCritical("Failed to merge PR", "error", err)
 		return err
 	}
 	if result.GetMerged() {
-		LogInfo(fmt.Sprintf("Successfully merged PR #%d\n", pr_number))
+		LogInfo("Successfully merged PR", "pr_number", pr_number)
 		return nil
 	} else {
-		LogError(fmt.Sprintf("Failed to merge PR #%d: %s", pr_number, result.GetMessage()))
+		LogError("Failed to merge PR", "pr_number", pr_number, "message", result.GetMessage())
 		return fmt.Errorf("failed to merge PR #%d: %s", pr_number, result.GetMessage())
 	}
 }
@@ -437,13 +435,13 @@ func deleteBranchIfExists(backgroundContext context.Context, client *github.Clie
 		return fmt.Errorf("refusing to delete protected branch 'main'")
 	}
 
-	LogInfo(fmt.Sprintf("Deleting branch %s on %s", ref.GetRef(), normalizedRepo))
+	LogInfo("Deleting branch", "ref", ref.GetRef(), "repo", normalizedRepo)
 	_, _, err := client.Git.GetRef(backgroundContext, owner, repoName, ref.GetRef())
 
 	if err == nil { // Branch exists (there was no error fetching it)
 		_, err = client.Git.DeleteRef(backgroundContext, owner, repoName, ref.GetRef())
 		if err != nil {
-			LogCritical(fmt.Sprintf("Error deleting branch: %v\n", err))
+			LogCritical("Error deleting branch", "error", err)
 			return fmt.Errorf("failed to delete branch %s: %w", ref.GetRef(), err)
 		}
 	}

@@ -214,7 +214,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		defer container.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
-				LogCritical(fmt.Sprintf("panic in webhook handler for PR #%d in %s/%s: %v", prNumber, repoOwner, repoName, r))
+				LogCritical("panic in webhook handler", "pr_number", prNumber, "repo_owner", repoOwner, "repo_name", repoName, "recovered", r)
 				container.MetricsCollector.RecordWebhookFailed()
 				if notifyErr := container.SlackNotifier.NotifyError(bgCtx, &ErrorEvent{
 					Operation:  "panic_recovery",
@@ -222,7 +222,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 					PRNumber:   prNumber,
 					SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
 				}); notifyErr != nil {
-					LogWarning(fmt.Sprintf("failed to send Slack error notification: %v", notifyErr))
+					LogWarning("failed to send Slack error notification", "error", notifyErr)
 				}
 			}
 		}()
