@@ -9,6 +9,7 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/google/go-github/v48/github"
+	"github.com/grove-platform/github-copier/configs"
 	. "github.com/grove-platform/github-copier/types"
 )
 
@@ -24,6 +25,7 @@ type workflowProcessor struct {
 	fileStateService FileStateService
 	metricsCollector *MetricsCollector
 	messageTemplater MessageTemplater
+	config           *configs.Config
 }
 
 // NewWorkflowProcessor creates a new workflow processor
@@ -33,6 +35,7 @@ func NewWorkflowProcessor(
 	fileStateService FileStateService,
 	metricsCollector *MetricsCollector,
 	messageTemplater MessageTemplater,
+	config *configs.Config,
 ) WorkflowProcessor {
 	return &workflowProcessor{
 		patternMatcher:   patternMatcher,
@@ -40,6 +43,7 @@ func NewWorkflowProcessor(
 		fileStateService: fileStateService,
 		metricsCollector: metricsCollector,
 		messageTemplater: messageTemplater,
+		config:           config,
 	}
 }
 
@@ -329,7 +333,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	sourceRepoName := parts[1]
 
 	// Fetch file content from source repository
-	fileContent, err := RetrieveFileContentsWithConfigAndBranch(ctx, file.Path, sourceCommitSHA, sourceRepoOwner, sourceRepoName)
+	fileContent, err := RetrieveFileContentsWithConfigAndBranch(ctx, wp.config, file.Path, sourceCommitSHA, sourceRepoOwner, sourceRepoName)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve file content: %w", err)
 	}

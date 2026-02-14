@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/google/go-github/v48/github"
@@ -13,7 +12,7 @@ import (
 )
 
 // UpdateDeprecationFile updates the deprecation file with the provided data map.
-func UpdateDeprecationFile(ctx context.Context, filesToDeprecate map[string]Configs) {
+func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToDeprecate map[string]Configs) {
 	// Early return if there are no files to deprecate - prevents blank commits
 	if len(filesToDeprecate) == 0 {
 		LogInfo("No deprecated files to record; skipping deprecation file update")
@@ -25,11 +24,11 @@ func UpdateDeprecationFile(ctx context.Context, filesToDeprecate map[string]Conf
 
 	fileContent, _, _, err := client.Repositories.GetContents(
 		ctx,
-		os.Getenv(configs.ConfigRepoOwner),
-		os.Getenv(configs.ConfigRepoName),
-		os.Getenv(configs.DeprecationFile),
+		config.ConfigRepoOwner,
+		config.ConfigRepoName,
+		config.DeprecationFile,
 		&github.RepositoryContentGetOptions{
-			Ref: os.Getenv(configs.ConfigRepoBranch),
+			Ref: config.ConfigRepoBranch,
 		},
 	)
 	if err != nil {
@@ -50,7 +49,7 @@ func UpdateDeprecationFile(ctx context.Context, filesToDeprecate map[string]Conf
 	var deprecationFile DeprecationFile
 	err = json.Unmarshal([]byte(content), &deprecationFile)
 	if err != nil {
-		LogError(fmt.Sprintf("Failed to unmarshal %s: %v", configs.DeprecationFile, err))
+		LogError(fmt.Sprintf("Failed to unmarshal %s: %v", config.DeprecationFile, err))
 		return
 	}
 
@@ -70,17 +69,17 @@ func UpdateDeprecationFile(ctx context.Context, filesToDeprecate map[string]Conf
 		return
 	}
 
-	message := fmt.Sprintf("Updating %s.", os.Getenv(configs.DeprecationFile))
-	uploadDeprecationFileChanges(ctx, message, string(updatedJSON))
+	message := fmt.Sprintf("Updating %s.", config.DeprecationFile)
+	uploadDeprecationFileChanges(ctx, config, message, string(updatedJSON))
 
-	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", os.Getenv(configs.DeprecationFile), len(filesToDeprecate)))
+	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", config.DeprecationFile, len(filesToDeprecate)))
 }
 
-func uploadDeprecationFileChanges(ctx context.Context, message string, newDeprecationFileContents string) {
+func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, message string, newDeprecationFileContents string) {
 	client := GetRestClient()
 
-	targetFileContent, _, _, err := client.Repositories.GetContents(ctx, os.Getenv(configs.ConfigRepoOwner), os.Getenv(configs.ConfigRepoName),
-		os.Getenv(configs.DeprecationFile), &github.RepositoryContentGetOptions{Ref: os.Getenv(configs.ConfigRepoBranch)})
+	targetFileContent, _, _, err := client.Repositories.GetContents(ctx, config.ConfigRepoOwner, config.ConfigRepoName,
+		config.DeprecationFile, &github.RepositoryContentGetOptions{Ref: config.ConfigRepoBranch})
 
 	if err != nil {
 		LogError(fmt.Sprintf("Error getting deprecation file contents: %v", err))
@@ -94,13 +93,13 @@ func uploadDeprecationFileChanges(ctx context.Context, message string, newDeprec
 	options := &github.RepositoryContentFileOptions{
 		Message: github.String(message),
 		Content: []byte(newDeprecationFileContents),
-		Branch:  github.String(os.Getenv(configs.ConfigRepoBranch)),
-		Committer: &github.CommitAuthor{Name: github.String(os.Getenv(configs.CommitterName)),
-			Email: github.String(os.Getenv(configs.CommitterEmail))},
+		Branch:  github.String(config.ConfigRepoBranch),
+		Committer: &github.CommitAuthor{Name: github.String(config.CommitterName),
+			Email: github.String(config.CommitterEmail)},
 	}
 
 	options.SHA = targetFileContent.SHA
-	_, _, err = client.Repositories.UpdateFile(ctx, os.Getenv(configs.ConfigRepoOwner), os.Getenv(configs.ConfigRepoName), os.Getenv(configs.DeprecationFile), options)
+	_, _, err = client.Repositories.UpdateFile(ctx, config.ConfigRepoOwner, config.ConfigRepoName, config.DeprecationFile, options)
 	if err != nil {
 		LogError(fmt.Sprintf("Cannot update deprecation file: %v", err))
 	}

@@ -203,28 +203,6 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.PRMergePollMaxAttempts = getIntEnvWithDefault(PRMergePollMaxAttempts, config.PRMergePollMaxAttempts)
 	config.PRMergePollInterval = getIntEnvWithDefault(PRMergePollInterval, config.PRMergePollInterval)
 
-	// Export resolved values back into environment so downstream os.Getenv sees defaults
-	_ = os.Setenv(Port, config.Port)
-	_ = os.Setenv(ConfigRepoName, config.ConfigRepoName)
-	_ = os.Setenv(ConfigRepoOwner, config.ConfigRepoOwner)
-	_ = os.Setenv(AppId, config.AppId)
-	_ = os.Setenv(AppClientId, config.AppClientId)
-	_ = os.Setenv(InstallationId, config.InstallationId)
-	_ = os.Setenv(CommitterName, config.CommitterName)
-	_ = os.Setenv(CommitterEmail, config.CommitterEmail)
-	_ = os.Setenv(ConfigFile, config.ConfigFile)
-	_ = os.Setenv(MainConfigFile, config.MainConfigFile)
-	_ = os.Setenv(UseMainConfig, fmt.Sprintf("%t", config.UseMainConfig))
-	_ = os.Setenv(DeprecationFile, config.DeprecationFile)
-	_ = os.Setenv(WebserverPath, config.WebserverPath)
-	_ = os.Setenv(ConfigRepoBranch, config.ConfigRepoBranch)
-	_ = os.Setenv(PEMKeyName, config.PEMKeyName)
-	_ = os.Setenv(CopierLogName, config.CopierLogName)
-	_ = os.Setenv(GoogleCloudProjectId, config.GoogleCloudProjectId)
-	_ = os.Setenv(DefaultRecursiveCopy, fmt.Sprintf("%t", config.DefaultRecursiveCopy))
-	_ = os.Setenv(DefaultPRMerge, fmt.Sprintf("%t", config.DefaultPRMerge))
-	_ = os.Setenv(DefaultCommitMessage, config.DefaultCommitMessage)
-
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}

@@ -31,7 +31,7 @@ var gcpLoggingEnabled bool
 
 // InitializeGoogleLogger sets up Google Cloud Logging level loggers if not disabled.
 // It is safe to call multiple times; initialization will only occur once per process.
-func InitializeGoogleLogger() {
+func InitializeGoogleLogger(config *configs.Config) {
 	// Allow disabling cloud logging for local/dev via env.
 	if isCloudLoggingDisabled() {
 		gcpLoggingEnabled = false
@@ -43,7 +43,7 @@ func InitializeGoogleLogger() {
 		return
 	}
 
-	projectId := os.Getenv(configs.GoogleCloudProjectId)
+	projectId := config.GoogleCloudProjectId
 	if projectId == "" {
 		log.Printf("[WARN] GOOGLE_CLOUD_PROJECT_ID not set, disabling cloud logging\n")
 		gcpLoggingEnabled = false
@@ -59,7 +59,7 @@ func InitializeGoogleLogger() {
 	googleLoggingClient = client
 	gcpLoggingEnabled = true
 
-	logName := os.Getenv(configs.CopierLogName)
+	logName := config.CopierLogName
 	if logName == "" {
 		logName = "code-copier-log" // fallback default
 	}
