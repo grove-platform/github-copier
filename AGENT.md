@@ -32,6 +32,15 @@ types/
   types.go                          # ChangedFile, UploadKey, UploadFileContent
 configs/environment.go              # Config struct, LoadEnvironment()
 tests/utils.go                      # Test helpers, httpmock setup
+cmd/
+  config-validator/main.go          # CLI: validate configs, test patterns, init templates
+  test-webhook/main.go              # CLI: send test webhook payloads (with delivery ID)
+  test-pem/main.go                  # CLI: verify PEM key + App ID against GitHub API
+scripts/
+  ci-local.sh                       # Run full CI pipeline locally (build, test, lint, vet)
+  run-local.sh                      # Run app locally with dev settings
+  deploy-cloudrun.sh                # Deploy to Google Cloud Run
+  integration-test.sh               # End-to-end integration test
 ```
 
 ## Key Types
@@ -42,11 +51,13 @@ type PatternType string    // "prefix" | "glob" | "regex"
 type TransformationType string  // "move" | "copy" | "glob" | "regex"
 
 type Workflow struct {
-    Name           string
-    Source         SourceConfig      // Repo, Branch, Patterns []SourcePattern
-    Destination    DestinationConfig // Repo, Branch
-    Transformations []Transformation // Type, From, To, Pattern, Replacement
-    Commit         CommitConfig      // Strategy, Message, PRTitle, AutoMerge
+    Name             string
+    Source           Source              // Repo, Branch, InstallationID
+    Destination      Destination         // Repo, Branch
+    Transformations  []Transformation    // Type, From, To, Pattern, Replacement
+    Exclude          []string
+    CommitStrategy   *CommitStrategyConfig // Type (direct|pull_request), PRTitle, PRBody, AutoMerge
+    DeprecationCheck *DeprecationConfig
 }
 
 // types/types.go
@@ -74,7 +85,7 @@ workflows:
     source: { repo: "org/src", branch: "main", patterns: [{type: glob, pattern: "docs/**"}] }
     destination: { repo: "org/dest", branch: "main" }
     transformations: [{ type: move, from: "docs/", to: "public/" }]
-    commit: { strategy: pr, message: "Sync" }  # strategy: direct|pr
+    commit_strategy: { type: pull_request, pr_title: "Sync docs" }  # type: direct|pull_request
 ```
 
 ## Test Commands
@@ -95,6 +106,7 @@ golangci-lint run ./...                          # lint
 | Webhook logic | `webhook_handler_new.go` |
 | Rate limit behavior | `rate_limit.go` |
 | Auth flow | `github_auth.go` + `token_manager.go` |
+| CLI tool | `cmd/<tool>/main.go` + `cmd/<tool>/README.md` |
 
 ## Conventions
 
