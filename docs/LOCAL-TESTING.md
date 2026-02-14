@@ -149,7 +149,7 @@ export WEBHOOK_SECRET=$(gcloud secrets versions access latest --secret=webhook-s
 nano .copier/workflows/main.yaml
 
 # 2. Validate it
-./config-validator validate -config config.json -v
+./config-validator validate -config copier-config.yaml -v
 
 # 3. Start app
 make run-local
@@ -207,13 +207,11 @@ Logs go to stdout when cloud logging is disabled:
 
 ```bash
 # You'll see logs like:
-[INFO] Webhook received: pull_request event
-[INFO] PR #42 merged: "Add Go database examples"
-[INFO] Processing 5 files from PR
-[DEBUG] Testing pattern: ^examples/(?P<lang>[^/]+)/(?P<category>[^/]+)/.*$
-[INFO] Pattern matched: examples/go/database/connect.go
-[INFO]   → Transformed to: docs/go/database/connect.go
-[INFO]   → Variables: lang=go, category=database
+{"level":"INFO","msg":"Webhook received","event":"pull_request"}
+{"level":"INFO","msg":"PR merged","pr":42,"title":"Add Go database examples"}
+{"level":"INFO","msg":"Processing files from PR","count":5}
+{"level":"DEBUG","msg":"Testing pattern","pattern":"^examples/(?P<lang>[^/]+)/(?P<category>[^/]+)/.*$"}
+{"level":"INFO","msg":"Pattern matched","file":"examples/go/database/connect.go","target":"docs/go/database/connect.go"}
 [DRY-RUN] Would create commit with 2 files
 [DRY-RUN] Would create PR: "Update database examples"
 ```
@@ -360,7 +358,7 @@ export GITHUB_TOKEN=ghp_your_token_here
   -file "examples/go/main.go"
 
 # Check config file
-./config-validator validate -config config.json -v
+./config-validator validate -config copier-config.yaml -v
 ```
 
 ## Complete Testing Workflow
@@ -372,7 +370,7 @@ export GITHUB_TOKEN=ghp_your_token_here
 make build
 
 # 2. Validate configuration
-./config-validator validate -config config.json -v
+./config-validator validate -config copier-config.yaml -v
 
 # 3. Test pattern matching
 ./config-validator test-pattern \

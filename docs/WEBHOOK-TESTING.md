@@ -87,7 +87,7 @@ Test against your staging environment:
 
 ```bash
 # Set staging URL
-export WEBHOOK_URL=https://staging-myapp.appspot.com/webhook
+export WEBHOOK_URL=https://your-service-url.run.app/events
 export WEBHOOK_SECRET=your-staging-secret
 
 # Test with real PR
@@ -172,7 +172,7 @@ EOF
 -pr int         # PR number to fetch from GitHub
 -owner string   # Repository owner (required with -pr)
 -repo string    # Repository name (required with -pr)
--url string     # Webhook URL (default: http://localhost:8080/webhook)
+-url string     # Webhook URL (default: http://localhost:8080/events)
 -secret string  # Webhook secret for HMAC signature
 -payload string # Path to custom payload JSON file
 -dry-run        # Print payload without sending
@@ -278,11 +278,11 @@ After sending a test webhook, verify:
 
 ### Application Logs
 ```bash
-# Local
-tail -f logs/app.log
+# Local: logs are JSON on stdout
+LOG_LEVEL=debug ./github-copier
 
-# GCP
-gcloud app logs tail -s default
+# Cloud Run
+gcloud run services logs read github-copier --limit=50
 ```
 
 **Look for:**
@@ -382,7 +382,7 @@ db.audit_events.find().sort({timestamp: -1}).limit(10)
 curl http://localhost:8080/health
 
 # Check webhook URL
-./test-webhook -payload test.json -url http://localhost:8080/webhook
+./test-webhook -payload test.json -url http://localhost:8080/events
 
 # Check application logs for errors
 ```

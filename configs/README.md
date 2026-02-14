@@ -101,35 +101,13 @@ env_variables:
 
 ---
 
-## Deployment Targets
+## Deployment Target
 
-This service supports **two Google Cloud deployment options**:
+This service deploys to **Google Cloud Run**.
 
-### App Engine (Flexible Environment)
+### Cloud Run
 
-**Config file:** `env.yaml` (with `env_variables:` wrapper)
-
-**Format:**
-```yaml
-env_variables:
-  GITHUB_APP_ID: "123456"
-  REPO_OWNER: "mongodb"
-```
-
-**Deploy:**
-```bash
-cp configs/env.yaml.production env.yaml
-# Edit env.yaml with your values
-gcloud app deploy app.yaml  # Includes env.yaml automatically
-```
-
-**Best for:** Long-running services, always-on applications
-
----
-
-### Cloud Run (Serverless Containers)
-
-**Config file:** `env-cloudrun.yaml` (plain YAML, no wrapper)
+**Config file:** `env-cloudrun.yaml` (plain YAML key-value pairs)
 
 **Format:**
 ```yaml
@@ -140,12 +118,9 @@ REPO_OWNER: "mongodb"
 **Deploy:**
 ```bash
 cp configs/env.yaml.production env-cloudrun.yaml
-# Remove the 'env_variables:' wrapper
 # Edit env-cloudrun.yaml with your values
-gcloud run deploy github-copier --source . --env-vars-file=env-cloudrun.yaml
+./scripts/deploy-cloudrun.sh
 ```
-
-**Best for:** Cost-effective, scales to zero, serverless
 
 ---
 
@@ -157,10 +132,10 @@ gcloud run deploy github-copier --source . --env-vars-file=env-cloudrun.yaml
 
 ```bash
 # Quick start
-cp configs/env.yaml.production env.yaml
-nano env.yaml  # Update PROJECT_NUMBER and values
+cp configs/env.yaml.production env-cloudrun.yaml
+nano env-cloudrun.yaml  # Update PROJECT_NUMBER and values
 ./scripts/grant-secret-access.sh
-gcloud app deploy app.yaml  # env.yaml is included via 'includes' directive
+./scripts/deploy-cloudrun.sh
 ```
 
 **Why:** Pre-configured with production best practices, minimal setup required.
@@ -216,7 +191,7 @@ nano env.yaml
 # - Set custom defaults
 
 # Deploy
-gcloud app deploy app.yaml  # env.yaml is included via 'includes' directive
+./scripts/deploy-cloudrun.sh
 ```
 
 **Why:** Need advanced features not in production template.
@@ -240,22 +215,9 @@ Or manually convert:
 GITHUB_APP_ID=123456
 REPO_OWNER=mongodb
 
-# env.yaml format:
-env_variables:
-  GITHUB_APP_ID: "123456"
-  REPO_OWNER: "mongodb"
-```
-
-### Between App Engine and Cloud Run formats
-
-Use the format conversion script:
-
-```bash
-# Convert App Engine → Cloud Run
-./scripts/convert-env-format.sh to-cloudrun env.yaml env-cloudrun.yaml
-
-# Convert Cloud Run → App Engine
-./scripts/convert-env-format.sh to-appengine env-cloudrun.yaml env.yaml
+# Cloud Run YAML format:
+GITHUB_APP_ID: "123456"
+REPO_OWNER: "mongodb"
 ```
 
 **Key difference:**
@@ -337,7 +299,6 @@ github-copier/
 
 ## See Also
 
-- [CONFIGURATION-GUIDE.md](../docs/CONFIGURATION-GUIDE.md) - Variable validation and reference
 - [DEPLOYMENT.md](../docs/DEPLOYMENT.md) - Complete deployment guide
 - [LOCAL-TESTING.md](../docs/LOCAL-TESTING.md) - Local development guide
 

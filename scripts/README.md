@@ -192,7 +192,7 @@ Fetch real PR data from GitHub and send it to the webhook.
 - `pr-number` - Pull request number (required)
 - `owner` - Repository owner (required)
 - `repo` - Repository name (required)
-- `webhook-url` - Webhook URL (optional, default: `http://localhost:8080/webhook`)
+- `webhook-url` - Webhook URL (optional, default: `http://localhost:8080/events`)
 
 **Environment Variables:**
 - `GITHUB_TOKEN` - GitHub personal access token (required)
@@ -206,7 +206,7 @@ export GITHUB_TOKEN=ghp_your_token_here
 ./scripts/test-with-pr.sh 42 mongodb docs-code-examples
 
 # Test with custom webhook URL
-./scripts/test-with-pr.sh 42 mongodb docs-code-examples http://localhost:8080/webhook
+./scripts/test-with-pr.sh 42 mongodb docs-code-examples http://localhost:8080/events
 ```
 
 **Output:**
@@ -425,6 +425,5 @@ curl -X POST -H 'Content-type: application/json' \
 
 - [Local Testing Guide](../docs/LOCAL-TESTING.md) - Local development
 - [Webhook Testing Guide](../docs/WEBHOOK-TESTING.md) - Testing webhooks
-- [Quick Reference](../docs/QUICK-REFERENCE.md) - All commands
 - [test-webhook Tool](../cmd/test-webhook/README.md) - Test webhook tool
 

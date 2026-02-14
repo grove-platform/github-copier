@@ -581,18 +581,36 @@ auto_merge: false
 
 The application is designed for concurrent operations:
 
+- **TokenManager**: Thread-safe token state via `sync.RWMutex`
 - **FileStateService**: Thread-safe with `sync.RWMutex`
+- **DeliveryTracker**: Thread-safe webhook deduplication via `sync.Mutex`
 - **MetricsCollector**: Thread-safe counters
 - **AuditLogger**: Thread-safe MongoDB operations
 - **ServiceContainer**: Immutable after initialization
 
 ## Error Handling
 
+- Sentinel errors in `services/errors.go` (`ErrRateLimited`, `ErrNotFound`, etc.)
+- All errors wrapped with `%w` for `errors.Is()`/`errors.As()` compatibility
 - Context-aware cancellation support
 - Graceful degradation (audit logging optional)
-- Detailed error logging with full context
+- Structured error logging with full context via `log/slog`
 - Metrics tracking for failed operations
 - No-op implementations for optional features
+
+## Rate Limit Handling
+
+The `RateLimitTransport` (`services/rate_limit.go`) wraps the HTTP transport to automatically:
+- Detect 403/429 responses with `X-RateLimit-Remaining: 0` or `Retry-After` headers
+- Wait and retry with appropriate backoff
+- Log rate limit events with structured context
+
+## Webhook Idempotency
+
+The `DeliveryTracker` (`services/delivery_tracker.go`) prevents duplicate processing:
+- Tracks `X-GitHub-Delivery` header from each webhook
+- TTL-based cleanup to prevent unbounded memory growth
+- Returns 200 OK for already-processed deliveries
 
 ## Performance Considerations
 
@@ -639,8 +657,9 @@ METRICS_ENABLED: "true"
 
 **Health Monitoring:**
 - `/health` endpoint for liveness checks
+- `/ready` endpoint for readiness probes (checks GitHub auth, rate limits, MongoDB)
 - `/metrics` endpoint for monitoring
-- Structured logs for analysis
+- Structured JSON logs via `log/slog` for analysis
 
 ## Future Enhancements
 
@@ -649,6 +668,4 @@ Potential improvements:
 1. **Automatic Cleanup PRs** - Create PRs to remove deprecated files from targets
 2. **Expiration Dates** - Auto-remove deprecation entries after X days
 3. **Config Validation CLI** - Enhanced validation tool
-4. **Retry Logic** - Automatic retry for failed GitHub API calls
-5. **Rate Limiting** - Respect GitHub API rate limits
 

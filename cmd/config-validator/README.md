@@ -185,7 +185,7 @@ When files aren't matching your pattern:
 
 1. **Get actual file paths from logs:**
    ```bash
-   grep "sample file path" logs/app.log
+   # Check stdout for "sample file path" entries
    ```
 
 2. **Test your pattern:**
