@@ -40,28 +40,58 @@ cp configs/.env.local.example configs/.env
 nano configs/.env
 ```
 
-### 2. Minimal Configuration
+### 2. GitHub App Credentials (Required)
 
-For basic local testing, you only need:
+The app authenticates with GitHub on startup, even in dry-run mode. You need your App ID, Installation ID, and PEM key.
+
+**Option A — PEM from GCP Secret Manager** (if you have `gcloud` access):
+
+```bash
+# Run once to authenticate locally:
+gcloud auth application-default login
+
+# configs/.env
+GITHUB_APP_ID=123456
+INSTALLATION_ID=789012
+GOOGLE_CLOUD_PROJECT_ID=github-copy-code-examples
+PEM_NAME=CODE_COPIER_PEM
+```
+
+**Option B — PEM key provided directly** (no GCP needed):
 
 ```bash
 # configs/.env
+GITHUB_APP_ID=123456
+INSTALLATION_ID=789012
+SKIP_SECRET_MANAGER=true
+GITHUB_APP_PRIVATE_KEY_B64=$(base64 -i /path/to/your-key.pem)
+```
+
+You can verify your PEM key independently with:
+
+```bash
+go build -o test-pem ./cmd/test-pem
+./test-pem /path/to/your-key.pem 123456
+```
+
+### 3. Additional Settings (Recommended)
+
+```bash
+# configs/.env (add below the credentials)
 COPIER_DISABLE_CLOUD_LOGGING=true
 DRY_RUN=true
 MAIN_CONFIG_FILE=.copier/workflows/main.yaml
 USE_MAIN_CONFIG=true
 ```
 
-### 3. For Testing with Real PRs
+### 4. For Testing with Real PRs
 
-Add a GitHub token:
+The `test-webhook` CLI and `test-with-pr.sh` script use a GitHub PAT (not the App credentials) to fetch PR data from the API:
 
 ```bash
 # Get token from: https://github.com/settings/tokens
 # Required scope: repo (read access)
-
-# Add to configs/.env
-GITHUB_TOKEN=ghp_your_token_here
+export GITHUB_TOKEN=ghp_your_token_here
 ```
 
 ## Running Locally
@@ -264,9 +294,22 @@ curl http://localhost:8080/health | jq
 
 ## Environment Variables for Local Testing
 
-### Required (Minimal)
+### Required
 
 ```bash
+# GitHub App credentials (app authenticates on startup)
+GITHUB_APP_ID=123456
+INSTALLATION_ID=789012
+
+# PEM key — Option A: via Secret Manager (requires gcloud auth)
+GOOGLE_CLOUD_PROJECT_ID=github-copy-code-examples
+PEM_NAME=CODE_COPIER_PEM
+
+# PEM key — Option B: direct (no GCP needed)
+SKIP_SECRET_MANAGER=true
+GITHUB_APP_PRIVATE_KEY_B64=<base64-encoded PEM>
+
+# Local dev overrides
 COPIER_DISABLE_CLOUD_LOGGING=true  # Use stdout instead of GCP
 DRY_RUN=true                       # Don't make actual commits
 ```
@@ -281,10 +324,10 @@ MAIN_CONFIG_FILE=.copier/workflows/main.yaml  # Your main config file
 USE_MAIN_CONFIG=true               # Enable main config system
 ```
 
-### Optional (for Real PR Testing)
+### Optional (for test-webhook CLI / test-with-pr.sh)
 
 ```bash
-GITHUB_TOKEN=ghp_...               # For fetching real PRs
+GITHUB_TOKEN=ghp_...               # PAT for fetching real PR data
 REPO_OWNER=mongodb                 # Default repo owner
 REPO_NAME=docs-realm               # Default repo name
 ```
@@ -302,9 +345,26 @@ AUDIT_COLLECTION=audit_events
 
 ## Troubleshooting
 
+### Error: "A JSON web token could not be decoded" / "Failed to configure GitHub permissions"
+
+**Problem:** The app needs GitHub App credentials (App ID + PEM key) to authenticate on startup, even in dry-run mode.
+
+**Solution:**
+```bash
+# Add to configs/.env:
+GITHUB_APP_ID=123456
+INSTALLATION_ID=789012
+
+# Then provide the PEM key — either via Secret Manager:
+gcloud auth application-default login
+# Or directly:
+SKIP_SECRET_MANAGER=true
+GITHUB_APP_PRIVATE_KEY_B64=$(base64 -i /path/to/your-key.pem)
+```
+
 ### Error: "projects/GOOGLE_CLOUD_PROJECT_ID is not a valid resource name"
 
-**Problem:** Cloud logging is enabled but GCP_PROJECT_ID is not set
+**Problem:** Cloud logging is enabled but GCP_PROJECT_ID is not set.
 
 **Solution:**
 ```bash

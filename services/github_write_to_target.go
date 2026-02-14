@@ -55,6 +55,21 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 // AddFilesToTargetRepos uploads files to target repository branches.
 // It accepts the upload map as a parameter for concurrency safety.
 func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
+	if config.DryRun {
+		for key, value := range filesToUpload {
+			LogInfo("[DRY-RUN] Would upload files to target repo",
+				"repo", key.RepoName,
+				"branch", key.BranchPath,
+				"file_count", len(value.Content),
+				"strategy", value.CommitStrategy,
+			)
+			for path := range value.Content {
+				LogInfo("[DRY-RUN] Would write file", "repo", key.RepoName, "path", path)
+			}
+		}
+		return
+	}
+
 	for key, value := range filesToUpload {
 		if err := uploadToTarget(ctx, config, key, value, prTemplateFetcher); err != nil {
 			LogCritical("Failed to upload files", "repo", key.RepoName, "error", err)

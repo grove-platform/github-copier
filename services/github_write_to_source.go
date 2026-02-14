@@ -19,6 +19,17 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 		return
 	}
 
+	if config.DryRun {
+		LogInfo("[DRY-RUN] Would update deprecation file",
+			"file", config.DeprecationFile,
+			"deprecated_count", len(filesToDeprecate),
+		)
+		for path := range filesToDeprecate {
+			LogInfo("[DRY-RUN] Would mark as deprecated", "path", path)
+		}
+		return
+	}
+
 	// Fetch the deprecation file from the repository
 	client := GetRestClient()
 
