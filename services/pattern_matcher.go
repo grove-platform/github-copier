@@ -103,7 +103,7 @@ func (pm *DefaultPatternMatcher) matchGlob(filePath, pattern string) types.Match
 func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.MatchResult {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		LogInfo(fmt.Sprintf("REGEX COMPILE ERROR: pattern=%s, error=%v", pattern, err))
+		LogInfo("REGEX COMPILE ERROR", "pattern", pattern, "error", err)
 		return types.NewMatchResult(false, nil)
 	}
 
@@ -111,7 +111,7 @@ func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.Matc
 	if match == nil {
 		// Log server file pattern attempts for debugging
 		if strings.Contains(pattern, "server/") && strings.Contains(filePath, "server/") {
-			LogInfo(fmt.Sprintf("REGEX NO MATCH: file=%s, pattern=%s", filePath, pattern))
+			LogInfo("REGEX NO MATCH", "file", filePath, "pattern", pattern)
 		}
 		return types.NewMatchResult(false, nil)
 	}
@@ -126,7 +126,7 @@ func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.Matc
 
 	// Log server file matches for debugging
 	if strings.Contains(pattern, "server/") {
-		LogInfo(fmt.Sprintf("REGEX MATCH SUCCESS: file=%s, pattern=%s, variables=%v", filePath, pattern, variables))
+		LogInfo("REGEX MATCH SUCCESS", "file", filePath, "pattern", pattern, "variables", variables)
 	}
 
 	return types.NewMatchResult(true, variables)

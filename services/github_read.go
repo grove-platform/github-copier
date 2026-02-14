@@ -46,7 +46,7 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 
 		err := client.Query(ctx, &prQuery, variables)
 		if err != nil {
-			LogCritical(fmt.Sprintf("Failed to execute query GetFilesChanged: %v", err))
+			LogCritical("Failed to execute query GetFilesChanged", "error", err)
 			return nil, err
 		}
 

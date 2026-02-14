@@ -32,7 +32,7 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 		},
 	)
 	if err != nil {
-		LogError(fmt.Sprintf("Error getting deprecation file: %v", err))
+		LogError("Error getting deprecation file", "error", err)
 		return
 	}
 	if fileContent == nil {
@@ -42,14 +42,14 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 
 	content, err := fileContent.GetContent()
 	if err != nil {
-		LogError(fmt.Sprintf("Error decoding deprecation file: %v", err))
+		LogError("Error decoding deprecation file", "error", err)
 		return
 	}
 
 	var deprecationFile types.DeprecationFile
 	err = json.Unmarshal([]byte(content), &deprecationFile)
 	if err != nil {
-		LogError(fmt.Sprintf("Failed to unmarshal %s: %v", config.DeprecationFile, err))
+		LogError("Failed to unmarshal deprecation file", "file", config.DeprecationFile, "error", err)
 		return
 	}
 
@@ -65,14 +65,14 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 
 	updatedJSON, err := json.MarshalIndent(deprecationFile, "", "  ")
 	if err != nil {
-		LogError(fmt.Sprintf("Error marshaling JSON: %v", err))
+		LogError("Error marshaling JSON", "error", err)
 		return
 	}
 
 	message := fmt.Sprintf("Updating %s.", config.DeprecationFile)
 	uploadDeprecationFileChanges(ctx, config, message, string(updatedJSON))
 
-	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", config.DeprecationFile, len(filesToDeprecate)))
+	LogInfo("Successfully updated deprecation file", "file", config.DeprecationFile, "entries", len(filesToDeprecate))
 }
 
 func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, message string, newDeprecationFileContents string) {
@@ -82,7 +82,7 @@ func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, m
 		config.DeprecationFile, &github.RepositoryContentGetOptions{Ref: config.ConfigRepoBranch})
 
 	if err != nil {
-		LogError(fmt.Sprintf("Error getting deprecation file contents: %v", err))
+		LogError("Error getting deprecation file contents", "error", err)
 		return
 	}
 	if targetFileContent == nil {
@@ -101,7 +101,7 @@ func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, m
 	options.SHA = targetFileContent.SHA
 	_, _, err = client.Repositories.UpdateFile(ctx, config.ConfigRepoOwner, config.ConfigRepoName, config.DeprecationFile, options)
 	if err != nil {
-		LogError(fmt.Sprintf("Cannot update deprecation file: %v", err))
+		LogError("Cannot update deprecation file", "error", err)
 	}
 
 	LogInfo("Deprecation file updated.")

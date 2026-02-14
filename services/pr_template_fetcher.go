@@ -51,14 +51,14 @@ func (f *DefaultPRTemplateFetcher) FetchPRTemplate(ctx context.Context, client *
 	for _, path := range templatePaths {
 		content, err := f.fetchFileContent(ctx, client, owner, repo, path, branch)
 		if err == nil && content != "" {
-			LogInfo(fmt.Sprintf("Found PR template in %s/%s at %s", owner, repo, path))
+			LogInfo("Found PR template", "owner", owner, "repo", repo, "path", path)
 			return content, nil
 		}
 		// Continue to next location if not found
 	}
 
 	// No template found
-	LogDebug(fmt.Sprintf("No PR template found in %s/%s (checked %d locations)", owner, repo, len(templatePaths)))
+	LogDebug("No PR template found", "owner", owner, "repo", repo, "locations_checked", len(templatePaths))
 	return "", nil
 }
 

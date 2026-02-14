@@ -289,7 +289,7 @@ func (wp *workflowProcessor) isExcluded(path string, excludePatterns []string) b
 	for _, pattern := range excludePatterns {
 		matched, err := doublestar.Match(pattern, path)
 		if err != nil {
-			LogWarning(fmt.Sprintf("Invalid exclude pattern: %s: %v", pattern, err))
+			LogWarning("Invalid exclude pattern", "pattern", pattern, "error", err)
 			continue
 		}
 		if matched {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -75,7 +74,7 @@ func main() {
 	}
 
 	// Initialize Google Cloud logging
-	services.InitializeGoogleLogger(config)
+	services.InitializeLogger(config)
 	defer services.CloseGoogleLogger()
 
 	// Configure GitHub permissions
@@ -179,7 +178,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 
 	// Start server in goroutine
 	go func() {
-		services.LogInfo(fmt.Sprintf("Starting web server on port %s", port))
+		services.LogInfo("Starting web server", "port", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- fmt.Errorf("server error: %w", err)
 		}
@@ -197,27 +196,27 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			return err
 		}
 	case sig := <-sigChan:
-		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+		services.LogInfo("Received signal, initiating graceful shutdown", "signal", sig)
 	}
 
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Println("Waiting for in-flight requests to complete...")
+	services.LogInfo("Waiting for in-flight requests to complete")
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		services.LogError("Server shutdown error", "error", err)
 	} else {
-		log.Println("Server stopped accepting new connections")
+		services.LogInfo("Server stopped accepting new connections")
 	}
 
 	// Cleanup resources (flush audit logs, close connections)
-	log.Println("Cleaning up resources...")
+	services.LogInfo("Cleaning up resources")
 	if err := container.Close(shutdownCtx); err != nil {
-		log.Printf("Cleanup error: %v", err)
+		services.LogError("Cleanup error", "error", err)
 	}
 
-	log.Println("Shutdown complete")
+	services.LogInfo("Shutdown complete")
 	return nil
 }
 
