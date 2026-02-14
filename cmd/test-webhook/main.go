@@ -148,7 +148,7 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -174,7 +174,7 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer filesResp.Body.Close()
+	defer func() { _ = filesResp.Body.Close() }()
 
 	var files []map[string]interface{}
 	if err := json.NewDecoder(filesResp.Body).Decode(&files); err != nil {
@@ -283,7 +283,7 @@ func sendWebhook(url string, payload []byte, secret string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 

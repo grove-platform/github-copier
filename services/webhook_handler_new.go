@@ -168,7 +168,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		"merged": merged,
 	})
 
-	if !(action == "closed" && merged) {
+	if action != "closed" || !merged {
 		LogInfoCtx(ctx, "skipping non-merged PR", map[string]interface{}{
 			"action": action,
 			"merged": merged,

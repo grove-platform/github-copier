@@ -13,57 +13,57 @@ import (
 type SlackNotifier interface {
 	// NotifyPRProcessed sends a notification when a PR is successfully processed
 	NotifyPRProcessed(ctx context.Context, event *PRProcessedEvent) error
-	
+
 	// NotifyError sends a notification when an error occurs
 	NotifyError(ctx context.Context, event *ErrorEvent) error
-	
+
 	// NotifyFilesCopied sends a notification when files are copied
 	NotifyFilesCopied(ctx context.Context, event *FilesCopiedEvent) error
-	
+
 	// NotifyDeprecation sends a notification when files are deprecated
 	NotifyDeprecation(ctx context.Context, event *DeprecationEvent) error
-	
+
 	// IsEnabled returns true if Slack notifications are enabled
 	IsEnabled() bool
 }
 
 // PRProcessedEvent contains information about a processed PR
 type PRProcessedEvent struct {
-	PRNumber      int
-	PRTitle       string
-	PRURL         string
-	SourceRepo    string
-	FilesMatched  int
-	FilesCopied   int
-	FilesFailed   int
+	PRNumber       int
+	PRTitle        string
+	PRURL          string
+	SourceRepo     string
+	FilesMatched   int
+	FilesCopied    int
+	FilesFailed    int
 	ProcessingTime time.Duration
 }
 
 // ErrorEvent contains information about an error
 type ErrorEvent struct {
-	Operation   string
-	Error       error
-	PRNumber    int
-	SourceRepo  string
+	Operation      string
+	Error          error
+	PRNumber       int
+	SourceRepo     string
 	AdditionalInfo map[string]interface{}
 }
 
 // FilesCopiedEvent contains information about copied files
 type FilesCopiedEvent struct {
-	PRNumber    int
-	SourceRepo  string
-	TargetRepo  string
-	FileCount   int
-	Files       []string
-	RuleName    string
+	PRNumber   int
+	SourceRepo string
+	TargetRepo string
+	FileCount  int
+	Files      []string
+	RuleName   string
 }
 
 // DeprecationEvent contains information about deprecated files
 type DeprecationEvent struct {
-	PRNumber    int
-	SourceRepo  string
-	FileCount   int
-	Files       []string
+	PRNumber   int
+	SourceRepo string
+	FileCount  int
+	Files      []string
 }
 
 // DefaultSlackNotifier implements SlackNotifier using Slack webhooks
@@ -79,7 +79,7 @@ type DefaultSlackNotifier struct {
 // NewSlackNotifier creates a new Slack notifier
 func NewSlackNotifier(webhookURL, channel, username, iconEmoji string) SlackNotifier {
 	enabled := webhookURL != ""
-	
+
 	return &DefaultSlackNotifier{
 		webhookURL: webhookURL,
 		enabled:    enabled,
@@ -102,22 +102,22 @@ func (sn *DefaultSlackNotifier) NotifyPRProcessed(ctx context.Context, event *PR
 	if !sn.enabled {
 		return nil
 	}
-	
+
 	color := "good" // green
 	if event.FilesFailed > 0 {
 		color = "warning" // yellow
 	}
-	
+
 	message := &SlackMessage{
 		Channel:   sn.channel,
 		Username:  sn.username,
 		IconEmoji: sn.iconEmoji,
 		Attachments: []SlackAttachment{
 			{
-				Color:      color,
-				Title:      fmt.Sprintf("✅ PR #%d Processed", event.PRNumber),
-				TitleLink:  event.PRURL,
-				Text:       event.PRTitle,
+				Color:     color,
+				Title:     fmt.Sprintf("✅ PR #%d Processed", event.PRNumber),
+				TitleLink: event.PRURL,
+				Text:      event.PRTitle,
 				Fields: []SlackField{
 					{Title: "Repository", Value: event.SourceRepo, Short: true},
 					{Title: "Files Matched", Value: fmt.Sprintf("%d", event.FilesMatched), Short: true},
@@ -131,7 +131,7 @@ func (sn *DefaultSlackNotifier) NotifyPRProcessed(ctx context.Context, event *PR
 			},
 		},
 	}
-	
+
 	return sn.sendMessage(ctx, message)
 }
 
@@ -140,20 +140,20 @@ func (sn *DefaultSlackNotifier) NotifyError(ctx context.Context, event *ErrorEve
 	if !sn.enabled {
 		return nil
 	}
-	
+
 	fields := []SlackField{
 		{Title: "Operation", Value: event.Operation, Short: true},
 		{Title: "Error", Value: event.Error.Error(), Short: false},
 	}
-	
+
 	if event.SourceRepo != "" {
 		fields = append(fields, SlackField{Title: "Repository", Value: event.SourceRepo, Short: true})
 	}
-	
+
 	if event.PRNumber > 0 {
 		fields = append(fields, SlackField{Title: "PR Number", Value: fmt.Sprintf("#%d", event.PRNumber), Short: true})
 	}
-	
+
 	message := &SlackMessage{
 		Channel:   sn.channel,
 		Username:  sn.username,
@@ -170,7 +170,7 @@ func (sn *DefaultSlackNotifier) NotifyError(ctx context.Context, event *ErrorEve
 			},
 		},
 	}
-	
+
 	return sn.sendMessage(ctx, message)
 }
 
@@ -179,28 +179,28 @@ func (sn *DefaultSlackNotifier) NotifyFilesCopied(ctx context.Context, event *Fi
 	if !sn.enabled {
 		return nil
 	}
-	
+
 	// Limit files shown to first 10
 	filesText := ""
 	displayFiles := event.Files
 	if len(displayFiles) > 10 {
 		displayFiles = displayFiles[:10]
-		filesText = fmt.Sprintf("```\n%s\n... and %d more```", 
-			formatFileList(displayFiles), 
+		filesText = fmt.Sprintf("```\n%s\n... and %d more```",
+			formatFileList(displayFiles),
 			len(event.Files)-10)
 	} else {
 		filesText = fmt.Sprintf("```\n%s```", formatFileList(displayFiles))
 	}
-	
+
 	message := &SlackMessage{
 		Channel:   sn.channel,
 		Username:  sn.username,
 		IconEmoji: sn.iconEmoji,
 		Attachments: []SlackAttachment{
 			{
-				Color:      "good", // green
-				Title:      fmt.Sprintf("📋 Files Copied from PR #%d", event.PRNumber),
-				Text:       filesText,
+				Color: "good", // green
+				Title: fmt.Sprintf("📋 Files Copied from PR #%d", event.PRNumber),
+				Text:  filesText,
 				Fields: []SlackField{
 					{Title: "Source", Value: event.SourceRepo, Short: true},
 					{Title: "Target", Value: event.TargetRepo, Short: true},
@@ -213,7 +213,7 @@ func (sn *DefaultSlackNotifier) NotifyFilesCopied(ctx context.Context, event *Fi
 			},
 		},
 	}
-	
+
 	return sn.sendMessage(ctx, message)
 }
 
@@ -222,18 +222,18 @@ func (sn *DefaultSlackNotifier) NotifyDeprecation(ctx context.Context, event *De
 	if !sn.enabled {
 		return nil
 	}
-	
+
 	filesText := fmt.Sprintf("```\n%s```", formatFileList(event.Files))
-	
+
 	message := &SlackMessage{
 		Channel:   sn.channel,
 		Username:  sn.username,
 		IconEmoji: sn.iconEmoji,
 		Attachments: []SlackAttachment{
 			{
-				Color:      "warning", // yellow
-				Title:      fmt.Sprintf("⚠️ Files Deprecated from PR #%d", event.PRNumber),
-				Text:       filesText,
+				Color: "warning", // yellow
+				Title: fmt.Sprintf("⚠️ Files Deprecated from PR #%d", event.PRNumber),
+				Text:  filesText,
 				Fields: []SlackField{
 					{Title: "Repository", Value: event.SourceRepo, Short: true},
 					{Title: "File Count", Value: fmt.Sprintf("%d", event.FileCount), Short: true},
@@ -244,7 +244,7 @@ func (sn *DefaultSlackNotifier) NotifyDeprecation(ctx context.Context, event *De
 			},
 		},
 	}
-	
+
 	return sn.sendMessage(ctx, message)
 }
 
@@ -254,24 +254,24 @@ func (sn *DefaultSlackNotifier) sendMessage(ctx context.Context, message *SlackM
 	if err != nil {
 		return fmt.Errorf("failed to marshal slack message: %w", err)
 	}
-	
+
 	req, err := http.NewRequestWithContext(ctx, "POST", sn.webhookURL, bytes.NewBuffer(payload))
 	if err != nil {
 		return fmt.Errorf("failed to create slack request: %w", err)
 	}
-	
+
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := sn.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send slack message: %w", err)
 	}
-	defer resp.Body.Close()
-	
+	defer func() { _ = resp.Body.Close() }()
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("slack returned non-200 status: %d", resp.StatusCode)
 	}
-	
+
 	return nil
 }
 
@@ -286,11 +286,11 @@ func formatFileList(files []string) string {
 
 // SlackMessage represents a Slack message
 type SlackMessage struct {
-	Channel     string             `json:"channel,omitempty"`
-	Username    string             `json:"username,omitempty"`
-	IconEmoji   string             `json:"icon_emoji,omitempty"`
-	Text        string             `json:"text,omitempty"`
-	Attachments []SlackAttachment  `json:"attachments,omitempty"`
+	Channel     string            `json:"channel,omitempty"`
+	Username    string            `json:"username,omitempty"`
+	IconEmoji   string            `json:"icon_emoji,omitempty"`
+	Text        string            `json:"text,omitempty"`
+	Attachments []SlackAttachment `json:"attachments,omitempty"`
 }
 
 // SlackAttachment represents a Slack message attachment
@@ -311,4 +311,3 @@ type SlackField struct {
 	Value string `json:"value"`
 	Short bool   `json:"short"`
 }
-

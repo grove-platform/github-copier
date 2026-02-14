@@ -26,7 +26,7 @@ func TestFileStateService_AddAndGetFilesToUpload(t *testing.T) {
 		CommitStrategy: types.CommitStrategyDirect,
 		CommitMessage:  "Test commit",
 		Content: []github.RepositoryContent{
-			{Path: github.String("test.go")},
+			{Path: github.Ptr("test.go")},
 		},
 	}
 
@@ -193,7 +193,7 @@ func TestFileStateService_UpdateExistingFile(t *testing.T) {
 	content1 := types.UploadFileContent{
 		TargetBranch: "main",
 		Content: []github.RepositoryContent{
-			{Path: github.String("file1.go")},
+			{Path: github.Ptr("file1.go")},
 		},
 	}
 	service.AddFileToUpload(key, content1)
@@ -202,8 +202,8 @@ func TestFileStateService_UpdateExistingFile(t *testing.T) {
 	content2 := types.UploadFileContent{
 		TargetBranch: "main",
 		Content: []github.RepositoryContent{
-			{Path: github.String("file1.go")},
-			{Path: github.String("file2.go")},
+			{Path: github.Ptr("file1.go")},
+			{Path: github.Ptr("file2.go")},
 		},
 	}
 	service.AddFileToUpload(key, content2)
@@ -271,14 +271,14 @@ func TestFileStateService_MultipleRepos(t *testing.T) {
 	content1 := types.UploadFileContent{
 		TargetBranch: "main",
 		Content: []github.RepositoryContent{
-			{Path: github.String("file1.go")},
+			{Path: github.Ptr("file1.go")},
 		},
 	}
 
 	content2 := types.UploadFileContent{
 		TargetBranch: "develop",
 		Content: []github.RepositoryContent{
-			{Path: github.String("file2.go")},
+			{Path: github.Ptr("file2.go")},
 		},
 	}
 
@@ -305,7 +305,7 @@ func TestFileStateService_IsolatedCopies(t *testing.T) {
 	content := types.UploadFileContent{
 		TargetBranch: "main",
 		Content: []github.RepositoryContent{
-			{Path: github.String("file1.go")},
+			{Path: github.Ptr("file1.go")},
 		},
 	}
 

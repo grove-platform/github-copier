@@ -14,7 +14,6 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/google/go-github/v82/github"
@@ -187,10 +186,10 @@ func TestHandleWebhookWithContainer_ValidSignature(t *testing.T) {
 
 	// Create a valid pull_request event payload
 	prEvent := &github.PullRequestEvent{
-		Action: github.String("opened"),
+		Action: github.Ptr("opened"),
 		PullRequest: &github.PullRequest{
-			Number: github.Int(123),
-			Merged: github.Bool(false),
+			Number: github.Ptr(123),
+			Merged: github.Ptr(false),
 		},
 	}
 
@@ -262,10 +261,10 @@ func TestHandleWebhookWithContainer_NonMergedPR(t *testing.T) {
 
 	// Create a PR event that's not merged
 	prEvent := &github.PullRequestEvent{
-		Action: github.String("opened"),
+		Action: github.Ptr("opened"),
 		PullRequest: &github.PullRequest{
-			Number: github.Int(123),
-			Merged: github.Bool(false),
+			Number: github.Ptr(123),
+			Merged: github.Ptr(false),
 		},
 	}
 	payload, _ := json.Marshal(prEvent)
@@ -290,22 +289,19 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 	// the webhook handler returns the correct HTTP response.
 
 	// Set up environment variables to prevent ConfigurePermissions from failing
-	// We don't clean these up because:
-	// 1. The background goroutine may still need them after the test completes
-	// 2. TestMain in github_write_to_target_test.go sets them up properly anyway
-	// 3. These are test values that won't affect other tests
-	os.Setenv(configs.AppId, "123456")
-	os.Setenv(configs.InstallationId, "789012")
-	os.Setenv(configs.ConfigRepoOwner, "test-owner")
-	os.Setenv(configs.ConfigRepoName, "test-repo")
-	os.Setenv("SKIP_SECRET_MANAGER", "true")
+	// t.Setenv auto-cleans up after the test
+	t.Setenv(configs.AppId, "123456")
+	t.Setenv(configs.InstallationId, "789012")
+	t.Setenv(configs.ConfigRepoOwner, "test-owner")
+	t.Setenv(configs.ConfigRepoName, "test-repo")
+	t.Setenv("SKIP_SECRET_MANAGER", "true")
 
 	// Generate a valid RSA private key for testing
 	key, _ := rsa.GenerateKey(rand.Reader, 1024)
 	der := x509.MarshalPKCS1PrivateKey(key)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
-	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
 	// Set installation access token to prevent ConfigurePermissions from being called
 	defaultTokenManager.SetInstallationAccessToken("test-token")
@@ -324,19 +320,19 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 
 	// Create a merged PR event
 	prEvent := &github.PullRequestEvent{
-		Action: github.String("closed"),
+		Action: github.Ptr("closed"),
 		PullRequest: &github.PullRequest{
-			Number:         github.Int(123),
-			Merged:         github.Bool(true),
-			MergeCommitSHA: github.String("abc123"),
+			Number:         github.Ptr(123),
+			Merged:         github.Ptr(true),
+			MergeCommitSHA: github.Ptr("abc123"),
 			Base: &github.PullRequestBranch{
-				Ref: github.String("main"),
+				Ref: github.Ptr("main"),
 			},
 		},
 		Repo: &github.Repository{
-			Name: github.String("test-repo"),
+			Name: github.Ptr("test-repo"),
 			Owner: &github.User{
-				Login: github.String("test-owner"),
+				Login: github.Ptr("test-owner"),
 			},
 		},
 	}
@@ -371,18 +367,18 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 	// (assuming workflows are configured for main branch only)
 
 	// Set up environment variables
-	os.Setenv(configs.AppId, "123456")
-	os.Setenv(configs.InstallationId, "789012")
-	os.Setenv(configs.ConfigRepoOwner, "test-owner")
-	os.Setenv(configs.ConfigRepoName, "test-repo")
-	os.Setenv("SKIP_SECRET_MANAGER", "true")
+	t.Setenv(configs.AppId, "123456")
+	t.Setenv(configs.InstallationId, "789012")
+	t.Setenv(configs.ConfigRepoOwner, "test-owner")
+	t.Setenv(configs.ConfigRepoName, "test-repo")
+	t.Setenv("SKIP_SECRET_MANAGER", "true")
 
 	// Generate a valid RSA private key for testing
 	key, _ := rsa.GenerateKey(rand.Reader, 1024)
 	der := x509.MarshalPKCS1PrivateKey(key)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
-	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
 	defaultTokenManager.SetInstallationAccessToken("test-token")
 
@@ -400,19 +396,19 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 
 	// Create a merged PR event to development branch
 	prEvent := &github.PullRequestEvent{
-		Action: github.String("closed"),
+		Action: github.Ptr("closed"),
 		PullRequest: &github.PullRequest{
-			Number:         github.Int(456),
-			Merged:         github.Bool(true),
-			MergeCommitSHA: github.String("def456"),
+			Number:         github.Ptr(456),
+			Merged:         github.Ptr(true),
+			MergeCommitSHA: github.Ptr("def456"),
 			Base: &github.PullRequestBranch{
-				Ref: github.String("development"),
+				Ref: github.Ptr("development"),
 			},
 		},
 		Repo: &github.Repository{
-			Name: github.String("test-repo"),
+			Name: github.Ptr("test-repo"),
 			Owner: &github.User{
-				Login: github.String("test-owner"),
+				Login: github.Ptr("test-owner"),
 			},
 		},
 	}
@@ -473,17 +469,17 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 	}
 
 	// Set up environment variables
-	os.Setenv(configs.AppId, "123456")
-	os.Setenv(configs.InstallationId, "789012")
-	os.Setenv(configs.ConfigRepoOwner, "test-owner")
-	os.Setenv(configs.ConfigRepoName, "test-repo")
-	os.Setenv("SKIP_SECRET_MANAGER", "true")
+	t.Setenv(configs.AppId, "123456")
+	t.Setenv(configs.InstallationId, "789012")
+	t.Setenv(configs.ConfigRepoOwner, "test-owner")
+	t.Setenv(configs.ConfigRepoName, "test-repo")
+	t.Setenv("SKIP_SECRET_MANAGER", "true")
 
 	key, _ := rsa.GenerateKey(rand.Reader, 1024)
 	der := x509.MarshalPKCS1PrivateKey(key)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
-	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
+	t.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
 	defaultTokenManager.SetInstallationAccessToken("test-token")
 
@@ -503,19 +499,19 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 
 			// Create a merged PR event with specific base branch
 			prEvent := &github.PullRequestEvent{
-				Action: github.String("closed"),
+				Action: github.Ptr("closed"),
 				PullRequest: &github.PullRequest{
-					Number:         github.Int(tc.prNumber),
-					Merged:         github.Bool(true),
-					MergeCommitSHA: github.String("abc123"),
+					Number:         github.Ptr(tc.prNumber),
+					Merged:         github.Ptr(true),
+					MergeCommitSHA: github.Ptr("abc123"),
 					Base: &github.PullRequestBranch{
-						Ref: github.String(tc.baseBranch),
+						Ref: github.Ptr(tc.baseBranch),
 					},
 				},
 				Repo: &github.Repository{
-					Name: github.String("test-repo"),
+					Name: github.Ptr("test-repo"),
 					Owner: &github.User{
-						Login: github.String("test-owner"),
+						Login: github.Ptr("test-owner"),
 					},
 				},
 			}

@@ -146,8 +146,8 @@ func TestInstallationTokenCache_ExpiryTracking(t *testing.T) {
 
 func TestLoadWebhookSecret_FromEnv(t *testing.T) {
 	testSecret := "test-webhook-secret"
-	os.Setenv("WEBHOOK_SECRET", testSecret)
-	defer os.Unsetenv("WEBHOOK_SECRET")
+	_ = os.Setenv("WEBHOOK_SECRET", testSecret)
+	defer func() { _ = os.Unsetenv("WEBHOOK_SECRET") }()
 
 	config := &configs.Config{WebhookSecret: ""}
 	_ = LoadWebhookSecret(context.Background(), config)
@@ -160,8 +160,8 @@ func TestLoadWebhookSecret_FromEnv(t *testing.T) {
 
 func TestLoadMongoURI_FromEnv(t *testing.T) {
 	testURI := "mongodb://localhost:27017/test"
-	os.Setenv("MONGO_URI", testURI)
-	defer os.Unsetenv("MONGO_URI")
+	_ = os.Setenv("MONGO_URI", testURI)
+	defer func() { _ = os.Unsetenv("MONGO_URI") }()
 
 	envURI := os.Getenv("MONGO_URI")
 	if envURI != testURI {
@@ -171,8 +171,8 @@ func TestLoadMongoURI_FromEnv(t *testing.T) {
 
 func TestGitHubAppID_FromEnv(t *testing.T) {
 	testAppID := "123456"
-	os.Setenv("GITHUB_APP_ID", testAppID)
-	defer os.Unsetenv("GITHUB_APP_ID")
+	_ = os.Setenv("GITHUB_APP_ID", testAppID)
+	defer func() { _ = os.Unsetenv("GITHUB_APP_ID") }()
 
 	appID := os.Getenv("GITHUB_APP_ID")
 	if appID != testAppID {
@@ -182,8 +182,8 @@ func TestGitHubAppID_FromEnv(t *testing.T) {
 
 func TestGitHubInstallationID_FromEnv(t *testing.T) {
 	testInstallID := "789012"
-	os.Setenv("GITHUB_INSTALLATION_ID", testInstallID)
-	defer os.Unsetenv("GITHUB_INSTALLATION_ID")
+	_ = os.Setenv("GITHUB_INSTALLATION_ID", testInstallID)
+	defer func() { _ = os.Unsetenv("GITHUB_INSTALLATION_ID") }()
 
 	installID := os.Getenv("GITHUB_INSTALLATION_ID")
 	if installID != testInstallID {
@@ -193,8 +193,8 @@ func TestGitHubInstallationID_FromEnv(t *testing.T) {
 
 func TestGitHubPrivateKeyPath_FromEnv(t *testing.T) {
 	testPath := "/path/to/private-key.pem"
-	os.Setenv("GITHUB_PRIVATE_KEY_PATH", testPath)
-	defer os.Unsetenv("GITHUB_PRIVATE_KEY_PATH")
+	_ = os.Setenv("GITHUB_PRIVATE_KEY_PATH", testPath)
+	defer func() { _ = os.Unsetenv("GITHUB_PRIVATE_KEY_PATH") }()
 
 	keyPath := os.Getenv("GITHUB_PRIVATE_KEY_PATH")
 	if keyPath != testPath {

@@ -162,10 +162,10 @@ func recordBatchFailure(mc *MetricsCollector, n int) {
 func createPullRequest(ctx context.Context, client *github.Client, defaultOwner, repo, head, base, title, body string) (*github.PullRequest, error) {
 	owner, repoName := parseRepoPath(repo, defaultOwner)
 	pr := &github.NewPullRequest{
-		Title: github.String(title),
-		Head:  github.String(head), // for same-repo branches, just "branch"; for forks, use "owner:branch"
-		Base:  github.String(base), // e.g. "main"
-		Body:  github.String(body),
+		Title: github.Ptr(title),
+		Head:  github.Ptr(head), // for same-repo branches, just "branch"; for forks, use "owner:branch"
+		Base:  github.Ptr(base), // e.g. "main"
+		Body:  github.Ptr(body),
 	}
 	created, _, err := client.PullRequests.Create(ctx, owner, repoName, pr)
 	if err != nil {
@@ -381,10 +381,10 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 	var treeEntries []*github.TreeEntry
 	for path, content := range files {
 		treeEntries = append(treeEntries, &github.TreeEntry{
-			Path:    github.String(path),
-			Type:    github.String("blob"),
-			Mode:    github.String("100644"),
-			Content: github.String(content),
+			Path:    github.Ptr(path),
+			Type:    github.Ptr("blob"),
+			Mode:    github.Ptr("100644"),
+			Content: github.Ptr(content),
 		})
 	}
 
@@ -488,13 +488,4 @@ func deleteBranchIfExists(backgroundContext context.Context, client *github.Clie
 // DeleteBranchIfExistsExported is an exported wrapper for testing deleteBranchIfExists
 func DeleteBranchIfExistsExported(ctx context.Context, client *github.Client, defaultOwner, repo string, ref *github.Reference) error {
 	return deleteBranchIfExists(ctx, client, defaultOwner, repo, ref)
-}
-
-// parseIntWithDefault parses a string to int, returning defaultValue on error
-func parseIntWithDefault(s string, defaultValue int) (int, error) {
-	var result int
-	if _, err := fmt.Sscanf(s, "%d", &result); err != nil {
-		return defaultValue, err
-	}
-	return result, nil
 }

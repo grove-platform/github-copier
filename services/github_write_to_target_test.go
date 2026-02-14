@@ -25,31 +25,31 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	os.Setenv(configs.ConfigRepoOwner, "my-org")
-	os.Setenv(configs.ConfigRepoName, "config-repo")
-	os.Setenv(configs.InstallationId, "12345")
-	os.Setenv(configs.AppId, "1166559")
-	os.Setenv(configs.AppClientId, "IvTestClientId")
-	os.Setenv("SKIP_SECRET_MANAGER", "true")
-	os.Setenv(configs.ConfigRepoBranch, "main")
+	_ = os.Setenv(configs.ConfigRepoOwner, "my-org")
+	_ = os.Setenv(configs.ConfigRepoName, "config-repo")
+	_ = os.Setenv(configs.InstallationId, "12345")
+	_ = os.Setenv(configs.AppId, "1166559")
+	_ = os.Setenv(configs.AppClientId, "IvTestClientId")
+	_ = os.Setenv("SKIP_SECRET_MANAGER", "true")
+	_ = os.Setenv(configs.ConfigRepoBranch, "main")
 
 	key, _ := rsa.GenerateKey(rand.Reader, 1024)
 	der := x509.MarshalPKCS1PrivateKey(key)
 	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: der})
-	os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
-	os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
+	_ = os.Setenv("GITHUB_APP_PRIVATE_KEY", string(pemBytes))
+	_ = os.Setenv("GITHUB_APP_PRIVATE_KEY_B64", base64.StdEncoding.EncodeToString(pemBytes))
 
 	code := m.Run()
 
-	os.Unsetenv(configs.ConfigRepoOwner)
-	os.Unsetenv(configs.ConfigRepoName)
-	os.Unsetenv(configs.InstallationId)
-	os.Unsetenv(configs.AppId)
-	os.Unsetenv(configs.AppClientId)
-	os.Unsetenv("SKIP_SECRET_MANAGER")
-	os.Unsetenv("SRC_BRANCH")
-	os.Unsetenv("GITHUB_APP_PRIVATE_KEY")
-	os.Unsetenv("GITHUB_APP_PRIVATE_KEY_B64")
+	_ = os.Unsetenv(configs.ConfigRepoOwner)
+	_ = os.Unsetenv(configs.ConfigRepoName)
+	_ = os.Unsetenv(configs.InstallationId)
+	_ = os.Unsetenv(configs.AppId)
+	_ = os.Unsetenv(configs.AppClientId)
+	_ = os.Unsetenv("SKIP_SECRET_MANAGER")
+	_ = os.Unsetenv("SRC_BRANCH")
+	_ = os.Unsetenv("GITHUB_APP_PRIVATE_KEY")
+	_ = os.Unsetenv("GITHUB_APP_PRIVATE_KEY_B64")
 
 	os.Exit(code)
 }
@@ -66,14 +66,14 @@ func TestAddFilesToTargetRepos_Direct_Succeeds(t *testing.T) {
 
 	files := []github.RepositoryContent{
 		{
-			Name:    github.String("dir/example1.txt"),
-			Path:    github.String("dir/example1.txt"),
-			Content: github.String(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
+			Name:    github.Ptr("dir/example1.txt"),
+			Path:    github.Ptr("dir/example1.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
 		},
 		{
-			Name:    github.String("dir/example2.txt"),
-			Path:    github.String("dir/example2.txt"),
-			Content: github.String(base64.StdEncoding.EncodeToString([]byte("hello 2"))),
+			Name:    github.Ptr("dir/example2.txt"),
+			Path:    github.Ptr("dir/example2.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 2"))),
 		},
 	}
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
@@ -150,14 +150,14 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 
 	files := []github.RepositoryContent{
 		{
-			Name:    github.String("dir/example1.txt"),
-			Path:    github.String("dir/example1.txt"),
-			Content: github.String(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
+			Name:    github.Ptr("dir/example1.txt"),
+			Path:    github.Ptr("dir/example1.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
 		},
 		{
-			Name:    github.String("dir/example2.txt"),
-			Path:    github.String("dir/example2.txt"),
-			Content: github.String(base64.StdEncoding.EncodeToString([]byte("hello 2"))),
+			Name:    github.Ptr("dir/example2.txt"),
+			Path:    github.Ptr("dir/example2.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 2"))),
 		},
 	}
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
@@ -229,9 +229,9 @@ func TestAddFiles_DirectConflict_NonFastForward(t *testing.T) {
 
 	files := []github.RepositoryContent{
 		{
-			Name:    github.String("dir/example1.txt"),
-			Path:    github.String("dir/example1.txt"),
-			Content: github.String(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
+			Name:    github.Ptr("dir/example1.txt"),
+			Path:    github.Ptr("dir/example1.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
 		},
 	}
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
@@ -307,9 +307,9 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	)
 
 	files := []github.RepositoryContent{{
-		Name:    github.String("f.txt"),
-		Path:    github.String("f.txt"),
-		Content: github.String(base64.StdEncoding.EncodeToString([]byte("x"))),
+		Name:    github.Ptr("f.txt"),
+		Path:    github.Ptr("f.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("x"))),
 	}}
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
 		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch}: {
@@ -348,7 +348,7 @@ func TestPriority_Strategy_ConfigOverridesEnv_And_MessageFallbacks(t *testing.T)
 	testCfg.DefaultCommitMessage = wantMsg
 
 	httpmock.RegisterResponder("POST", commitsURL, func(req *http.Request) (*http.Response, error) {
-		defer req.Body.Close()
+		defer func() { _ = req.Body.Close() }()
 		b, _ := io.ReadAll(req.Body)
 		if !strings.Contains(string(b), wantMsg) {
 			t.Fatalf("commit body does not contain expected message: %s; body=%s", wantMsg, string(b))
@@ -357,9 +357,9 @@ func TestPriority_Strategy_ConfigOverridesEnv_And_MessageFallbacks(t *testing.T)
 	})
 
 	files := []github.RepositoryContent{{
-		Name:    github.String("a.txt"),
-		Path:    github.String("a.txt"),
-		Content: github.String(base64.StdEncoding.EncodeToString([]byte("x"))),
+		Name:    github.Ptr("a.txt"),
+		Path:    github.Ptr("a.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("x"))),
 	}}
 
 	typeCfg := types.Configs{
@@ -441,8 +441,8 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	)
 
 	files := []github.RepositoryContent{{
-		Name: github.String("only.txt"), Path: github.String("only.txt"),
-		Content: github.String(base64.StdEncoding.EncodeToString([]byte("y"))),
+		Name: github.Ptr("only.txt"), Path: github.Ptr("only.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("y"))),
 	}}
 	filesToUpload := map[types.UploadKey]types.UploadFileContent{
 		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, RuleName: "", CommitStrategy: "pr"}: {TargetBranch: baseBranch, Content: files, CommitStrategy: "pr"},

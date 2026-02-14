@@ -5,12 +5,13 @@ repos:
     hooks:
       - id: gitleaks
 
-  # Go linting - use local system golangci-lint
+  # Go linting - requires golangci-lint v2 installed locally:
+  #   go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.9.0
   - repo: local
     hooks:
       - id: golangci-lint
         name: golangci-lint
-        entry: golangci-lint run --new-from-rev=HEAD~1
+        entry: golangci-lint run --fix
         language: system
         pass_filenames: false
         types: [go]

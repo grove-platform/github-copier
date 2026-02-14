@@ -61,7 +61,7 @@ func main() {
 		fmt.Printf("❌ Failed to initialize services: %v\n", err)
 		os.Exit(1)
 	}
-	defer container.Close(context.Background())
+	defer func() { _ = container.Close(context.Background()) }()
 
 	// If validate-only mode, validate config and exit
 	if validateOnly {
@@ -158,12 +158,12 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "GitHub Code Example Copier\n")
-		fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
-		fmt.Fprintf(w, "Health check: /health\n")   //nolint:errcheck
-		fmt.Fprintf(w, "Readiness check: /ready\n") //nolint:errcheck
+		_, _ = fmt.Fprintf(w, "GitHub Code Example Copier\n")
+		_, _ = fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
+		_, _ = fmt.Fprintf(w, "Health check: /health\n")
+		_, _ = fmt.Fprintf(w, "Readiness check: /ready\n")
 		if config.MetricsEnabled {
-			fmt.Fprintf(w, "Metrics: /metrics\n") //nolint:errcheck
+			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
 		}
 	})
 

@@ -339,7 +339,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	}
 
 	// Update file name to target path
-	fileContent.Name = github.String(targetPath)
+	fileContent.Name = github.Ptr(targetPath)
 
 	// Create upload key
 	key := types.UploadKey{
