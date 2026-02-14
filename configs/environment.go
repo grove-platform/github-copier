@@ -109,7 +109,7 @@ func NewConfig() *Config {
 		CommitterEmail:             "bot@example.com",
 		ConfigFile:                 "copier-config.yaml",
 		DeprecationFile:            "deprecated_examples.json",
-		WebserverPath:              "/webhook",
+		WebserverPath:              "/events",
 		ConfigRepoBranch:           "main",                               // Default branch to fetch config file from
 		PEMKeyName:                 "CODE_COPIER_PEM",                    // short secret name; resolved to full path at runtime via SecretPath()
 		WebhookSecretName:          "webhook-secret",                     // short secret name; resolved to full path at runtime via SecretPath()

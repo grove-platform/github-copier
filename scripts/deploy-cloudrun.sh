@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Configuration
-SERVICE_NAME="github-copier"
+SERVICE_NAME="examples-copier"
 REGION="${1:-us-central1}"
 ENV_FILE="$PROJECT_ROOT/env-cloudrun.yaml"
 
@@ -21,7 +21,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║         Deploying github-copier to Cloud Run                  ║${NC}"
+echo -e "${BLUE}║         Deploying examples-copier to Cloud Run                ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 

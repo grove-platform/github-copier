@@ -100,7 +100,7 @@ func TestHandleWebhookWithContainer_MethodNotAllowed(t *testing.T) {
 	methods := []string{"GET", "PUT", "DELETE", "PATCH"}
 	for _, method := range methods {
 		t.Run(method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/webhook", nil)
+			req := httptest.NewRequest(method, "/events", nil)
 			w := httptest.NewRecorder()
 
 			HandleWebhookWithContainer(w, req, config, container)
@@ -126,7 +126,7 @@ func TestHandleWebhookWithContainer_MissingEventType(t *testing.T) {
 	}
 
 	payload := []byte(`{"action": "closed"}`)
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	// Missing X-GitHub-Event header
 
 	w := httptest.NewRecorder()
@@ -157,7 +157,7 @@ func TestHandleWebhookWithContainer_InvalidSignature(t *testing.T) {
 	}
 
 	payload := []byte(`{"action": "closed"}`)
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 	req.Header.Set("X-Hub-Signature-256", "sha256=invalid")
 
@@ -201,7 +201,7 @@ func TestHandleWebhookWithContainer_ValidSignature(t *testing.T) {
 	mac.Write(payload)
 	signature := "sha256=" + hex.EncodeToString(mac.Sum(nil))
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 	req.Header.Set("X-Hub-Signature-256", signature)
 
@@ -234,7 +234,7 @@ func TestHandleWebhookWithContainer_NonPREvent(t *testing.T) {
 	}
 	payload, _ := json.Marshal(pushEvent)
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "push")
 
 	w := httptest.NewRecorder()
@@ -270,7 +270,7 @@ func TestHandleWebhookWithContainer_NonMergedPR(t *testing.T) {
 	}
 	payload, _ := json.Marshal(prEvent)
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 
 	w := httptest.NewRecorder()
@@ -342,7 +342,7 @@ func TestHandleWebhookWithContainer_MergedPR(t *testing.T) {
 	}
 	payload, _ := json.Marshal(prEvent)
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 
 	w := httptest.NewRecorder()
@@ -418,7 +418,7 @@ func TestHandleWebhookWithContainer_MergedPRToDevelopmentBranch(t *testing.T) {
 	}
 	payload, _ := json.Marshal(prEvent)
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "pull_request")
 
 	w := httptest.NewRecorder()
@@ -521,7 +521,7 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 			}
 			payload, _ := json.Marshal(prEvent)
 
-			req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+			req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 			req.Header.Set("X-GitHub-Event", "pull_request")
 
 			w := httptest.NewRecorder()
@@ -567,7 +567,7 @@ func TestHandleWebhookWithContainer_DuplicateDelivery(t *testing.T) {
 	deliveryID := "test-delivery-abc-123"
 
 	// First request with this delivery ID should be processed normally
-	req1 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req1 := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req1.Header.Set("X-GitHub-Event", "push")
 	req1.Header.Set("X-GitHub-Delivery", deliveryID)
 	w1 := httptest.NewRecorder()
@@ -579,7 +579,7 @@ func TestHandleWebhookWithContainer_DuplicateDelivery(t *testing.T) {
 	}
 
 	// Second request with the same delivery ID should be rejected as duplicate
-	req2 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req2 := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req2.Header.Set("X-GitHub-Event", "push")
 	req2.Header.Set("X-GitHub-Delivery", deliveryID)
 	w2 := httptest.NewRecorder()
@@ -591,7 +591,7 @@ func TestHandleWebhookWithContainer_DuplicateDelivery(t *testing.T) {
 	}
 
 	// Third request with a different delivery ID should be processed
-	req3 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req3 := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req3.Header.Set("X-GitHub-Event", "push")
 	req3.Header.Set("X-GitHub-Delivery", "different-delivery-456")
 	w3 := httptest.NewRecorder()
@@ -621,7 +621,7 @@ func TestHandleWebhookWithContainer_NoDeliveryHeader(t *testing.T) {
 	}
 	payload, _ := json.Marshal(pushEvent)
 
-	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req := httptest.NewRequest("POST", "/events", bytes.NewReader(payload))
 	req.Header.Set("X-GitHub-Event", "push")
 	// No X-GitHub-Delivery header
 
