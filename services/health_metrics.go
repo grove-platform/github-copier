@@ -218,21 +218,21 @@ func (mc *MetricsCollector) RecordGitHubAPIError() {
 func (mc *MetricsCollector) GetFilesMatched() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesMatched)
+	return int(mc.filesMatched) // #nosec G115 -- counter fits in int
 }
 
 // GetFilesUploaded returns the current files uploaded count
 func (mc *MetricsCollector) GetFilesUploaded() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesUploaded)
+	return int(mc.filesUploaded) // #nosec G115 -- counter fits in int
 }
 
 // GetFilesUploadFailed returns the current files upload failed count
 func (mc *MetricsCollector) GetFilesUploadFailed() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesUploadFailed)
+	return int(mc.filesUploadFailed) // #nosec G115 -- counter fits in int
 }
 
 // GetMetrics returns current metrics

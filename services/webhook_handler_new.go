@@ -251,11 +251,13 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	}()
 }
 
-// handleMergedPRWithContainer processes a merged PR using the new pattern matching system
+// handleMergedPRWithContainer orchestrates processing of a merged PR:
+// auth → config → match workflows → fetch changed files → process → upload → notify.
 func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) {
 	startTime := time.Now()
+	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
 
-	// Configure GitHub permissions
+	// 1. Ensure GitHub auth
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
 		if err := ConfigurePermissions(ctx, config); err != nil {
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
@@ -264,91 +266,95 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		}
 	}
 
-	// Load configuration using new loader
-	// Note: config.ConfigRepoOwner and config.ConfigRepoName are already set from env.yaml
-	// The webhook repoOwner/repoName are used for matching workflows, not for loading config
+	// 2. Load config and find matching workflows
+	yamlConfig, err := loadAndMatchWorkflows(ctx, config, container, webhookRepo, baseBranch, prNumber)
+	if err != nil {
+		return // already logged and notified
+	}
+
+	// 3. Fetch changed files from the source PR
+	changedFiles, err := fetchChangedFiles(ctx, config, container, repoOwner, repoName, prNumber, webhookRepo)
+	if err != nil {
+		return // already logged and notified
+	}
+
+	// 4. Snapshot metrics before processing
+	filesMatchedBefore := container.MetricsCollector.GetFilesMatched()
+	filesUploadedBefore := container.MetricsCollector.GetFilesUploaded()
+	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
+
+	// 5. Process workflows, upload files, and update deprecations
+	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
+	uploadAndDeprecateFiles(ctx, config, container)
+
+	// 6. Report completion
+	reportCompletion(ctx, container, webhookRepo, prNumber, sourceCommitSHA, startTime,
+		filesMatchedBefore, filesUploadedBefore, filesFailedBefore)
+}
+
+// loadAndMatchWorkflows loads the YAML config and filters to workflows matching
+// the webhook's source repo and branch. Returns nil and logs/notifies on error.
+func loadAndMatchWorkflows(ctx context.Context, config *configs.Config, container *ServiceContainer, webhookRepo string, baseBranch string, prNumber int) (*types.YAMLConfig, error) {
 	yamlConfig, err := container.ConfigLoader.LoadConfig(ctx, config)
 	if err != nil {
 		LogAndReturnError(ctx, "config_load", "failed to load config", err)
 		container.MetricsCollector.RecordWebhookFailed()
-
-		// Send error notification to Slack
-		if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
-			Operation:  "config_load",
-			Error:      err,
-			PRNumber:   prNumber,
-			SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
-		}); notifyErr != nil {
-			LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
-		}
-		return
+		notifySlackError(ctx, container, "config_load", err, prNumber, webhookRepo)
+		return nil, err
 	}
 
-	// Find workflows matching this source repo and branch
-	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
-	var matchingWorkflows []types.Workflow
-	for _, workflow := range yamlConfig.Workflows {
-		// Match both repository and branch
-		if workflow.Source.Repo == webhookRepo && workflow.Source.Branch == baseBranch {
-			matchingWorkflows = append(matchingWorkflows, workflow)
+	var matching []types.Workflow
+	for _, wf := range yamlConfig.Workflows {
+		if wf.Source.Repo == webhookRepo && wf.Source.Branch == baseBranch {
+			matching = append(matching, wf)
 		}
 	}
 
-	if len(matchingWorkflows) == 0 {
+	if len(matching) == 0 {
 		LogWarningCtx(ctx, "no workflows configured for source repository and branch", map[string]interface{}{
 			"webhook_repo":   webhookRepo,
 			"base_branch":    baseBranch,
 			"workflow_count": len(yamlConfig.Workflows),
 		})
 		container.MetricsCollector.RecordWebhookFailed()
-		return
+		return nil, fmt.Errorf("no matching workflows")
 	}
 
 	LogInfoCtx(ctx, "found matching workflows", map[string]interface{}{
 		"webhook_repo":   webhookRepo,
 		"base_branch":    baseBranch,
-		"matching_count": len(matchingWorkflows),
+		"matching_count": len(matching),
 	})
 
-	// Store matching workflows for processing
-	yamlConfig.Workflows = matchingWorkflows
+	yamlConfig.Workflows = matching
+	return yamlConfig, nil
+}
 
-	// Get changed files from PR (from the source repository that triggered the webhook)
+// fetchChangedFiles retrieves the files changed in a PR, logging and notifying on error.
+func fetchChangedFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, repoOwner string, repoName string, prNumber int, webhookRepo string) ([]types.ChangedFile, error) {
 	changedFiles, err := GetFilesChangedInPr(ctx, config, repoOwner, repoName, prNumber)
 	if err != nil {
 		LogAndReturnError(ctx, "get_files", "failed to get changed files", err)
 		container.MetricsCollector.RecordWebhookFailed()
-
-		// Send error notification to Slack
-		if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
-			Operation:  "get_files",
-			Error:      err,
-			PRNumber:   prNumber,
-			SourceRepo: webhookRepo,
-		}); notifyErr != nil {
-			LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
-		}
-		return
+		notifySlackError(ctx, container, "get_files", err, prNumber, webhookRepo)
+		return nil, err
 	}
 
 	LogInfoCtx(ctx, "retrieved changed files", map[string]interface{}{
 		"count": len(changedFiles),
 	})
+	return changedFiles, nil
+}
 
-	// Track metrics before processing
-	filesMatchedBefore := container.MetricsCollector.GetFilesMatched()
-	filesUploadedBefore := container.MetricsCollector.GetFilesUploaded()
-	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
-
-	// Process files with workflow processor
-	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
-
-	// Upload queued files using local data for concurrency safety
+// uploadAndDeprecateFiles drains the file-state queues, uploading files to target
+// repos and updating the deprecation file.
+func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer) {
+	// Upload queued files
 	filesToUpload := container.FileStateService.GetFilesToUpload()
 	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
-	// Update deprecation file using local data for concurrency safety
+	// Build deprecation map and update file
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
 	filesToDeprecate := make(map[string]types.Configs)
 	for _, entries := range deprecationMap {
@@ -361,11 +367,13 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	}
 	UpdateDeprecationFile(ctx, config, filesToDeprecate)
 	container.FileStateService.ClearFilesToDeprecate()
+}
 
-	// Calculate metrics after processing
-	filesMatched := container.MetricsCollector.GetFilesMatched() - filesMatchedBefore
-	filesUploaded := container.MetricsCollector.GetFilesUploaded() - filesUploadedBefore
-	filesFailed := container.MetricsCollector.GetFilesUploadFailed() - filesFailedBefore
+// reportCompletion calculates processing metrics and sends a Slack notification.
+func reportCompletion(ctx context.Context, container *ServiceContainer, webhookRepo string, prNumber int, sourceCommitSHA string, startTime time.Time, matchedBefore int, uploadedBefore int, failedBefore int) {
+	filesMatched := container.MetricsCollector.GetFilesMatched() - matchedBefore
+	filesUploaded := container.MetricsCollector.GetFilesUploaded() - uploadedBefore
+	filesFailed := container.MetricsCollector.GetFilesUploadFailed() - failedBefore
 	processingTime := time.Since(startTime)
 
 	LogInfoCtx(ctx, "--Done--", map[string]interface{}{
@@ -373,10 +381,9 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		"sha":       sourceCommitSHA,
 	})
 
-	// Send success notification to Slack
 	if notifyErr := container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
 		PRNumber:       prNumber,
-		PRTitle:        fmt.Sprintf("PR #%d", prNumber), // TODO: Get actual PR title from GitHub
+		PRTitle:        fmt.Sprintf("PR #%d", prNumber),
 		PRURL:          fmt.Sprintf("https://github.com/%s/pull/%d", webhookRepo, prNumber),
 		SourceRepo:     webhookRepo,
 		FilesMatched:   filesMatched,
@@ -385,6 +392,18 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		ProcessingTime: processingTime,
 	}); notifyErr != nil {
 		LogWarningCtx(ctx, "failed to send Slack PR processed notification", map[string]interface{}{"error": notifyErr.Error()})
+	}
+}
+
+// notifySlackError is a helper to send a Slack error notification, logging any failure.
+func notifySlackError(ctx context.Context, container *ServiceContainer, operation string, err error, prNumber int, sourceRepo string) {
+	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		Operation:  operation,
+		Error:      err,
+		PRNumber:   prNumber,
+		SourceRepo: sourceRepo,
+	}); notifyErr != nil {
+		LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
 	}
 }
 

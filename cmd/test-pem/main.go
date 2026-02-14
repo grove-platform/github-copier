@@ -16,7 +16,7 @@ func main() {
 		fmt.Println("Usage: test-pem <pem-file> <app-id>")
 		os.Exit(1)
 	}
-	pemData, err := os.ReadFile(os.Args[1])
+	pemData, err := os.ReadFile(os.Args[1]) // #nosec G304 -- CLI tool, path from user arg
 	if err != nil {
 		fmt.Println("Read error:", err)
 		os.Exit(1)

@@ -56,83 +56,90 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 // It accepts the upload map as a parameter for concurrency safety.
 func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
 	for key, value := range filesToUpload {
-		// Parse the repository to get the organization
-		owner, _ := parseRepoPath(key.RepoName, config.ConfigRepoOwner)
+		if err := uploadToTarget(ctx, config, key, value, prTemplateFetcher); err != nil {
+			LogCritical("Failed to upload files", "repo", key.RepoName, "error", err)
+			recordBatchFailure(metricsCollector, len(value.Content))
+		}
+	}
+}
 
-		// Get a client authenticated for this organization
-		client, err := GetRestClientForOrg(ctx, config, owner)
+// uploadToTarget handles a single upload-key: authenticates for the target org,
+// resolves commit parameters, and dispatches to the appropriate strategy.
+func uploadToTarget(ctx context.Context, config *configs.Config, key types.UploadKey, value types.UploadFileContent, prTemplateFetcher PRTemplateFetcher) error {
+	owner, _ := parseRepoPath(key.RepoName, config.ConfigRepoOwner)
+
+	client, err := GetRestClientForOrg(ctx, config, owner)
+	if err != nil {
+		return fmt.Errorf("get GitHub client for org %s: %w", owner, err)
+	}
+
+	params := resolveCommitParams(config, key, value, prTemplateFetcher, client, ctx)
+
+	switch params.strategy {
+	case "direct":
+		LogInfo("Using direct commit strategy", "repo", key.RepoName, "branch", key.BranchPath)
+		return addFilesToBranch(ctx, config, client, key, value.Content, params.commitMsg)
+	default: // "pr" or "pull_request"
+		LogInfo("Using PR commit strategy", "repo", key.RepoName, "branch", key.BranchPath, "auto_merge", params.mergeWithoutReview)
+		return addFilesViaPR(ctx, config, client, key, value.Content, params.commitMsg, params.prTitle, params.prBody, params.mergeWithoutReview)
+	}
+}
+
+// commitParams groups the resolved parameters for a single upload operation.
+type commitParams struct {
+	strategy           string
+	commitMsg          string
+	prTitle            string
+	prBody             string
+	mergeWithoutReview bool
+}
+
+// resolveCommitParams derives commit strategy, message, PR title/body, and template
+// from the upload value and config defaults.
+func resolveCommitParams(config *configs.Config, key types.UploadKey, value types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, client *github.Client, ctx context.Context) commitParams {
+	strategy := string(value.CommitStrategy)
+	if strategy == "" {
+		strategy = "direct"
+	}
+
+	commitMsg := value.CommitMessage
+	if strings.TrimSpace(commitMsg) == "" {
+		commitMsg = config.DefaultCommitMessage
+	}
+
+	prTitle := value.PRTitle
+	if strings.TrimSpace(prTitle) == "" {
+		prTitle = commitMsg
+	}
+
+	prBody := value.PRBody
+	if value.UsePRTemplate && prTemplateFetcher != nil && strategy != "direct" {
+		targetBranch := strings.TrimPrefix(key.BranchPath, "refs/heads/")
+		template, err := prTemplateFetcher.FetchPRTemplate(ctx, client, key.RepoName, targetBranch)
 		if err != nil {
-			LogCritical("Failed to get GitHub client for org", "org", owner, "error", err)
-			// Record failure for each file in this batch
-			if metricsCollector != nil {
-				for range value.Content {
-					metricsCollector.RecordFileUploadFailed()
-				}
-			}
-			continue
+			LogWarning("Failed to fetch PR template", "repo", key.RepoName, "error", err)
+		} else if template != "" {
+			prBody = MergePRBodyWithTemplate(prBody, template)
+			LogInfo("Merged PR template", "repo", key.RepoName)
 		}
+	}
 
-		// Determine commit strategy from value (set by pattern-matching system)
-		strategy := string(value.CommitStrategy)
-		if strategy == "" {
-			strategy = "direct" // default
-		}
+	return commitParams{
+		strategy:           strategy,
+		commitMsg:          commitMsg,
+		prTitle:            prTitle,
+		prBody:             prBody,
+		mergeWithoutReview: value.AutoMergePR,
+	}
+}
 
-		// Get commit message from value or use default
-		commitMsg := value.CommitMessage
-		if strings.TrimSpace(commitMsg) == "" {
-			commitMsg = config.DefaultCommitMessage
-		}
-
-		// Get PR title from value or use commit message
-		prTitle := value.PRTitle
-		if strings.TrimSpace(prTitle) == "" {
-			prTitle = commitMsg
-		}
-
-		// Get PR body from value
-		prBody := value.PRBody
-
-		// Fetch and merge PR template if requested
-		if value.UsePRTemplate && prTemplateFetcher != nil && strategy != "direct" {
-			targetBranch := strings.TrimPrefix(key.BranchPath, "refs/heads/")
-			template, err := prTemplateFetcher.FetchPRTemplate(ctx, client, key.RepoName, targetBranch)
-			if err != nil {
-				LogWarning("Failed to fetch PR template", "repo", key.RepoName, "error", err)
-			} else if template != "" {
-				// Merge configured body with template
-				prBody = MergePRBodyWithTemplate(prBody, template)
-				LogInfo("Merged PR template", "repo", key.RepoName)
-			}
-		}
-
-		// Get auto-merge setting from value
-		mergeWithoutReview := value.AutoMergePR
-
-		switch strategy {
-		case "direct": // commits directly to the target branch
-			LogInfo("Using direct commit strategy", "repo", key.RepoName, "branch", key.BranchPath)
-			if err := addFilesToBranch(ctx, config, client, key, value.Content, commitMsg); err != nil {
-				LogCritical("Failed to add files to target branch", "error", err)
-				// Record failure for each file in this batch
-				if metricsCollector != nil {
-					for range value.Content {
-						metricsCollector.RecordFileUploadFailed()
-					}
-				}
-			}
-		default: // "pr" or "pull_request" strategy
-			LogInfo("Using PR commit strategy", "repo", key.RepoName, "branch", key.BranchPath, "auto_merge", mergeWithoutReview)
-			if err := addFilesViaPR(ctx, config, client, key, value.Content, commitMsg, prTitle, prBody, mergeWithoutReview); err != nil {
-				LogCritical("Failed via PR path", "error", err)
-				// Record failure for each file in this batch
-				if metricsCollector != nil {
-					for range value.Content {
-						metricsCollector.RecordFileUploadFailed()
-					}
-				}
-			}
-		}
+// recordBatchFailure records n file upload failures on the metrics collector.
+func recordBatchFailure(mc *MetricsCollector, n int) {
+	if mc == nil {
+		return
+	}
+	for i := 0; i < n; i++ {
+		mc.RecordFileUploadFailed()
 	}
 }
 
@@ -159,16 +166,39 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 ) error {
 	defaultOwner := config.ConfigRepoOwner
 	tempBranch := "copier/" + time.Now().UTC().Format("20060102-150405")
-
-	// 1) Create branch off the target branch specified in key.BranchPath or default to "main"
 	baseBranch := strings.TrimPrefix(key.BranchPath, "refs/heads/")
-	newRef, err := createBranch(ctx, client, defaultOwner, key.RepoName, tempBranch, baseBranch)
-	if err != nil {
+
+	// 1. Create branch off the target
+	if _, err := createBranch(ctx, client, defaultOwner, key.RepoName, tempBranch, baseBranch); err != nil {
 		return fmt.Errorf("create branch: %w", err)
 	}
-	_ = newRef // we just need it created; ref is not reused directly
 
-	// 2) Commit files to temp branch
+	// 2. Commit files to temp branch
+	if err := commitFilesToBranch(ctx, config, client, key, files, tempBranch, commitMessage); err != nil {
+		return err
+	}
+
+	// 3. Open PR from temp branch → base branch
+	pr, err := createPullRequest(ctx, client, defaultOwner, key.RepoName, tempBranch, baseBranch, prTitle, prBody)
+	if err != nil {
+		return fmt.Errorf("create PR: %w", err)
+	}
+
+	LogInfo("PR created", "pr_number", pr.GetNumber(), "from_branch", tempBranch, "base_branch", baseBranch)
+	LogInfo("PR URL", "url", pr.GetHTMLURL())
+
+	// 4. Optionally auto-merge and clean up
+	if mergeWithoutReview {
+		return autoMergePR(ctx, config, client, key.RepoName, defaultOwner, pr.GetNumber(), tempBranch)
+	}
+	LogInfo("PR created and awaiting review", "pr_number", pr.GetNumber())
+	return nil
+}
+
+// commitFilesToBranch decodes file contents and creates a tree + commit on the temp branch.
+func commitFilesToBranch(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
+	files []github.RepositoryContent, tempBranch string, commitMessage string,
+) error {
 	entries := make(map[string]string, len(files))
 	for _, f := range files {
 		content, err := f.GetContent()
@@ -183,54 +213,46 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 	if err != nil {
 		return fmt.Errorf("create tree on temp branch: %w", err)
 	}
-	if err = createCommit(ctx, client, defaultOwner, tempKey, baseSHA, treeSHA, commitMessage); err != nil {
+	if err = createCommit(ctx, client, config.ConfigRepoOwner, tempKey, baseSHA, treeSHA, commitMessage); err != nil {
 		return fmt.Errorf("create commit on temp branch: %w", err)
 	}
+	return nil
+}
 
-	// 3) Create PR from temp branch to base branch
-	base := strings.TrimPrefix(key.BranchPath, "refs/heads/")
-	pr, err := createPullRequest(ctx, client, defaultOwner, key.RepoName, tempBranch, base, prTitle, prBody)
-	if err != nil {
-		return fmt.Errorf("create PR: %w", err)
+// autoMergePR polls the PR for mergeability, merges it, and deletes the temp branch.
+func autoMergePR(ctx context.Context, config *configs.Config, client *github.Client, repo string, defaultOwner string, prNumber int, tempBranch string) error {
+	owner, repoName := parseRepoPath(repo, defaultOwner)
+
+	mergeable, state := pollMergeability(ctx, client, owner, repoName, prNumber, config.PRMergePollMaxAttempts, config.PRMergePollInterval)
+	if mergeable != nil && !*mergeable || strings.EqualFold(state, "dirty") {
+		LogWarning("PR is not mergeable; leaving open for manual resolution", "pr_number", prNumber, "state", state)
+		return fmt.Errorf("%w: pull request #%d has conflicts (state=%s)", ErrMergeConflict, prNumber, state)
 	}
 
-	// 4) Optionally merge the PR without review if MergeWithoutReview is true
-	LogInfo("PR created", "pr_number", pr.GetNumber(), "from_branch", tempBranch, "base_branch", base)
-	LogInfo("PR URL", "url", pr.GetHTMLURL())
-	if mergeWithoutReview {
-		// Poll PR for mergeability; GitHub may take a moment to compute it
-		maxAttempts := config.PRMergePollMaxAttempts
-		pollInterval := config.PRMergePollInterval
+	if err := mergePR(ctx, client, defaultOwner, repo, prNumber); err != nil {
+		return fmt.Errorf("merge PR: %w", err)
+	}
 
-		var mergeable *bool
-		var mergeableState string
-		owner, repoName := parseRepoPath(key.RepoName, defaultOwner)
-		for i := 0; i < maxAttempts; i++ {
-			current, _, gerr := client.PullRequests.Get(ctx, owner, repoName, pr.GetNumber())
-			if gerr == nil && current != nil {
-				mergeable = current.Mergeable
-				mergeableState = current.GetMergeableState()
-				if mergeable != nil { // computed
-					break
-				}
-			}
-			time.Sleep(time.Duration(pollInterval) * time.Millisecond)
-		}
-		if mergeable != nil && !*mergeable || strings.EqualFold(mergeableState, "dirty") {
-			LogWarning("PR is not mergeable; likely merge conflicts, leaving PR open for manual resolution", "pr_number", pr.GetNumber(), "state", mergeableState)
-			return fmt.Errorf("%w: pull request #%d has conflicts (state=%s)", ErrMergeConflict, pr.GetNumber(), mergeableState)
-		}
-		if err = mergePR(ctx, client, defaultOwner, key.RepoName, pr.GetNumber()); err != nil {
-			return fmt.Errorf("merge PR: %w", err)
-		}
-		if err = deleteBranchIfExists(ctx, client, defaultOwner, key.RepoName, &github.Reference{Ref: github.String("refs/heads/" + tempBranch)}); err != nil {
-			// Log but don't fail - branch cleanup is not critical
-			LogWarning("Failed to delete temp branch after merge", "error", err)
-		}
-	} else {
-		LogInfo("PR created and awaiting review", "pr_number", pr.GetNumber())
+	if err := deleteBranchIfExists(ctx, client, defaultOwner, repo, &github.Reference{Ref: github.Ptr("refs/heads/" + tempBranch)}); err != nil {
+		LogWarning("Failed to delete temp branch after merge", "error", err)
 	}
 	return nil
+}
+
+// pollMergeability polls the GitHub API until the PR's mergeability is computed or attempts are exhausted.
+func pollMergeability(ctx context.Context, client *github.Client, owner string, repo string, prNumber int, maxAttempts int, pollIntervalMs int) (mergeable *bool, state string) {
+	for i := 0; i < maxAttempts; i++ {
+		current, _, err := client.PullRequests.Get(ctx, owner, repo, prNumber)
+		if err == nil && current != nil {
+			mergeable = current.Mergeable
+			state = current.GetMergeableState()
+			if mergeable != nil {
+				return
+			}
+		}
+		time.Sleep(time.Duration(pollIntervalMs) * time.Millisecond)
+	}
+	return
 }
 
 // addFilesToBranch builds a tree, creates a commit, and updates the ref (direct to target branch)

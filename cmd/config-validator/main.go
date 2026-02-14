@@ -93,7 +93,7 @@ func printUsage() {
 }
 
 func validateConfig(configFile string, verbose bool) {
-	content, err := os.ReadFile(configFile)
+	content, err := os.ReadFile(configFile) // #nosec G304 -- CLI tool, path from user arg
 	if err != nil {
 		fmt.Printf("❌ Error reading config file: %v\n", err)
 		os.Exit(1)
@@ -210,7 +210,7 @@ workflows:
       pr_body: "Automated update from source repository"
 `
 
-	err := os.WriteFile(output, []byte(template), 0644)
+	err := os.WriteFile(output, []byte(template), 0644) // #nosec G306 -- config template file, 0644 is intentional
 	if err != nil {
 		fmt.Printf("❌ Error writing config file: %v\n", err)
 		os.Exit(1)
