@@ -10,10 +10,11 @@ services/
   webhook_handler_new.go            # HandleWebhookWithContainer()
   workflow_processor.go             # ProcessWorkflow() - core logic
   pattern_matcher.go                # MatchFile(pattern, path) bool
+  token_manager.go                  # TokenManager (thread-safe token state)
   github_auth.go                    # ConfigurePermissions() error
   github_read.go                    # GetFilesChangedInPr(), RetrieveFileContents()
-  github_write_to_target.go         # AddFilesToTargetRepoBranch()
-  github_write_to_source.go         # UpdateDeprecationFile()
+  github_write_to_target.go         # AddFilesToTargetRepos()
+  github_write_to_source.go         # UpdateDeprecationFile(filesToDeprecate)
   file_state_service.go             # tracks upload/deprecate queues
   main_config_loader.go             # LoadConfig() with $ref support
   service_container.go              # DI container
@@ -44,15 +45,15 @@ type ChangedFile struct { Path, Status string }  // Status: "ADDED"|"MODIFIED"|"
 type UploadKey struct { RepoName, BranchPath string }
 ```
 
-## Global State (⚠️ mutable)
+## State Management
 
-```go
-// services/github_write_to_target.go
-var FilesToUpload map[UploadKey]UploadFileContent
-// services/github_auth.go
-var InstallationAccessToken string
-var OrgTokens map[string]string
-```
+All mutable state is encapsulated in `TokenManager` (thread-safe via `sync.RWMutex`):
+- Installation access token
+- Per-org installation tokens with expiry
+- Cached JWT
+- HTTP client
+
+Per-request file state is managed via `FileStateService` in the `ServiceContainer`.
 
 ## Config Example
 

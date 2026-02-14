@@ -12,9 +12,10 @@ import (
 	. "github.com/grove-platform/github-copier/types"
 )
 
-func UpdateDeprecationFile() {
+// UpdateDeprecationFile updates the deprecation file with the provided data map.
+func UpdateDeprecationFile(filesToDeprecate map[string]Configs) {
 	// Early return if there are no files to deprecate - prevents blank commits
-	if len(FilesToDeprecate) == 0 {
+	if len(filesToDeprecate) == 0 {
 		LogInfo("No deprecated files to record; skipping deprecation file update")
 		return
 	}
@@ -54,7 +55,7 @@ func UpdateDeprecationFile() {
 		return
 	}
 
-	for key, value := range FilesToDeprecate {
+	for key, value := range filesToDeprecate {
 		newDeprecatedFileEntry := DeprecatedFileEntry{
 			FileName:  key,
 			Repo:      value.TargetRepo,
@@ -67,12 +68,13 @@ func UpdateDeprecationFile() {
 	updatedJSON, err := json.MarshalIndent(deprecationFile, "", "  ")
 	if err != nil {
 		LogError(fmt.Sprintf("Error marshaling JSON: %v", err))
+		return
 	}
 
 	message := fmt.Sprintf("Updating %s.", os.Getenv(configs.DeprecationFile))
 	uploadDeprecationFileChanges(message, string(updatedJSON))
 
-	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", os.Getenv(configs.DeprecationFile), len(FilesToDeprecate)))
+	LogInfo(fmt.Sprintf("Successfully updated %s with %d entries", os.Getenv(configs.DeprecationFile), len(filesToDeprecate)))
 }
 
 func uploadDeprecationFileChanges(message string, newDeprecationFileContents string) {

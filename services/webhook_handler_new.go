@@ -111,6 +111,8 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		LogInfoCtx(ctx, "signature verified", map[string]interface{}{
 			"elapsed_ms": time.Since(startTime).Milliseconds(),
 		})
+	} else {
+		LogWarningCtx(ctx, "webhook signature verification DISABLED - no webhook secret configured; set WEBHOOK_SECRET for production use", nil)
 	}
 
 	// Parse webhook event
@@ -205,7 +207,21 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	// Process asynchronously in background with a new context
 	// Don't use the request context as it will be cancelled when the request completes
 	bgCtx := context.Background()
-	go handleMergedPRWithContainer(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				LogCritical(fmt.Sprintf("panic in webhook handler for PR #%d in %s/%s: %v", prNumber, repoOwner, repoName, r))
+				container.MetricsCollector.RecordWebhookFailed()
+				_ = container.SlackNotifier.NotifyError(bgCtx, &ErrorEvent{
+					Operation:  "panic_recovery",
+					Error:      fmt.Errorf("panic: %v", r),
+					PRNumber:   prNumber,
+					SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
+				})
+			}
+		}()
+		handleMergedPRWithContainer(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+	}()
 }
 
 // handleMergedPRWithContainer processes a merged PR using the new pattern matching system
@@ -213,7 +229,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	startTime := time.Now()
 
 	// Configure GitHub permissions
-	if InstallationAccessToken == "" {
+	if defaultTokenManager.GetInstallationAccessToken() == "" {
 		if err := ConfigurePermissions(); err != nil {
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
 			container.MetricsCollector.RecordWebhookFailed()
@@ -296,25 +312,23 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	// Process files with workflow processor
 	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, container)
 
-	// Upload queued files
-	FilesToUpload = container.FileStateService.GetFilesToUpload()
-	AddFilesToTargetRepoBranchWithFetcher(container.PRTemplateFetcher, container.MetricsCollector)
+	// Upload queued files using local data for concurrency safety
+	filesToUpload := container.FileStateService.GetFilesToUpload()
+	AddFilesToTargetRepos(filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
-	// Update deprecation file - copy from FileStateService to global map for legacy function
-	// The deprecationMap is keyed by deprecation file name, with a slice of entries per file
+	// Update deprecation file using local data for concurrency safety
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
-	FilesToDeprecate = make(map[string]types.Configs)
+	filesToDeprecate := make(map[string]types.Configs)
 	for _, entries := range deprecationMap {
-		// Iterate over all entries for each deprecation file
 		for _, entry := range entries {
-			FilesToDeprecate[entry.FileName] = types.Configs{
+			filesToDeprecate[entry.FileName] = types.Configs{
 				TargetRepo:   entry.Repo,
 				TargetBranch: entry.Branch,
 			}
 		}
 	}
-	UpdateDeprecationFile()
+	UpdateDeprecationFile(filesToDeprecate)
 	container.FileStateService.ClearFilesToDeprecate()
 
 	// Calculate metrics after processing

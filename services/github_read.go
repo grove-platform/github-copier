@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/google/go-github/v48/github"
@@ -19,8 +18,8 @@ import (
 //   - repo: The repository name (e.g., "docs-sample-apps")
 //   - pr_number: The pull request number
 func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFile, error) {
-	if InstallationAccessToken == "" {
-		log.Println("No installation token provided")
+	if defaultTokenManager.GetInstallationAccessToken() == "" {
+		LogWarning("No installation token provided, configuring permissions")
 		if err := ConfigurePermissions(); err != nil {
 			return nil, fmt.Errorf("failed to configure permissions: %w", err)
 		}

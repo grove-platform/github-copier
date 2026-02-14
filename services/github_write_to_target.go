@@ -11,15 +11,7 @@ import (
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
 	. "github.com/grove-platform/github-copier/types"
-	"github.com/pkg/errors"
 )
-
-// FilesToUpload is a map where the key is the repo name
-// and the value is of type [UploadFileContent], which
-// contains the target branch name and the collection of files
-// to be uploaded.
-var FilesToUpload map[UploadKey]UploadFileContent
-var FilesToDeprecate map[string]Configs
 
 // repoOwner returns the config repository owner from environment variables.
 func repoOwner() string { return os.Getenv(configs.ConfigRepoOwner) }
@@ -64,20 +56,12 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 	return refPath
 }
 
-// AddFilesToTargetRepoBranch uploads files to the target repository branch
-// using the specified commit strategy (direct or via pull request).
-func AddFilesToTargetRepoBranch() {
-	AddFilesToTargetRepoBranchWithFetcher(nil, nil)
-}
-
-// AddFilesToTargetRepoBranchWithFetcher uploads files to the target repository branch
-// using the specified commit strategy (direct or via pull request).
-// If prTemplateFetcher is provided, it will be used to fetch PR templates when use_pr_template is true.
-// If metricsCollector is provided, it will be used to record upload failures.
-func AddFilesToTargetRepoBranchWithFetcher(prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
+// AddFilesToTargetRepos uploads files to target repository branches.
+// It accepts the upload map as a parameter for concurrency safety.
+func AddFilesToTargetRepos(filesToUpload map[UploadKey]UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
 	ctx := context.Background()
 
-	for key, value := range FilesToUpload {
+	for key, value := range filesToUpload {
 		// Parse the repository to get the organization
 		owner, _ := parseRepoPath(key.RepoName)
 
@@ -382,7 +366,7 @@ func createCommitTree(ctx context.Context, client *github.Client, targetBranch U
 
 	if err != nil || ref == nil {
 		if err == nil {
-			err = errors.Errorf("targetRef is nil after %d attempts", maxRetries)
+			err = fmt.Errorf("targetRef is nil after %d attempts", maxRetries)
 		}
 		LogCritical(fmt.Sprintf("Failed to get ref for %s after %d attempts: %v\n", normalizedRepo, maxRetries, err))
 		return "", "", err
