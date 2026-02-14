@@ -1,0 +1,2 @@
+# Example placeholder string in .env.local.example (not a real key)
+configs/.env.local.example:private-key:77
