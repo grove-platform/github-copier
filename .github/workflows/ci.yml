@@ -96,7 +96,7 @@ jobs:
 
     env:
       PROJECT_ID: "github-copy-code-examples"
-      SERVICE_NAME: "examples-copier"
+      SERVICE_NAME: "github-copier"
       REGION: "us-central1"
 
     steps:

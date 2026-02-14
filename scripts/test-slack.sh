@@ -38,7 +38,7 @@ echo ""
 # Test 1: Simple message
 echo -e "${BLUE}Test 1: Sending simple test message...${NC}"
 curl -X POST -H 'Content-type: application/json' \
-    --data '{"text":"🧪 Test message from examples-copier"}' \
+    --data '{"text":"🧪 Test message from github-copier"}' \
     "$WEBHOOK_URL"
 echo ""
 echo -e "${GREEN}✓ Simple message sent${NC}"
