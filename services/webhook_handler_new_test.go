@@ -2,6 +2,7 @@ package services
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/rsa"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/google/go-github/v82/github"
 	"github.com/grove-platform/github-copier/configs"
+	"github.com/jarcoal/httpmock"
 )
 
 func TestSimpleVerifySignature(t *testing.T) {
@@ -633,15 +635,54 @@ func TestHandleWebhookWithContainer_NoDeliveryHeader(t *testing.T) {
 }
 
 func TestRetrieveFileContentsWithConfigAndBranch(t *testing.T) {
-	// This test would require mocking the GitHub client
-	// For now, we document the expected behavior
-	t.Skip("Skipping test that requires GitHub API mocking")
+	// Use global httpmock since the REST client constructed inside the function
+	// creates its own http.Client transport chain.
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
 
-	// Expected behavior:
-	// - Should call client.Repositories.GetContents with correct parameters
-	// - Should use the specified branch in RepositoryContentGetOptions
-	// - Should return file content on success
-	// - Should return error on failure
+	owner := "test-owner"
+	repo := "test-repo"
+	branch := "main"
+	filePath := "examples/hello.go"
+	expectedContent := "package main\n\nfunc main() {}\n"
+
+	defaultTokenManager.SetInstallationAccessToken("test-token")
+	SetInstallationTokenForOrg(owner, "test-token")
+
+	httpmock.RegisterResponder("GET",
+		"https://api.github.com/repos/"+owner+"/"+repo+"/contents/"+filePath,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"type":     "file",
+			"name":     "hello.go",
+			"path":     filePath,
+			"encoding": "base64",
+			"content":  base64.StdEncoding.EncodeToString([]byte(expectedContent)),
+		}),
+	)
+
+	config := &configs.Config{
+		ConfigRepoOwner: owner,
+		ConfigRepoName:  repo,
+	}
+
+	fileContent, err := RetrieveFileContentsWithConfigAndBranch(
+		context.Background(), config, filePath, branch, owner, repo,
+	)
+	if err != nil {
+		t.Fatalf("RetrieveFileContentsWithConfigAndBranch: %v", err)
+	}
+
+	if fileContent == nil {
+		t.Fatal("expected non-nil file content")
+	}
+
+	content, err := fileContent.GetContent()
+	if err != nil {
+		t.Fatalf("GetContent: %v", err)
+	}
+	if content != expectedContent {
+		t.Errorf("content = %q, want %q", content, expectedContent)
+	}
 }
 
 func TestMaxWebhookBodyBytes(t *testing.T) {
