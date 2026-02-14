@@ -42,9 +42,6 @@ Validate a configuration file.
 
 # Validate with verbose output
 ./config-validator validate -config .copier/workflows/config.yaml -v
-
-# Validate legacy JSON config
-./config-validator validate -config config.json
 ```
 
 **Output:**
@@ -233,19 +230,6 @@ Before deploying a new configuration:
   -source "examples/go/main.go" \
   -template "docs/${lang}/${file}" \
   -vars "lang=go,file=main.go"
-```
-
-### Migrating from JSON to YAML
-
-```bash
-# Validate
-./config-validator validate -config workflow-config.yaml -v
-
-# Test patterns
-./config-validator test-pattern \
-  -type prefix \
-  -pattern "examples/" \
-  -file "examples/go/main.go"
 ```
 
 ## Exit Codes

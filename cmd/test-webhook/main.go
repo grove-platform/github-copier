@@ -13,6 +13,7 @@ import (
 	"os"
 
 	"github.com/google/go-github/v82/github"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -117,7 +118,7 @@ Examples:
 
   # Send to production with secret
   test-webhook -pr 123 -owner myorg -repo myrepo \
-    -url https://myapp.appspot.com/events \
+    -url https://your-service.run.app/events \
     -secret "my-webhook-secret"
 
 Environment Variables:
@@ -264,6 +265,11 @@ func sendWebhook(url string, payload []byte, secret string) error {
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-GitHub-Event", "pull_request")
+
+	// Add unique delivery ID for idempotency tracking
+	deliveryID := uuid.New().String()
+	req.Header.Set("X-GitHub-Delivery", deliveryID)
+	fmt.Printf("✓ Delivery ID: %s\n", deliveryID)
 
 	// Add signature if secret provided
 	if secret != "" {
