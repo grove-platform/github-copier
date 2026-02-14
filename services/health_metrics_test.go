@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grove-platform/github-copier/configs"
 	"github.com/grove-platform/github-copier/services"
 	"github.com/grove-platform/github-copier/types"
 	"github.com/stretchr/testify/assert"
@@ -136,10 +137,9 @@ func TestMetricsCollector_QueueSizes(t *testing.T) {
 }
 
 func TestHealthHandler(t *testing.T) {
-	fileStateService := services.NewFileStateService()
 	startTime := time.Now().Add(-1 * time.Hour)
 
-	handler := services.HealthHandler(fileStateService, startTime)
+	handler := services.HealthHandler(startTime)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -156,6 +156,70 @@ func TestHealthHandler(t *testing.T) {
 	assert.Equal(t, "healthy", health["status"])
 	assert.True(t, health["started"].(bool))
 	assert.NotNil(t, health["uptime"])
+}
+
+func TestReadinessHandler(t *testing.T) {
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+		AuditEnabled:    false,
+	}
+
+	container, err := services.NewServiceContainer(config)
+	require.NoError(t, err)
+
+	// Clear any token set by previous tests so GitHub shows as not_authenticated
+	container.TokenManager.SetInstallationAccessToken("")
+
+	handler := services.ReadinessHandler(container)
+
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var health services.HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &health)
+	require.NoError(t, err)
+
+	// With no installation token set, should be not_ready
+	assert.Equal(t, "not_ready", health.Status)
+	assert.False(t, health.GitHub.Authenticated)
+	assert.Equal(t, "not_authenticated", health.GitHub.Status)
+	assert.True(t, health.Started)
+}
+
+func TestReadinessHandler_WithAuth(t *testing.T) {
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+		AuditEnabled:    false,
+	}
+
+	container, err := services.NewServiceContainer(config)
+	require.NoError(t, err)
+
+	// Set a token so GitHub shows as authenticated
+	container.TokenManager.SetInstallationAccessToken("test-token")
+
+	handler := services.ReadinessHandler(container)
+
+	req := httptest.NewRequest("GET", "/ready", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var health services.HealthStatus
+	err = json.Unmarshal(w.Body.Bytes(), &health)
+	require.NoError(t, err)
+
+	assert.Equal(t, "ready", health.Status)
+	assert.True(t, health.GitHub.Authenticated)
+	assert.Equal(t, "healthy", health.GitHub.Status)
 }
 
 func TestMetricsHandler(t *testing.T) {

@@ -69,6 +69,12 @@ func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, config *config
 
 // HandleWebhookWithContainer handles incoming GitHub webhook requests using the service container
 func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *configs.Config, container *ServiceContainer) {
+	// GitHub webhooks are always POST
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	startTime := time.Now()
 	ctx := r.Context()
 

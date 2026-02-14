@@ -140,8 +140,11 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		handleWebhook(w, r, config, container)
 	})
 
-	// Health endpoint
-	mux.HandleFunc("/health", services.HealthHandler(container.FileStateService, container.StartTime))
+	// Liveness probe — lightweight, always 200 if process is running
+	mux.HandleFunc("/health", services.HealthHandler(container.StartTime))
+
+	// Readiness probe — checks GitHub auth, MongoDB connectivity
+	mux.HandleFunc("/ready", services.ReadinessHandler(container))
 
 	// Metrics endpoint (if enabled)
 	if config.MetricsEnabled {
@@ -157,9 +160,10 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintf(w, "GitHub Code Example Copier\n")
 		fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
-		fmt.Fprintf(w, "Health check: /health\n")
+		fmt.Fprintf(w, "Health check: /health\n")   //nolint:errcheck
+		fmt.Fprintf(w, "Readiness check: /ready\n") //nolint:errcheck
 		if config.MetricsEnabled {
-			fmt.Fprintf(w, "Metrics: /metrics\n")
+			fmt.Fprintf(w, "Metrics: /metrics\n") //nolint:errcheck
 		}
 	})
 
