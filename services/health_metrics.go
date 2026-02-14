@@ -287,10 +287,7 @@ func (mc *MetricsCollector) GetMetrics(fileStateService FileStateService) Metric
 			Calls:     mc.githubAPICalls,
 			Errors:    mc.githubAPIErrors,
 			ErrorRate: githubErrorRate,
-			RateLimit: RateLimitInfo{
-				Remaining: 5000, // TODO: Get from GitHub API
-				ResetAt:   time.Now().Add(1 * time.Hour),
-			},
+			RateLimit: currentRateLimitInfo(),
 		},
 		Queues: QueueMetrics{
 			UploadQueueSize:      len(uploadQueue),
@@ -364,6 +361,16 @@ func HealthHandler(fileStateService FileStateService, startTime time.Time) http.
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(health)
 	}
+}
+
+// currentRateLimitInfo returns the most recently observed GitHub API rate limit info.
+func currentRateLimitInfo() RateLimitInfo {
+	remaining, resetAt := GlobalRateLimitState.Get()
+	if remaining < 0 {
+		// No API calls made yet; return safe defaults
+		return RateLimitInfo{Remaining: -1, ResetAt: time.Time{}}
+	}
+	return RateLimitInfo{Remaining: remaining, ResetAt: resetAt}
 }
 
 // MetricsHandler handles /metrics endpoint
