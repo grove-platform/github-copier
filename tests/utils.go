@@ -222,7 +222,7 @@ func CountByMethodAndURLRegexp(method string, urlRE *regexp.Regexp) int {
 	info := httpmock.GetCallCountInfo()
 	total := 0
 	for k, v := range info {
-		if !(strings.HasPrefix(k, method+" ") || strings.HasPrefix(k, method+"=~")) {
+		if !strings.HasPrefix(k, method+" ") && !strings.HasPrefix(k, method+"=~") {
 			continue
 		}
 		var urlish string

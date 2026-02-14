@@ -67,12 +67,12 @@ func TestLogDebug(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.logLevel != "" {
-				os.Setenv("LOG_LEVEL", tt.logLevel)
-				defer os.Unsetenv("LOG_LEVEL")
+				_ = os.Setenv("LOG_LEVEL", tt.logLevel)
+				defer func() { _ = os.Unsetenv("LOG_LEVEL") }()
 			}
 			if tt.copierDebug != "" {
-				os.Setenv("COPIER_DEBUG", tt.copierDebug)
-				defer os.Unsetenv("COPIER_DEBUG")
+				_ = os.Setenv("COPIER_DEBUG", tt.copierDebug)
+				defer func() { _ = os.Unsetenv("COPIER_DEBUG") }()
 			}
 
 			var buf bytes.Buffer
@@ -461,10 +461,8 @@ func TestIsDebugEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("LOG_LEVEL", tt.logLevel)
-			os.Setenv("COPIER_DEBUG", tt.copierDebug)
-			defer os.Unsetenv("LOG_LEVEL")
-			defer os.Unsetenv("COPIER_DEBUG")
+			t.Setenv("LOG_LEVEL", tt.logLevel)
+			t.Setenv("COPIER_DEBUG", tt.copierDebug)
 
 			got := isDebugEnabled()
 			if got != tt.want {
@@ -488,8 +486,7 @@ func TestIsCloudLoggingDisabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			os.Setenv("COPIER_DISABLE_CLOUD_LOGGING", tt.value)
-			defer os.Unsetenv("COPIER_DISABLE_CLOUD_LOGGING")
+			t.Setenv("COPIER_DISABLE_CLOUD_LOGGING", tt.value)
 
 			got := isCloudLoggingDisabled()
 			if got != tt.want {

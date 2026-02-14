@@ -90,7 +90,7 @@ func getPrivateKeyFromSecret(ctx context.Context, config *configs.Config) ([]byt
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	req := &secretmanagerpb.AccessSecretVersionRequest{
 		Name: config.SecretPath(config.PEMKeyName),
@@ -115,7 +115,7 @@ func getWebhookSecretFromSecretManager(ctx context.Context, secretName string) (
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	req := &secretmanagerpb.AccessSecretVersionRequest{
 		Name: secretName,
@@ -171,7 +171,7 @@ func getSecretFromSecretManager(ctx context.Context, secretName, envVarName stri
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create Secret Manager client: %v", ErrSecretAccess, err)
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	req := &secretmanagerpb.AccessSecretVersionRequest{
 		Name: secretName,
@@ -205,7 +205,7 @@ func getInstallationAccessToken(installationId, jwtTokenStr string, hc *http.Cli
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("execute request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusCreated {
 		b, readErr := io.ReadAll(resp.Body)
@@ -327,7 +327,7 @@ func getInstallationIDForOrg(ctx context.Context, config *configs.Config, org st
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, readErr := io.ReadAll(resp.Body)

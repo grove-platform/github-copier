@@ -175,7 +175,7 @@ func (mal *MongoAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -192,7 +192,7 @@ func (mal *MongoAuditLogger) GetFailedEvents(ctx context.Context, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -209,7 +209,7 @@ func (mal *MongoAuditLogger) GetEventsByRule(ctx context.Context, ruleName strin
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -235,7 +235,7 @@ func (mal *MongoAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rul
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var stats []RuleStats
 	if err := cursor.All(ctx, &stats); err != nil {
@@ -276,7 +276,7 @@ func (mal *MongoAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]Da
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var stats []DailyStats
 	if err := cursor.All(ctx, &stats); err != nil {
