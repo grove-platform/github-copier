@@ -46,7 +46,7 @@ func simpleVerifySignature(sigHeader string, body, secret []byte) bool {
 // RetrieveFileContentsWithConfigAndBranch fetches file contents from a specific branch
 func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
 	// Use org-specific client to ensure we have the right installation token
-	client, err := GetRestClientForOrg(repoOwner)
+	client, err := GetRestClientForOrg(ctx, repoOwner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", repoOwner, err)
 	}
@@ -207,7 +207,9 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	// Process asynchronously in background with a new context
 	// Don't use the request context as it will be cancelled when the request completes
 	bgCtx := context.Background()
+	container.wg.Add(1)
 	go func() {
+		defer container.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				LogCritical(fmt.Sprintf("panic in webhook handler for PR #%d in %s/%s: %v", prNumber, repoOwner, repoName, r))
@@ -230,7 +232,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// Configure GitHub permissions
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
-		if err := ConfigurePermissions(); err != nil {
+		if err := ConfigurePermissions(ctx); err != nil {
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
 			container.MetricsCollector.RecordWebhookFailed()
 			return
@@ -285,7 +287,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	yamlConfig.Workflows = matchingWorkflows
 
 	// Get changed files from PR (from the source repository that triggered the webhook)
-	changedFiles, err := GetFilesChangedInPr(repoOwner, repoName, prNumber)
+	changedFiles, err := GetFilesChangedInPr(ctx, repoOwner, repoName, prNumber)
 	if err != nil {
 		LogAndReturnError(ctx, "get_files", "failed to get changed files", err)
 		container.MetricsCollector.RecordWebhookFailed()
@@ -314,7 +316,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// Upload queued files using local data for concurrency safety
 	filesToUpload := container.FileStateService.GetFilesToUpload()
-	AddFilesToTargetRepos(filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
+	AddFilesToTargetRepos(ctx, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
 	// Update deprecation file using local data for concurrency safety
@@ -328,7 +330,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 			}
 		}
 	}
-	UpdateDeprecationFile(filesToDeprecate)
+	UpdateDeprecationFile(ctx, filesToDeprecate)
 	container.FileStateService.ClearFilesToDeprecate()
 
 	// Calculate metrics after processing

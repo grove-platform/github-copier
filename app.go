@@ -40,12 +40,13 @@ func main() {
 	}
 
 	// Load secrets from Secret Manager if not directly provided
-	if err := services.LoadWebhookSecret(config); err != nil {
+	ctx := context.Background()
+	if err := services.LoadWebhookSecret(ctx, config); err != nil {
 		fmt.Printf("❌ Error loading webhook secret: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := services.LoadMongoURI(config); err != nil {
+	if err := services.LoadMongoURI(ctx, config); err != nil {
 		fmt.Printf("❌ Error loading MongoDB URI: %v\n", err)
 		os.Exit(1)
 	}
@@ -78,7 +79,7 @@ func main() {
 	defer services.CloseGoogleLogger()
 
 	// Configure GitHub permissions
-	if err := services.ConfigurePermissions(); err != nil {
+	if err := services.ConfigurePermissions(ctx); err != nil {
 		fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
 		os.Exit(1)
 	}

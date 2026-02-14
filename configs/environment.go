@@ -110,18 +110,18 @@ func NewConfig() *Config {
 		ConfigFile:                 "copier-config.yaml",
 		DeprecationFile:            "deprecated_examples.json",
 		WebserverPath:              "/webhook",
-		ConfigRepoBranch:           "main",                                                           // Default branch to fetch config file from
-		PEMKeyName:                 "projects/1054147886816/secrets/CODE_COPIER_PEM/versions/latest", // default secret name for GCP Secret Manager
-		WebhookSecretName:          "projects/1054147886816/secrets/webhook-secret/versions/latest",  // default webhook secret name for GCP Secret Manager
-		CopierLogName:              "copy-copier-log",                                                // default log name for logging to GCP
-		GoogleCloudProjectId:       "github-copy-code-examples",                                      // default project ID for logging to GCP
-		DefaultRecursiveCopy:       true,                                                             // system-wide default for recursive copying that individual config entries can override.
-		DefaultPRMerge:             false,                                                            // system-wide default for PR merge without review that individual config entries can override.
-		DefaultCommitMessage:       "Automated PR with updated examples",                             // default commit message used when per-config commit_message is absent.
-		GitHubAPIMaxRetries:        3,                                                                // default number of retry attempts for GitHub API calls
-		GitHubAPIInitialRetryDelay: 500,                                                              // default initial retry delay in milliseconds (exponential backoff)
-		PRMergePollMaxAttempts:     20,                                                               // default max attempts to poll PR for mergeability (~10 seconds with 500ms interval)
-		PRMergePollInterval:        500,                                                              // default polling interval in milliseconds
+		ConfigRepoBranch:           "main",                               // Default branch to fetch config file from
+		PEMKeyName:                 "CODE_COPIER_PEM",                    // short secret name; resolved to full path at runtime via SecretPath()
+		WebhookSecretName:          "webhook-secret",                     // short secret name; resolved to full path at runtime via SecretPath()
+		CopierLogName:              "copy-copier-log",                    // default log name for logging to GCP
+		GoogleCloudProjectId:       "github-copy-code-examples",          // default project ID for logging to GCP
+		DefaultRecursiveCopy:       true,                                 // system-wide default for recursive copying that individual config entries can override.
+		DefaultPRMerge:             false,                                // system-wide default for PR merge without review that individual config entries can override.
+		DefaultCommitMessage:       "Automated PR with updated examples", // default commit message used when per-config commit_message is absent.
+		GitHubAPIMaxRetries:        3,                                    // default number of retry attempts for GitHub API calls
+		GitHubAPIInitialRetryDelay: 500,                                  // default initial retry delay in milliseconds (exponential backoff)
+		PRMergePollMaxAttempts:     20,                                   // default max attempts to poll PR for mergeability (~10 seconds with 500ms interval)
+		PRMergePollInterval:        500,                                  // default polling interval in milliseconds
 	}
 }
 
@@ -230,6 +230,16 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+// SecretPath resolves a secret name to a fully-qualified GCP Secret Manager resource path.
+// If the name already contains "projects/", it is returned as-is (for backward compatibility).
+// Otherwise, it builds the full path using the configured GoogleCloudProjectId.
+func (c *Config) SecretPath(secretName string) string {
+	if strings.HasPrefix(secretName, "projects/") {
+		return secretName
+	}
+	return fmt.Sprintf("projects/%s/secrets/%s/versions/latest", c.GoogleCloudProjectId, secretName)
 }
 
 // getEnvWithDefault returns the environment variable value or default if not set

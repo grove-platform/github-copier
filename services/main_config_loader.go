@@ -234,7 +234,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 	}
 
 	// Fall back to fetching from config repo
-	client, err := GetRestClientForOrg(config.ConfigRepoOwner)
+	client, err := GetRestClientForOrg(ctx, config.ConfigRepoOwner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", config.ConfigRepoOwner, err)
 	}
@@ -285,7 +285,7 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 	repo := parts[1]
 
 	// Get GitHub client for the repo's org
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}
@@ -460,7 +460,7 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 	filePath := pathParts[2]
 
 	// Fetch file content
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, owner)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}
@@ -499,7 +499,7 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 	repo := parts[1]
 
 	// Fetch file content
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, owner)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}

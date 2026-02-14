@@ -17,20 +17,19 @@ import (
 //   - owner: The repository owner (e.g., "mongodb")
 //   - repo: The repository name (e.g., "docs-sample-apps")
 //   - pr_number: The pull request number
-func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFile, error) {
+func GetFilesChangedInPr(ctx context.Context, owner string, repo string, pr_number int) ([]ChangedFile, error) {
 	if defaultTokenManager.GetInstallationAccessToken() == "" {
 		LogWarning("No installation token provided, configuring permissions")
-		if err := ConfigurePermissions(); err != nil {
+		if err := ConfigurePermissions(ctx); err != nil {
 			return nil, fmt.Errorf("failed to configure permissions: %w", err)
 		}
 	}
 
 	// Use org-specific client to ensure we have the right installation token
-	client, err := GetGraphQLClientForOrg(owner)
+	client, err := GetGraphQLClientForOrg(ctx, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GraphQL client for org %s: %w", owner, err)
 	}
-	ctx := context.Background()
 
 	var changedFiles []ChangedFile
 	var cursor *githubv4.String = nil
@@ -98,11 +97,10 @@ func GetFilesChangedInPr(owner string, repo string, pr_number int) ([]ChangedFil
 
 // RetrieveFileContents fetches the contents of a file from the config repository at the specified path.
 // It returns a github.RepositoryContent object containing the file details.
-func RetrieveFileContents(filePath string) (github.RepositoryContent, error) {
+func RetrieveFileContents(ctx context.Context, filePath string) (github.RepositoryContent, error) {
 	owner := os.Getenv(configs.ConfigRepoOwner)
 	repo := os.Getenv(configs.ConfigRepoName)
 	client := GetRestClient()
-	ctx := context.Background()
 
 	fileContent, _, _, err :=
 		client.Repositories.GetContents(ctx, owner, repo,

@@ -83,7 +83,7 @@ func TestAddFilesToTargetRepos_Direct_Succeeds(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -109,7 +109,7 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 	// Force fresh token
 	services.DefaultTokenManager().SetInstallationAccessToken("")
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions()
+	err := services.ConfigurePermissions(context.Background())
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -168,7 +168,7 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST",
 		regexp.MustCompile(`/app/installations/`+regexp.QuoteMeta(os.Getenv(configs.InstallationId))+`/access_tokens$`),
@@ -240,7 +240,7 @@ func TestAddFiles_DirectConflict_NonFastForward(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -257,7 +257,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 
 	services.DefaultTokenManager().SetInstallationAccessToken("")
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions()
+	err := services.ConfigurePermissions(context.Background())
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -317,7 +317,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 		},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["POST "+createRefURL])
@@ -369,7 +369,7 @@ func TestPriority_Strategy_ConfigOverridesEnv_And_MessageFallbacks(t *testing.T)
 		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: cfg.CopierCommitStrategy}: {TargetBranch: baseBranch, Content: files},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	info := httpmock.GetCallCountInfo()
 	require.Equal(t, 1, info["GET "+baseRefURL])
@@ -387,7 +387,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 
 	services.DefaultTokenManager().SetInstallationAccessToken("")
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions()
+	err := services.ConfigurePermissions(context.Background())
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
@@ -444,7 +444,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, RuleName: "", CommitStrategy: "pr"}: {TargetBranch: baseBranch, Content: files, CommitStrategy: "pr"},
 	}
 
-	services.AddFilesToTargetRepos(filesToUpload, nil, nil)
+	services.AddFilesToTargetRepos(context.Background(), filesToUpload, nil, nil)
 
 	require.Equal(t, 1, test.CountByMethodAndURLRegexp("POST", regexp.MustCompile(`/pulls$`)))
 	require.Equal(t, 0, test.CountByMethodAndURLRegexp("PUT", regexp.MustCompile(`/pulls/5/merge$`)))
@@ -455,7 +455,7 @@ func TestDeleteBranchIfExists_NilReference(t *testing.T) {
 
 	services.DefaultTokenManager().SetInstallationAccessToken("")
 	test.MockGitHubAppTokenEndpoint(os.Getenv(configs.InstallationId))
-	err := services.ConfigurePermissions()
+	err := services.ConfigurePermissions(context.Background())
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	ctx := context.Background()
