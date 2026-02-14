@@ -75,9 +75,9 @@ const (
 	DeprecationFile            = "DEPRECATION_FILE"
 	WebserverPath              = "WEBSERVER_PATH"
 	ConfigRepoBranch           = "CONFIG_REPO_BRANCH"
-	PEMKeyName                 = "PEM_NAME"
-	WebhookSecretName          = "WEBHOOK_SECRET_NAME"
-	WebhookSecret              = "WEBHOOK_SECRET"
+	PEMKeyName                 = "PEM_NAME"            // #nosec G101 -- env var name, not a credential
+	WebhookSecretName          = "WEBHOOK_SECRET_NAME" // #nosec G101 -- env var name, not a credential
+	WebhookSecret              = "WEBHOOK_SECRET"      // #nosec G101 -- env var name, not a credential
 	CopierLogName              = "COPIER_LOG_NAME"
 	GoogleCloudProjectId       = "GOOGLE_CLOUD_PROJECT_ID"
 	DefaultRecursiveCopy       = "DEFAULT_RECURSIVE_COPY"
@@ -86,11 +86,11 @@ const (
 	DryRun                     = "DRY_RUN"
 	AuditEnabled               = "AUDIT_ENABLED"
 	MongoURI                   = "MONGO_URI"
-	MongoURISecretName         = "MONGO_URI_SECRET_NAME"
+	MongoURISecretName         = "MONGO_URI_SECRET_NAME" // #nosec G101 -- env var name, not a credential
 	AuditDatabase              = "AUDIT_DATABASE"
 	AuditCollection            = "AUDIT_COLLECTION"
 	MetricsEnabled             = "METRICS_ENABLED"
-	SlackWebhookURL            = "SLACK_WEBHOOK_URL"
+	SlackWebhookURL            = "SLACK_WEBHOOK_URL" // #nosec G101 -- env var name, not a credential
 	SlackChannel               = "SLACK_CHANNEL"
 	SlackUsername              = "SLACK_USERNAME"
 	SlackIconEmoji             = "SLACK_ICON_EMOJI"

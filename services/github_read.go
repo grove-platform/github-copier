@@ -54,8 +54,8 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 		for _, edge := range prQuery.Repository.PullRequest.Files.Edges {
 			changedFiles = append(changedFiles, types.ChangedFile{
 				Path:      string(edge.Node.Path),
-				Additions: int(edge.Node.Additions),
-				Deletions: int(edge.Node.Deletions),
+				Additions: int(edge.Node.Additions), // #nosec G115 -- PR additions/deletions fit in int
+				Deletions: int(edge.Node.Deletions), // #nosec G115 -- PR additions/deletions fit in int
 				Status:    string(edge.Node.ChangeType),
 			})
 		}

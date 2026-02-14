@@ -38,7 +38,7 @@ func main() {
 
 	// Option 1: Use custom payload file
 	if *payloadFile != "" {
-		payload, err = os.ReadFile(*payloadFile)
+		payload, err = os.ReadFile(*payloadFile) // #nosec G304 -- CLI tool, path from user flag
 		if err != nil {
 			fmt.Printf("Error reading payload file: %v\n", err)
 			os.Exit(1)

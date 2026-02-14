@@ -159,7 +159,7 @@ func (cv *ConfigValidator) TestTransform(sourcePath string, template string, var
 // This is useful for local testing and development
 func loadLocalConfigFile(filename string) (string, error) {
 	// Try to read from current directory
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 -- local dev config path from caller
 	if err != nil {
 		return "", err
 	}
