@@ -187,35 +187,73 @@ func testTransform(source, template, varsStr string) {
 }
 
 func initConfig(templateName, output string) {
-	// Simple workflow config template
-	template := `# Workflow Configuration
-# This file defines workflows for copying code examples between repositories
+	templates := map[string]string{
+		"basic": `# Workflow Configuration — Basic (move transformation)
+# This file defines workflows for copying code examples between repositories.
 
 workflows:
   - name: "example-workflow"
-    source:
-      repo: "mongodb/source-repo"
-      branch: "main"
-      path: "examples"
+    # source.repo and source.branch are inherited from the workflow config reference
     destination:
-      repo: "mongodb/dest-repo"
+      repo: "your-org/dest-repo"
       branch: "main"
     transformations:
       - move:
           from: "examples"
           to: "code-examples"
     commit_strategy:
-      type: "pr"
+      type: "pull_request"
       pr_title: "Update code examples"
       pr_body: "Automated update from source repository"
-`
+`,
+		"glob": `# Workflow Configuration — Glob transformation
+# Uses glob patterns for flexible file matching.
 
-	err := os.WriteFile(output, []byte(template), 0644) // #nosec G306 -- config template file, 0644 is intentional
+workflows:
+  - name: "copy-go-examples"
+    destination:
+      repo: "your-org/dest-repo"
+      branch: "main"
+    transformations:
+      - glob:
+          pattern: "examples/**/*.go"
+          transform: "code/${relative_path}"
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Go examples"
+      auto_merge: false
+`,
+		"regex": `# Workflow Configuration — Regex transformation
+# Uses regex with named capture groups for precise path control.
+
+workflows:
+  - name: "organize-by-language"
+    destination:
+      repo: "your-org/dest-repo"
+      branch: "main"
+    transformations:
+      - regex:
+          pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
+          transform: "code/${lang}/${file}"
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update ${lang} examples"
+      auto_merge: false
+`,
+	}
+
+	tmpl, ok := templates[templateName]
+	if !ok {
+		fmt.Printf("❌ Unknown template: %s (must be basic, glob, or regex)\n", templateName)
+		os.Exit(1)
+	}
+
+	err := os.WriteFile(output, []byte(tmpl), 0644) // #nosec G306 -- config template file, 0644 is intentional
 	if err != nil {
 		fmt.Printf("❌ Error writing config file: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("✅ Created workflow config file: %s\n", output)
+	fmt.Printf("✅ Created workflow config file: %s (template: %s)\n", output, templateName)
 	fmt.Println("Edit this file to configure your workflows")
 }

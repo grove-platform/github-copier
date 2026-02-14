@@ -108,13 +108,12 @@ Test your configuration locally before deploying:
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true make run-local-quick
+./scripts/run-local.sh
 
 # 2. In another terminal, send test webhook
 ./test-webhook -payload testdata/example-pr-merged.json
 
-# 3. Check logs
-# Logs go to stdout (JSON format via slog)
+# 3. Check logs (JSON format on stdout via slog)
 ```
 
 ### Testing Pattern Matching
@@ -123,7 +122,7 @@ Test if your patterns match real PR files:
 
 ```bash
 # 1. Start app
-make run-local-quick
+./scripts/run-local.sh
 
 # 2. Send webhook with real PR data
 export GITHUB_TOKEN=ghp_...
@@ -286,7 +285,7 @@ Response: 404 Not Found
 
 **Solution:** Check the webhook URL:
 ```bash
-# Default is /webhook
+# Default is /events
 ./test-webhook -payload test.json -url http://localhost:8080/events
 ```
 
@@ -362,37 +361,6 @@ EOF
 
 chmod +x run-tests.sh
 ./run-tests.sh
-```
-
-### Integration with CI/CD
-
-```yaml
-# .github/workflows/test.yml
-name: Test Examples Copier
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.23.4
-      
-      - name: Build
-        run: |
-          go build -o github-copier .
-          go build -o test-webhook ./cmd/test-webhook
-      
-      - name: Test
-        run: |
-          DRY_RUN=true ./github-copier &
-          sleep 2
-          ./test-webhook -payload testdata/example-pr-merged.json
 ```
 
 ## Exit Codes

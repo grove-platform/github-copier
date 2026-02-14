@@ -8,6 +8,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/go-github/v82 v82.0.0
+	github.com/google/uuid v1.6.0
 	github.com/jarcoal/httpmock v1.4.1
 	github.com/joho/godotenv v1.5.1
 	github.com/shurcooL/githubv4 v0.0.0-20260209031235-2402fdf4a9ed
