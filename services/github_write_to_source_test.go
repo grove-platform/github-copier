@@ -5,12 +5,12 @@ import (
 	"testing"
 
 	"github.com/grove-platform/github-copier/configs"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 func TestUpdateDeprecationFile_EmptyMap(t *testing.T) {
 	// When the map is empty, UpdateDeprecationFile should return early without panic.
-	UpdateDeprecationFile(context.Background(), configs.NewConfig(), map[string]Configs{})
+	UpdateDeprecationFile(context.Background(), configs.NewConfig(), map[string]types.Configs{})
 }
 
 func TestUpdateDeprecationFile_WithFiles(t *testing.T) {

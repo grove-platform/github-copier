@@ -8,11 +8,11 @@ import (
 
 	"github.com/google/go-github/v48/github"
 	"github.com/grove-platform/github-copier/configs"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // UpdateDeprecationFile updates the deprecation file with the provided data map.
-func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToDeprecate map[string]Configs) {
+func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToDeprecate map[string]types.Configs) {
 	// Early return if there are no files to deprecate - prevents blank commits
 	if len(filesToDeprecate) == 0 {
 		LogInfo("No deprecated files to record; skipping deprecation file update")
@@ -46,7 +46,7 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 		return
 	}
 
-	var deprecationFile DeprecationFile
+	var deprecationFile types.DeprecationFile
 	err = json.Unmarshal([]byte(content), &deprecationFile)
 	if err != nil {
 		LogError(fmt.Sprintf("Failed to unmarshal %s: %v", config.DeprecationFile, err))
@@ -54,7 +54,7 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 	}
 
 	for key, value := range filesToDeprecate {
-		newDeprecatedFileEntry := DeprecatedFileEntry{
+		newDeprecatedFileEntry := types.DeprecatedFileEntry{
 			FileName:  key,
 			Repo:      value.TargetRepo,
 			Branch:    value.TargetBranch,
