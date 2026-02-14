@@ -168,7 +168,7 @@ path_transform: "all-examples/${filename}"
 
 ### What are the prerequisites?
 
-- Go 1.23.4+
+- Go 1.26+
 - GitHub App credentials
 - Google Cloud project (for Secret Manager and logging)
 - MongoDB Atlas (optional, for audit logging)
@@ -179,7 +179,7 @@ Yes! See [Local Testing](LOCAL-TESTING.md) for instructions.
 
 ### How do I deploy to Google Cloud?
 
-See [Deployment Guide](DEPLOYMENT.md) for complete guide and [Deployment Checklist](DEPLOYMENT-CHECKLIST.md) for step-by-step instructions.
+See [Deployment Guide](DEPLOYMENT.md) for the complete guide including the deployment checklist.
 
 ### Do I need MongoDB?
 

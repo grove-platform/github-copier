@@ -320,7 +320,6 @@ Potential improvements:
 ---
 
 **See Also:**
-- [Configuration Guide](CONFIGURATION-GUIDE.md) - Deprecation configuration
 - [Architecture](ARCHITECTURE.md) - System design
 - [Troubleshooting](TROUBLESHOOTING.md) - Common issues
 

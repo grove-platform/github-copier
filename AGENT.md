@@ -5,24 +5,33 @@ Webhook service: PR merged → match files → transform paths → copy to targe
 ## File Map
 
 ```
-app.go                              # entrypoint, HTTP server
+app.go                              # entrypoint, HTTP server, graceful shutdown
 services/
-  webhook_handler_new.go            # HandleWebhookWithContainer()
-  workflow_processor.go             # ProcessWorkflow() - core logic
+  webhook_handler_new.go            # HandleWebhookWithContainer() orchestrator
+  workflow_processor.go             # ProcessWorkflow() - core file matching logic
   pattern_matcher.go                # MatchFile(pattern, path) bool
-  token_manager.go                  # TokenManager (thread-safe token state)
-  github_auth.go                    # ConfigurePermissions() error
-  github_read.go                    # GetFilesChangedInPr(), RetrieveFileContents()
-  github_write_to_target.go         # AddFilesToTargetRepos()
+  token_manager.go                  # TokenManager (thread-safe token state, sync.RWMutex)
+  github_auth.go                    # ConfigurePermissions(), JWT generation
+  github_read.go                    # GetFilesChangedInPr() (GraphQL), RetrieveFileContents()
+  github_write_to_target.go         # AddFilesToTargetRepos(), addFilesViaPR()
   github_write_to_source.go         # UpdateDeprecationFile(filesToDeprecate)
-  file_state_service.go             # tracks upload/deprecate queues
+  rate_limit.go                     # RateLimitTransport (auto-retry on 403/429)
+  delivery_tracker.go               # DeliveryTracker (webhook idempotency via X-GitHub-Delivery)
+  errors.go                         # Sentinel errors (ErrRateLimited, ErrNotFound, etc.)
+  logger.go                         # slog JSON handler, LogCritical, LogAndReturnError
+  file_state_service.go             # Tracks upload/deprecate queues (thread-safe)
   main_config_loader.go             # LoadConfig() with $ref support
+  config_loader.go                  # Config loading & validation
   service_container.go              # DI container
+  health_metrics.go                 # /health (liveness), /ready (readiness), /metrics
+  audit_logger.go                   # MongoDB audit logging
+  slack_notifier.go                 # Slack notifications
+  pr_template_fetcher.go            # PR template resolution from target repos
 types/
   config.go                         # Workflow, Transformation, SourcePattern structs
   types.go                          # ChangedFile, UploadKey, UploadFileContent
 configs/environment.go              # Config struct, LoadEnvironment()
-tests/utils.go                      # test helpers, httpmock setup
+tests/utils.go                      # Test helpers, httpmock setup
 ```
 
 ## Key Types
@@ -55,6 +64,8 @@ All mutable state is encapsulated in `TokenManager` (thread-safe via `sync.RWMut
 
 Per-request file state is managed via `FileStateService` in the `ServiceContainer`.
 
+Webhook idempotency is handled by `DeliveryTracker` (TTL-based, in-memory).
+
 ## Config Example
 
 ```yaml
@@ -69,8 +80,9 @@ workflows:
 ## Test Commands
 
 ```bash
-go test ./...                                    # all
+go test -race ./...                              # all with race detector
 go test ./services/... -run TestWorkflow -v      # specific
+golangci-lint run ./...                          # lint
 ```
 
 ## Edit Patterns
@@ -81,11 +93,16 @@ go test ./services/... -run TestWorkflow -v      # specific
 | New pattern type | `types/config.go` (PatternType) → `pattern_matcher.go` |
 | New config field | `types/config.go` (struct) → consumers in `workflow_processor.go` |
 | Webhook logic | `webhook_handler_new.go` |
+| Rate limit behavior | `rate_limit.go` |
+| Auth flow | `github_auth.go` + `token_manager.go` |
 
 ## Conventions
 
 - Return `error`, never `log.Fatal`
 - Wrap errors: `fmt.Errorf("context: %w", err)`
+- Use sentinel errors from `errors.go` where appropriate
 - Nil-check GitHub API responses before dereference
+- Use `log/slog` for all logging (never `log` or `fmt.Print` for operational output)
 - Tests use `httpmock`; see `tests/utils.go`
+- Always run tests with `-race` flag
 - **Changelog**: Update `CHANGELOG.md` for all notable changes (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/))

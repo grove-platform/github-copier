@@ -16,7 +16,7 @@ cp testdata/.env.test .env.test
 ENV_FILE=.env.test go run app.go
 
 # 4. In another terminal, start webhook tunnel
-smee --url https://smee.io/YOUR_CHANNEL --target http://localhost:8080/webhook
+smee --url https://smee.io/YOUR_CHANNEL --target http://localhost:8080/events
 
 # 5. Create a PR in your test source repo and merge it
 ```
@@ -189,10 +189,10 @@ After sending a test webhook:
 1. **Check Application Logs**
    ```bash
    # Local
-   tail -f logs/app.log
+   # Logs go to stdout (JSON format via slog)
    
-   # GCP
-   gcloud app logs tail -s default
+   # Cloud Run
+   gcloud run services logs read github-copier --limit=50
    ```
 
 2. **Check Metrics**
