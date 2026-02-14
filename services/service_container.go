@@ -25,6 +25,9 @@ type ServiceContainer struct {
 	MetricsCollector  *MetricsCollector
 	SlackNotifier     SlackNotifier
 
+	// Webhook deduplication
+	DeliveryTracker *DeliveryTracker
+
 	// Server state
 	StartTime time.Time
 
@@ -90,6 +93,7 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		AuditLogger:       auditLogger,
 		MetricsCollector:  metricsCollector,
 		SlackNotifier:     slackNotifier,
+		DeliveryTracker:   NewDeliveryTracker(1 * time.Hour),
 		StartTime:         time.Now(),
 	}, nil
 }
@@ -103,6 +107,9 @@ func (sc *ServiceContainer) Wait() {
 func (sc *ServiceContainer) Close(ctx context.Context) error {
 	var closeErr error
 	sc.closeOnce.Do(func() {
+		if sc.DeliveryTracker != nil {
+			sc.DeliveryTracker.Stop()
+		}
 		if sc.AuditLogger != nil {
 			closeErr = sc.AuditLogger.Close(ctx)
 		}

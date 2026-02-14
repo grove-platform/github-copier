@@ -517,6 +517,94 @@ func TestHandleWebhookWithContainer_MergedPRWithDifferentBranches(t *testing.T) 
 	}
 }
 
+func TestHandleWebhookWithContainer_DuplicateDelivery(t *testing.T) {
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+		AuditEnabled:    false,
+	}
+
+	container, err := NewServiceContainer(config)
+	if err != nil {
+		t.Fatalf("NewServiceContainer() error = %v", err)
+	}
+
+	// Create a push event payload (non-PR, returns 204)
+	pushEvent := map[string]interface{}{
+		"ref": "refs/heads/main",
+	}
+	payload, _ := json.Marshal(pushEvent)
+
+	deliveryID := "test-delivery-abc-123"
+
+	// First request with this delivery ID should be processed normally
+	req1 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req1.Header.Set("X-GitHub-Event", "push")
+	req1.Header.Set("X-GitHub-Delivery", deliveryID)
+	w1 := httptest.NewRecorder()
+
+	HandleWebhookWithContainer(w1, req1, config, container)
+
+	if w1.Code != http.StatusNoContent {
+		t.Errorf("First request: status code = %d, want %d", w1.Code, http.StatusNoContent)
+	}
+
+	// Second request with the same delivery ID should be rejected as duplicate
+	req2 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req2.Header.Set("X-GitHub-Event", "push")
+	req2.Header.Set("X-GitHub-Delivery", deliveryID)
+	w2 := httptest.NewRecorder()
+
+	HandleWebhookWithContainer(w2, req2, config, container)
+
+	if w2.Code != http.StatusOK {
+		t.Errorf("Duplicate request: status code = %d, want %d (duplicate should return 200 OK)", w2.Code, http.StatusOK)
+	}
+
+	// Third request with a different delivery ID should be processed
+	req3 := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req3.Header.Set("X-GitHub-Event", "push")
+	req3.Header.Set("X-GitHub-Delivery", "different-delivery-456")
+	w3 := httptest.NewRecorder()
+
+	HandleWebhookWithContainer(w3, req3, config, container)
+
+	if w3.Code != http.StatusNoContent {
+		t.Errorf("Different delivery: status code = %d, want %d", w3.Code, http.StatusNoContent)
+	}
+}
+
+func TestHandleWebhookWithContainer_NoDeliveryHeader(t *testing.T) {
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+		AuditEnabled:    false,
+	}
+
+	container, err := NewServiceContainer(config)
+	if err != nil {
+		t.Fatalf("NewServiceContainer() error = %v", err)
+	}
+
+	// Request without X-GitHub-Delivery header should still be processed
+	pushEvent := map[string]interface{}{
+		"ref": "refs/heads/main",
+	}
+	payload, _ := json.Marshal(pushEvent)
+
+	req := httptest.NewRequest("POST", "/webhook", bytes.NewReader(payload))
+	req.Header.Set("X-GitHub-Event", "push")
+	// No X-GitHub-Delivery header
+
+	w := httptest.NewRecorder()
+
+	HandleWebhookWithContainer(w, req, config, container)
+
+	if w.Code != http.StatusNoContent {
+		t.Errorf("Status code = %d, want %d", w.Code, http.StatusNoContent)
+	}
+}
+
 func TestRetrieveFileContentsWithConfigAndBranch(t *testing.T) {
 	// This test would require mocking the GitHub client
 	// For now, we document the expected behavior
