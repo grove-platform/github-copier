@@ -94,9 +94,23 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		return
 	}
 
+	// Check for duplicate delivery using X-GitHub-Delivery header
+	deliveryID := r.Header.Get("X-GitHub-Delivery")
+	if deliveryID != "" && container.DeliveryTracker != nil {
+		if !container.DeliveryTracker.TryRecord(deliveryID) {
+			LogInfoCtx(ctx, "duplicate webhook delivery, skipping", map[string]interface{}{
+				"delivery_id": deliveryID,
+				"event_type":  eventType,
+			})
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
 	LogInfoCtx(ctx, "payload read", map[string]interface{}{
-		"elapsed_ms": time.Since(startTime).Milliseconds(),
-		"size_bytes": len(payload),
+		"elapsed_ms":  time.Since(startTime).Milliseconds(),
+		"size_bytes":  len(payload),
+		"delivery_id": deliveryID,
 	})
 
 	// Verify webhook signature
@@ -180,6 +194,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		"sha":         sourceCommitSHA,
 		"repo":        fmt.Sprintf("%s/%s", repoOwner, repoName),
 		"base_branch": baseBranch,
+		"delivery_id": deliveryID,
 		"elapsed_ms":  time.Since(startTime).Milliseconds(),
 	})
 
