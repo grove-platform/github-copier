@@ -190,7 +190,9 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	if _, err := w.Write([]byte(`{"status":"accepted"}`)); err != nil {
+		LogWarningCtx(ctx, "failed to write webhook response body", map[string]interface{}{"error": err.Error()})
+	}
 
 	LogInfoCtx(ctx, "response sent", map[string]interface{}{
 		"elapsed_ms": time.Since(startTime).Milliseconds(),
@@ -214,12 +216,14 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 			if r := recover(); r != nil {
 				LogCritical(fmt.Sprintf("panic in webhook handler for PR #%d in %s/%s: %v", prNumber, repoOwner, repoName, r))
 				container.MetricsCollector.RecordWebhookFailed()
-				_ = container.SlackNotifier.NotifyError(bgCtx, &ErrorEvent{
+				if notifyErr := container.SlackNotifier.NotifyError(bgCtx, &ErrorEvent{
 					Operation:  "panic_recovery",
 					Error:      fmt.Errorf("panic: %v", r),
 					PRNumber:   prNumber,
 					SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
-				})
+				}); notifyErr != nil {
+					LogWarning(fmt.Sprintf("failed to send Slack error notification: %v", notifyErr))
+				}
 			}
 		}()
 		handleMergedPRWithContainer(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
@@ -248,12 +252,14 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		container.MetricsCollector.RecordWebhookFailed()
 
 		// Send error notification to Slack
-		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
 			Operation:  "config_load",
 			Error:      err,
 			PRNumber:   prNumber,
 			SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
-		})
+		}); notifyErr != nil {
+			LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
+		}
 		return
 	}
 
@@ -293,12 +299,14 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		container.MetricsCollector.RecordWebhookFailed()
 
 		// Send error notification to Slack
-		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
 			Operation:  "get_files",
 			Error:      err,
 			PRNumber:   prNumber,
 			SourceRepo: webhookRepo,
-		})
+		}); notifyErr != nil {
+			LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
+		}
 		return
 	}
 
@@ -345,7 +353,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	})
 
 	// Send success notification to Slack
-	_ = container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
+	if notifyErr := container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
 		PRNumber:       prNumber,
 		PRTitle:        fmt.Sprintf("PR #%d", prNumber), // TODO: Get actual PR title from GitHub
 		PRURL:          fmt.Sprintf("https://github.com/%s/pull/%d", webhookRepo, prNumber),
@@ -354,7 +362,9 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		FilesCopied:    filesUploaded,
 		FilesFailed:    filesFailed,
 		ProcessingTime: processingTime,
-	})
+	}); notifyErr != nil {
+		LogWarningCtx(ctx, "failed to send Slack PR processed notification", map[string]interface{}{"error": notifyErr.Error()})
+	}
 }
 
 // processFilesWithWorkflows processes changed files using the workflow system

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -63,9 +64,8 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 		content, err = retrieveConfigFileContent(ctx, configFile, config)
 		if err != nil {
 			// Check if this is an authentication error and make it more prominent
-			errStr := err.Error()
-			if strings.Contains(errStr, "GITHUB APP AUTHENTICATION FAILED") || strings.Contains(errStr, "401") || strings.Contains(errStr, "Bad credentials") {
-				return nil, fmt.Errorf("GITHUB APP AUTHENTICATION FAILED: Unable to retrieve main config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager and redeploy the service. Original error: %w", err)
+			if errors.Is(err, ErrAuthentication) {
+				return nil, fmt.Errorf("%w: unable to retrieve main config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager and redeploy the service. Original error: %v", ErrAuthentication, err)
 			}
 			return nil, fmt.Errorf("failed to retrieve main config file: %w", err)
 		}
@@ -77,19 +77,19 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 // LoadMainConfigFromContent loads main configuration from a string and resolves references
 func (mcl *DefaultMainConfigLoader) LoadMainConfigFromContent(ctx context.Context, content string, config *configs.Config) (*types.YAMLConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("main config file is empty")
+		return nil, fmt.Errorf("%w: main config file is empty", ErrConfigLoad)
 	}
 
 	// Parse as MainConfig
 	var mainConfig types.MainConfig
 	err := yaml.Unmarshal([]byte(content), &mainConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse main config: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse main config: %v", ErrConfigLoad, err)
 	}
 
 	// Validate that workflow_configs is present
 	if len(mainConfig.WorkflowConfigs) == 0 {
-		return nil, fmt.Errorf("main config must have at least one workflow_config entry")
+		return nil, fmt.Errorf("%w: main config must have at least one workflow_config entry", ErrConfigValidation)
 	}
 
 	// Set defaults for main config
@@ -97,7 +97,7 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfigFromContent(ctx context.Contex
 
 	// Validate main config
 	if err := mainConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("main config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: main config: %v", ErrConfigValidation, err)
 	}
 
 	LogInfoCtx(ctx, "loaded main config with workflow references", map[string]interface{}{
@@ -179,7 +179,7 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowReferences(ctx context.Contex
 
 	// Validate merged config
 	if err := mergedConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("merged config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: merged config: %v", ErrConfigValidation, err)
 	}
 
 	LogInfoCtx(ctx, "successfully resolved all workflow references", map[string]interface{}{
@@ -252,7 +252,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 		return nil, fmt.Errorf("failed to get workflow config file: %w", err)
 	}
 	if fileContent == nil {
-		return nil, fmt.Errorf("workflow config file content is nil for path: %s", ref.Path)
+		return nil, fmt.Errorf("%w: workflow config at path: %s", ErrContentNil, ref.Path)
 	}
 
 	content, err = fileContent.GetContent()
@@ -304,7 +304,7 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 		return nil, fmt.Errorf("failed to get workflow config file from %s: %w", ref.Repo, err)
 	}
 	if fileContent == nil {
-		return nil, fmt.Errorf("workflow config file content is nil for path: %s in repo %s", ref.Path, ref.Repo)
+		return nil, fmt.Errorf("%w: workflow config at path: %s in repo %s", ErrContentNil, ref.Path, ref.Repo)
 	}
 
 	content, err := fileContent.GetContent()
@@ -338,13 +338,13 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 // parseWorkflowConfig parses a workflow config from content
 func (mcl *DefaultMainConfigLoader) parseWorkflowConfig(content string, filename string) (*types.WorkflowConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("workflow config file is empty")
+		return nil, fmt.Errorf("%w: workflow config file is empty", ErrConfigLoad)
 	}
 
 	var workflowConfig types.WorkflowConfig
 	err := yaml.Unmarshal([]byte(content), &workflowConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse workflow config file %s: %w", filename, err)
+		return nil, fmt.Errorf("%w: failed to parse workflow config file %s: %v", ErrConfigLoad, filename, err)
 	}
 
 	return &workflowConfig, nil
@@ -478,7 +478,7 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("referenced file content is nil for path: %s", filePath)
+		return "", fmt.Errorf("%w: referenced file at path: %s", ErrContentNil, filePath)
 	}
 
 	return fileContent.GetContent()
@@ -517,7 +517,7 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("referenced file content is nil for path: %s", resolvedPath)
+		return "", fmt.Errorf("%w: referenced file at path: %s", ErrContentNil, resolvedPath)
 	}
 
 	return fileContent.GetContent()

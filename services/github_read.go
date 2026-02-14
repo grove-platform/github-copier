@@ -111,7 +111,7 @@ func RetrieveFileContents(ctx context.Context, config *configs.Config, filePath 
 		return github.RepositoryContent{}, fmt.Errorf("failed to get file content for %s: %w", filePath, err)
 	}
 	if fileContent == nil {
-		return github.RepositoryContent{}, fmt.Errorf("file content is nil for path: %s", filePath)
+		return github.RepositoryContent{}, fmt.Errorf("%w: %s", ErrContentNil, filePath)
 	}
 	return *fileContent, nil
 }

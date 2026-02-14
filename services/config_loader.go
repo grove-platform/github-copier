@@ -52,14 +52,14 @@ func (cl *DefaultConfigLoader) LoadConfig(ctx context.Context, config *configs.C
 // LoadConfigFromContent loads configuration from a string
 func (cl *DefaultConfigLoader) LoadConfigFromContent(content string, filename string) (*types.YAMLConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("config file is empty")
+		return nil, fmt.Errorf("%w: config file is empty", ErrConfigLoad)
 	}
 
 	// Parse as YAML (supports both YAML and JSON since YAML is a superset of JSON)
 	var yamlConfig types.YAMLConfig
 	err := yaml.Unmarshal([]byte(content), &yamlConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse config file: %v", ErrConfigLoad, err)
 	}
 
 	// Set defaults
@@ -67,7 +67,7 @@ func (cl *DefaultConfigLoader) LoadConfigFromContent(content string, filename st
 
 	// Validate
 	if err := yamlConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrConfigValidation, err)
 	}
 
 	return &yamlConfig, nil
@@ -95,12 +95,12 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 		// Check if this is an authentication error
 		errStr := err.Error()
 		if strings.Contains(errStr, "401") || strings.Contains(errStr, "Bad credentials") {
-			return "", fmt.Errorf("GITHUB APP AUTHENTICATION FAILED: Unable to fetch config file due to authentication error. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Original error: %w", err)
+			return "", fmt.Errorf("%w: unable to fetch config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Original error: %v", ErrAuthentication, err)
 		}
 		return "", fmt.Errorf("failed to get config file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("config file content is nil for path: %s", filePath)
+		return "", fmt.Errorf("%w: config file at path: %s", ErrContentNil, filePath)
 	}
 
 	// Decode content
