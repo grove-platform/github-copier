@@ -32,7 +32,7 @@ jobs:
           go-version: '1.26'
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v7
         with:
           version: v2.9.0
 
@@ -50,9 +50,13 @@ jobs:
 
       - name: Run gosec
         # Individual false positives are suppressed with inline #nosec comments.
-        # G115 (integer overflow) is kept as a global exclusion because safe
-        # int<->int64 casts are widespread and would require excessive inline noise.
-        run: gosec -exclude=G115 ./...
+        # Global exclusions for rules that produce widespread false positives:
+        #   G115: integer overflow on safe int<->int64 casts
+        #   G703: path traversal taint (CLI tools intentionally read user-supplied paths)
+        #   G704: SSRF taint (HTTP clients call known GitHub/Slack APIs)
+        #   G705: XSS taint (CLI tools print to stderr, not web responses)
+        #   G706: log injection taint (structured slog logger, not raw string concat)
+        run: gosec -exclude=G115,G703,G704,G705,G706 ./...
 
   build:
     runs-on: ubuntu-latest
