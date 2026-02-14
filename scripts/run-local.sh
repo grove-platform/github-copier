@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Run examples-copier locally with proper development settings
+# Run github-copier locally with proper development settings
 # This script sets up the environment for local testing
 
 set -e
@@ -11,14 +11,14 @@ BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-echo -e "${BLUE}Starting examples-copier in local development mode${NC}"
+echo -e "${BLUE}Starting github-copier in local development mode${NC}"
 echo ""
 
 # Check if binary exists
-if [ ! -f "./examples-copier" ]; then
-    echo -e "${YELLOW}Building examples-copier...${NC}"
-    go build -o examples-copier .
-    echo -e "${GREEN}✓ Built examples-copier${NC}"
+if [ ! -f "./github-copier" ]; then
+    echo -e "${YELLOW}Building github-copier...${NC}"
+    go build -o github-copier .
+    echo -e "${GREEN}✓ Built github-copier${NC}"
 fi
 
 # Set local development environment
@@ -30,8 +30,8 @@ export METRICS_ENABLED=true
 export PORT=8080
 export AUDIT_ENABLED=false
 
-# Use copier-copier-config.yaml by default (or override)
-export CONFIG_FILE=${CONFIG_FILE:-copier-copier-config.yaml}
+# Use copier-config.yaml by default (or override)
+export CONFIG_FILE=${CONFIG_FILE:-copier-config.yaml}
 export DEPRECATION_FILE=${DEPRECATION_FILE:-deprecated_examples.json}
 
 # Load .env if it exists
@@ -64,5 +64,5 @@ echo -e "${BLUE}Press Ctrl+C to stop${NC}"
 echo ""
 
 # Run the application
-./examples-copier
+./github-copier
 

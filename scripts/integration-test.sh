@@ -69,7 +69,7 @@ send_webhook() {
     log_info "Signature: $signature"
     
     response=$(curl -s -w "\n%{http_code}" \
-        -X POST "$APP_URL/webhook" \
+        -X POST "$APP_URL/events" \
         -H "Content-Type: application/json" \
         -H "X-GitHub-Event: pull_request" \
         -H "X-Hub-Signature-256: $signature" \
@@ -117,16 +117,17 @@ main() {
             ;;
         verify)
             log_info "Verifying destination repos..."
-            verify_dest_repo "cbullinger/copier-app-dest-1" "go-examples"
-            verify_dest_repo "cbullinger/copier-app-dest-2" "python-examples"
+            # Update these to match your test workflow destinations
+            verify_dest_repo "${DEST_REPO_1:-your-org/dest-repo-1}" "${DEST_PATH_1:-examples}"
+            verify_dest_repo "${DEST_REPO_2:-your-org/dest-repo-2}" "${DEST_PATH_2:-examples}"
             ;;
         full)
             check_app || exit 1
             send_webhook "$PAYLOAD_FILE"
             log_info "Waiting 10s for processing..."
             sleep 10
-            verify_dest_repo "cbullinger/copier-app-dest-1" "go-examples"
-            verify_dest_repo "cbullinger/copier-app-dest-2" "python-examples"
+            verify_dest_repo "${DEST_REPO_1:-your-org/dest-repo-1}" "${DEST_PATH_1:-examples}"
+            verify_dest_repo "${DEST_REPO_2:-your-org/dest-repo-2}" "${DEST_PATH_2:-examples}"
             ;;
         *)
             echo "Usage: $0 [webhook|verify|full]"

@@ -16,7 +16,7 @@ NC='\033[0m' # No Color
 PR_NUMBER=${1:-}
 OWNER=${2:-${REPO_OWNER:-}}
 REPO=${3:-${REPO_NAME:-}}
-WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:8080/webhook}
+WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:8080/events}
 WEBHOOK_SECRET=${WEBHOOK_SECRET:-}
 
 # Help message
@@ -32,7 +32,7 @@ if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ -z "$PR_NUMBER" ]; then
     echo ""
     echo "Environment Variables:"
     echo "  GITHUB_TOKEN      GitHub token for API access (required)"
-    echo "  WEBHOOK_URL       Webhook endpoint (default: http://localhost:8080/webhook)"
+    echo "  WEBHOOK_URL       Webhook endpoint (default: http://localhost:8080/events)"
     echo "  WEBHOOK_SECRET    Webhook secret for signature"
     echo "  REPO_OWNER        Default repository owner"
     echo "  REPO_NAME         Default repository name"
@@ -45,7 +45,7 @@ if [ "$1" == "-h" ] || [ "$1" == "--help" ] || [ -z "$PR_NUMBER" ]; then
     echo "  $0 123 myorg myrepo"
     echo ""
     echo "  # Test against production"
-    echo "  WEBHOOK_URL=https://myapp.appspot.com/webhook $0 123"
+    echo "  WEBHOOK_URL=https://your-service.run.app/events $0 123"
     echo ""
     exit 0
 fi
@@ -81,7 +81,7 @@ if [[ "$WEBHOOK_URL" == http://localhost* ]]; then
     echo -e "${BLUE}Checking if application is running...${NC}"
     if ! curl -s -f "$WEBHOOK_URL" > /dev/null 2>&1; then
         echo -e "${YELLOW}Warning: Application doesn't seem to be running at $WEBHOOK_URL${NC}"
-        echo -e "${YELLOW}Start it with: DRY_RUN=true ./examples-copier${NC}"
+        echo -e "${YELLOW}Start it with: DRY_RUN=true ./github-copier${NC}"
         read -p "Continue anyway? (y/N) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -144,6 +144,6 @@ echo ""
 echo -e "${GREEN}✓ Test complete!${NC}"
 echo ""
 echo "Check application logs for processing details:"
-echo "  Local: Check terminal output"
-echo "  GCP: gcloud app logs tail -s default"
+echo "  Local: Check terminal output (JSON via slog)"
+echo "  Cloud Run: gcloud run services logs read github-copier --limit=50"
 
