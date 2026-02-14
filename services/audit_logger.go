@@ -48,6 +48,7 @@ type AuditLogger interface {
 	GetEventsByRule(ctx context.Context, ruleName string, limit int) ([]AuditEvent, error)
 	GetStatsByRule(ctx context.Context) (map[string]RuleStats, error)
 	GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error)
+	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
@@ -85,7 +86,13 @@ func NewMongoAuditLogger(ctx context.Context, mongoURI, database, collection str
 		return nil, fmt.Errorf("MONGO_URI is required when audit logging is enabled")
 	}
 
-	clientOptions := options.Client().ApplyURI(mongoURI)
+	clientOptions := options.Client().
+		ApplyURI(mongoURI).
+		SetServerSelectionTimeout(5 * time.Second).
+		SetConnectTimeout(5 * time.Second).
+		SetTimeout(10 * time.Second).
+		SetMaxPoolSize(10).
+		SetRetryWrites(true)
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
@@ -278,7 +285,12 @@ func (mal *MongoAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]Da
 	return stats, nil
 }
 
-// Close closes the MongoDB connection
+// Ping checks MongoDB connectivity.
+func (mal *MongoAuditLogger) Ping(ctx context.Context) error {
+	return mal.client.Ping(ctx, nil)
+}
+
+// Close closes the MongoDB connection.
 func (mal *MongoAuditLogger) Close(ctx context.Context) error {
 	return mal.client.Disconnect(ctx)
 }
@@ -306,4 +318,5 @@ func (nal *NoOpAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rule
 func (nal *NoOpAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error) {
 	return []DailyStats{}, nil
 }
+func (nal *NoOpAuditLogger) Ping(ctx context.Context) error  { return nil }
 func (nal *NoOpAuditLogger) Close(ctx context.Context) error { return nil }

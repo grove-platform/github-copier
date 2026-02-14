@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -338,27 +339,87 @@ func calculateStats(durations []time.Duration) ProcessingTimeStats {
 	}
 }
 
-// HealthHandler handles /health endpoint
-func HealthHandler(fileStateService FileStateService, startTime time.Time) http.HandlerFunc {
+// HealthHandler handles /health (liveness) endpoint.
+// Returns 200 if the process is running. This is a lightweight check
+// suitable for Cloud Run / Kubernetes liveness probes.
+func HealthHandler(startTime time.Time) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		uploadQueue := fileStateService.GetFilesToUpload()
-		deprecationQueue := fileStateService.GetFilesToDeprecate()
+		health := map[string]interface{}{
+			"status":  "healthy",
+			"started": true,
+			"uptime":  time.Since(startTime).String(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(health)
+	}
+}
+
+// ReadinessHandler handles /ready endpoint.
+// Checks actual dependency connectivity (GitHub API auth, MongoDB).
+// Returns 200 if all dependencies are reachable, 503 otherwise.
+// Suitable for Cloud Run / Kubernetes readiness probes.
+func ReadinessHandler(container *ServiceContainer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		status := "ready"
+		httpStatus := http.StatusOK
+
+		// Check GitHub API: verify we have a valid authentication token
+		githubStatus := "healthy"
+		githubAuth := defaultTokenManager.GetInstallationAccessToken() != ""
+		if !githubAuth {
+			githubStatus = "not_authenticated"
+		}
+		// Check rate limit state
+		remaining, resetAt := GlobalRateLimitState.Get()
+		if remaining == 0 && time.Now().Before(resetAt) {
+			githubStatus = "rate_limited"
+		}
+
+		// Check MongoDB (if audit logging is enabled)
+		auditStatus := "disabled"
+		auditConnected := false
+		if container.AuditLogger != nil {
+			if err := container.AuditLogger.Ping(ctx); err != nil {
+				auditStatus = "unavailable"
+				status = "degraded"
+			} else {
+				auditStatus = "connected"
+				auditConnected = true
+			}
+		}
+
+		// If GitHub is not authenticated, we're not ready
+		if !githubAuth {
+			status = "not_ready"
+			httpStatus = http.StatusServiceUnavailable
+		}
+
+		uploadQueue := container.FileStateService.GetFilesToUpload()
+		deprecationQueue := container.FileStateService.GetFilesToDeprecate()
 
 		health := HealthStatus{
-			Status:  "healthy",
+			Status:  status,
 			Started: true,
 			GitHub: GitHubHealthStatus{
-				Status:        "healthy",
-				Authenticated: true,
+				Status:        githubStatus,
+				Authenticated: githubAuth,
 			},
 			Queues: QueueHealthStatus{
 				UploadCount:      len(uploadQueue),
 				DeprecationCount: len(deprecationQueue),
 			},
-			Uptime: time.Since(startTime).String(),
+			AuditLogger: AuditLoggerHealthStatus{
+				Status:    auditStatus,
+				Connected: auditConnected,
+			},
+			Uptime: time.Since(container.StartTime).String(),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
 		_ = json.NewEncoder(w).Encode(health)
 	}
 }

@@ -83,6 +83,33 @@ func TestSimpleVerifySignature(t *testing.T) {
 	}
 }
 
+func TestHandleWebhookWithContainer_MethodNotAllowed(t *testing.T) {
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+		AuditEnabled:    false,
+	}
+
+	container, err := NewServiceContainer(config)
+	if err != nil {
+		t.Fatalf("NewServiceContainer() error = %v", err)
+	}
+
+	methods := []string{"GET", "PUT", "DELETE", "PATCH"}
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			req := httptest.NewRequest(method, "/webhook", nil)
+			w := httptest.NewRecorder()
+
+			HandleWebhookWithContainer(w, req, config, container)
+
+			if w.Code != http.StatusMethodNotAllowed {
+				t.Errorf("%s: status code = %d, want %d", method, w.Code, http.StatusMethodNotAllowed)
+			}
+		})
+	}
+}
+
 func TestHandleWebhookWithContainer_MissingEventType(t *testing.T) {
 	config := &configs.Config{
 		ConfigRepoOwner: "test-owner",
