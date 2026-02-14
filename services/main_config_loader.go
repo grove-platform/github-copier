@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"gopkg.in/yaml.v3"
 
 	"github.com/grove-platform/github-copier/configs"

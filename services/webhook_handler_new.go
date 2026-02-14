@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/grove-platform/github-copier/configs"
 	"github.com/grove-platform/github-copier/types"
 )

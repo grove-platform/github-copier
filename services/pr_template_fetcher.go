@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 )
 
 // PRTemplateFetcher defines the interface for fetching PR templates from repositories
@@ -101,4 +101,3 @@ func MergePRBodyWithTemplate(configuredBody, template string) string {
 	// Merge: template first, then separator, then configured body
 	return fmt.Sprintf("%s\n\n---\n\n%s", template, configuredBody)
 }
-
