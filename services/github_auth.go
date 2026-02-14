@@ -232,20 +232,7 @@ func GetRestClient() *github.Client {
 	tm := defaultTokenManager
 	token := tm.GetInstallationAccessToken()
 	hc := tm.GetHTTPClient()
-
-	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
-	base := http.DefaultTransport
-	if hc != nil && hc.Transport != nil {
-		base = hc.Transport
-	}
-
-	httpClient := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: src,
-			Base:   base,
-		},
-	}
-	return github.NewClient(httpClient)
+	return newGitHubRESTClient(token, hc)
 }
 
 // GetGraphQLClient returns a GitHub GraphQL API client authenticated with the default installation access token.
@@ -256,7 +243,7 @@ func GetGraphQLClient(ctx context.Context, config *configs.Config) (*graphql.Cli
 		}
 	}
 	client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
-		Transport: &transport{token: defaultTokenManager.GetInstallationAccessToken()},
+		Transport: newRateLimitTransport(&transport{token: defaultTokenManager.GetInstallationAccessToken()}, nil),
 	})
 	return client, nil
 }
@@ -266,7 +253,7 @@ func GetGraphQLClient(ctx context.Context, config *configs.Config) (*graphql.Cli
 func GetGraphQLClientForOrg(ctx context.Context, config *configs.Config, org string) (*graphql.Client, error) {
 	if token, ok := defaultTokenManager.GetTokenForOrg(org); ok {
 		client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
-			Transport: &transport{token: token},
+			Transport: newRateLimitTransport(&transport{token: token}, nil),
 		})
 		return client, nil
 	}
@@ -290,7 +277,7 @@ func GetGraphQLClientForOrg(ctx context.Context, config *configs.Config, org str
 	defaultTokenManager.SetTokenForOrg(org, installationToken, expiresAt)
 
 	client := graphql.NewClient("https://api.github.com/graphql", &http.Client{
-		Transport: &transport{token: installationToken},
+		Transport: newRateLimitTransport(&transport{token: installationToken}, nil),
 	})
 	return client, nil
 }
@@ -409,17 +396,19 @@ func GetRestClientForOrg(ctx context.Context, config *configs.Config, org string
 }
 
 // newGitHubRESTClient creates a GitHub REST client with the given token and base HTTP client.
+// The transport chain is: rateLimitTransport → oauth2.Transport → base.
 func newGitHubRESTClient(token string, hc *http.Client) *github.Client {
 	src := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	base := http.DefaultTransport
 	if hc != nil && hc.Transport != nil {
 		base = hc.Transport
 	}
+	oauthTransport := &oauth2.Transport{
+		Source: src,
+		Base:   base,
+	}
 	httpClient := &http.Client{
-		Transport: &oauth2.Transport{
-			Source: src,
-			Base:   base,
-		},
+		Transport: newRateLimitTransport(oauthTransport, nil),
 	}
 	return github.NewClient(httpClient)
 }
