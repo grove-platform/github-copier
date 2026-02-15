@@ -117,6 +117,7 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 
 	// No existing open PRs
 	test.MockListOpenPRs(owner, repo, nil)
+	test.MockGetCommit(owner, repo, "baseSha", "oldTreeSha")
 
 	// Base ref used to create temp branch
 	httpmock.RegisterRegexpResponder("GET",
@@ -215,6 +216,45 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 	)
 }
 
+// TestAddFilesToTargetRepos_Direct_SkipsEmptyCommit verifies that when the new
+// tree SHA equals the base commit's tree SHA (i.e. all files already at HEAD),
+// no commit or ref update is created.
+func TestAddFilesToTargetRepos_Direct_SkipsEmptyCommit(t *testing.T) {
+	_ = test.WithHTTPMock(t)
+
+	owner, repo := test.EnvOwnerRepo(t)
+	branch := "main"
+
+	test.SetupOrgToken(owner, "test-token")
+
+	// Use NoOp endpoints: new tree SHA == base tree SHA
+	baseRefURL, commitsURL, updateRefURL := test.MockGitHubWriteEndpointsNoOp(owner, repo, branch)
+
+	files := []github.RepositoryContent{
+		{
+			Name:    github.Ptr("dir/example1.txt"),
+			Path:    github.Ptr("dir/example1.txt"),
+			Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("hello 1"))),
+		},
+	}
+	filesToUpload := map[types.UploadKey]types.UploadFileContent{
+		{RepoName: repo, BranchPath: "refs/heads/" + branch}: {
+			TargetBranch: branch,
+			Content:      files,
+		},
+	}
+
+	services.AddFilesToTargetRepos(context.Background(), test.TestConfig(), filesToUpload, nil, nil)
+
+	info := httpmock.GetCallCountInfo()
+	// Should still fetch the ref and create the tree
+	require.Equal(t, 1, info["GET "+baseRefURL], "should GET base ref")
+
+	// Should NOT create a commit or update the ref
+	require.Equal(t, 0, info["POST "+commitsURL], "should skip commit creation")
+	require.Equal(t, 0, info["PATCH "+updateRefURL], "should skip ref update")
+}
+
 func TestAddFiles_DirectConflict_NonFastForward(t *testing.T) {
 	_ = test.WithHTTPMock(t)
 
@@ -267,6 +307,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 
 	test.SetupOrgToken(owner, "test-token")
 	test.MockListOpenPRs(owner, repo, nil)
+	test.MockGetCommit(owner, repo, "baseSha", "oldTreeSha")
 
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+baseBranch+`$`),
@@ -400,6 +441,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 
 	test.SetupOrgToken(owner, "test-token")
 	test.MockListOpenPRs(owner, repo, nil)
+	test.MockGetCommit(owner, repo, "baseSha", "oldTreeSha")
 
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+baseBranch+`$`),
@@ -556,6 +598,7 @@ func TestAddFilesViaPR_ReusesExistingCopierPR(t *testing.T) {
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
+	test.MockGetCommit(owner, repo, "existingSha", "oldTreeSha")
 
 	// Return an existing open PR from a copier/* branch
 	test.MockListOpenPRs(owner, repo, []map[string]any{

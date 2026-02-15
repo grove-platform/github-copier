@@ -111,6 +111,8 @@ func SetupOrgToken(org, token string) {
 
 // MockGitHubWriteEndpoints mocks the full direct-commit flow endpoints for a single branch.
 // Returns the URLs for the base ref, commits, and update ref endpoints.
+// The base commit's tree SHA is "oldTreeSha" (different from the new tree "newTreeSha"),
+// so commits will proceed normally. Use MockGitHubWriteEndpointsNoOp to simulate no changes.
 func MockGitHubWriteEndpoints(owner, repo, branch string) (baseRefURL, commitsURL, updateRefURL string) {
 	baseRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/ref/heads/" + branch
 	httpmock.RegisterResponder("GET", baseRefURL,
@@ -122,11 +124,64 @@ func MockGitHubWriteEndpoints(owner, repo, branch string) (baseRefURL, commitsUR
 		}),
 	)
 
+	// Mock GET commit to return the base commit's tree SHA
+	getCommitRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/baseSha$`)
+	httpmock.RegisterRegexpResponder("GET", getCommitRe,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  "baseSha",
+			"tree": map[string]any{"sha": "oldTreeSha"},
+		}),
+	)
+
 	treesRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
 		regexp.QuoteMeta(repo) + `/git/trees(\?.*)?$`)
 	httpmock.RegisterRegexpResponder("POST", treesRe,
 		httpmock.NewJsonResponderOrPanic(201, map[string]any{
 			"sha": "newTreeSha",
+		}),
+	)
+
+	commitsURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"
+	httpmock.RegisterResponder("POST", commitsURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{
+			"sha": "newCommitSha",
+		}),
+	)
+
+	updateRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch
+	httpmock.RegisterResponder("PATCH", updateRefURL,
+		httpmock.NewStringResponder(200, `{}`),
+	)
+
+	return
+}
+
+// MockGitHubWriteEndpointsNoOp is like MockGitHubWriteEndpoints but the new tree SHA
+// equals the base commit's tree SHA, simulating a no-op (duplicate) commit.
+func MockGitHubWriteEndpointsNoOp(owner, repo, branch string) (baseRefURL, commitsURL, updateRefURL string) {
+	baseRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/ref/heads/" + branch
+	httpmock.RegisterResponder("GET", baseRefURL,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref":    "refs/heads/" + branch,
+			"object": map[string]any{"sha": "baseSha"},
+		}),
+	)
+
+	getCommitRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/baseSha$`)
+	httpmock.RegisterRegexpResponder("GET", getCommitRe,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  "baseSha",
+			"tree": map[string]any{"sha": "sameTreeSha"},
+		}),
+	)
+
+	treesRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/trees(\?.*)?$`)
+	httpmock.RegisterRegexpResponder("POST", treesRe,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{
+			"sha": "sameTreeSha", // same as base — no real changes
 		}),
 	)
 
@@ -172,6 +227,20 @@ func MockCreateRef(owner, repo string) string {
 		}),
 	)
 	return url
+}
+
+// MockGetCommit mocks GET /repos/{owner}/{repo}/git/commits/{sha} for tree comparison.
+// baseTreeSHA is the tree SHA of the base commit; use a value different from the new tree
+// to allow commits, or the same value to simulate a no-op.
+func MockGetCommit(owner, repo, commitSHA, baseTreeSHA string) {
+	re := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/` + regexp.QuoteMeta(commitSHA) + `$`)
+	httpmock.RegisterRegexpResponder("GET", re,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  commitSHA,
+			"tree": map[string]any{"sha": baseTreeSHA},
+		}),
+	)
 }
 
 // MockListOpenPRs mocks the "list open PRs" endpoint, returning the supplied PRs.

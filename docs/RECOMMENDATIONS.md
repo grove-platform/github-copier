@@ -19,11 +19,13 @@ Last updated: 2026-02-15
 
 **Related:** [Architecture > Target Repo Batching](ARCHITECTURE.md#5-target-repo-batching)
 
-### 2. Empty commits on duplicate processing
+### 2. ~~Empty commits on duplicate processing~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-When two instances process the same webhook (e.g., local + Cloud Run), the second instance creates a commit with 0 file changes because the tree is already at HEAD. The app should compare the new tree SHA against the current HEAD tree before creating a commit and skip if identical.
+~~When two instances process the same webhook (e.g., local + Cloud Run), the second instance creates a commit with 0 file changes because the tree is already at HEAD.~~
+
+**Resolution:** `createCommitTree` now returns the base commit's tree SHA alongside the new tree SHA. Both `addFilesToBranch` (direct path) and `commitFilesToBranch` (PR path) compare the two and skip the commit entirely when they match, logging `"Skipping empty commit — new tree is identical to HEAD tree"`.
 
 **Files:** `services/github_write_to_target.go`
 
@@ -117,27 +119,33 @@ The `go.mod` says `go 1.26.0` but nothing prevents contributors from building wi
 
 ## Performance
 
-### 13. Cache resolved workflow configs
+### 13. ~~Cache resolved workflow configs~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-The app fetches all workflow configs from GitHub on every webhook (4+ API calls to resolve the main config and remote refs). Add a TTL cache (e.g., 5 minutes) so repeated webhooks reuse recently-fetched configs.
+~~The app fetches all workflow configs from GitHub on every webhook (4+ API calls to resolve the main config and remote refs).~~
 
-**Files:** `services/main_config_loader.go`
+**Resolution:** Added `CachedConfigLoader` (decorator around `ConfigLoader`) with a configurable TTL (default 5 minutes, via `CONFIG_CACHE_TTL_SECONDS` env var). Repeated webhooks within the TTL window reuse the cached config without any GitHub API calls. Set to 0 to disable.
 
-### 14. Fetch file contents in parallel
+**Files:** `services/config_cache.go`, `services/service_container.go`, `configs/environment.go`
 
-**Priority:** Low
+### 14. ~~Fetch file contents in parallel~~ (RESOLVED)
 
-`RetrieveFileContents()` is called sequentially for each matched file. Use a worker pool or `errgroup` to fetch multiple files concurrently (respecting rate limits).
+**Priority:** Low — **Status: Fixed**
 
-**Files:** `services/github_read.go`, `services/workflow_processor.go`
+~~`RetrieveFileContents()` is called sequentially for each matched file.~~
 
-### 15. Handle GitHub API pagination for large PRs
+**Resolution:** Refactored `ProcessWorkflow` into three phases: match (sequential, fast), fetch (parallel via `errgroup` with a concurrency limit of 5), and queue (sequential, mutates shared state). File content fetches now run concurrently within each workflow, significantly reducing latency for PRs with many matched files.
 
-**Priority:** Medium
+**Files:** `services/workflow_processor.go`
 
-Large PRs with 100+ changed files may require pagination in `GetFilesChangedInPr()`. Verify the GraphQL query handles `hasNextPage` and cursor-based pagination correctly.
+### 15. ~~Handle GitHub API pagination for large PRs~~ (RESOLVED)
+
+**Priority:** Medium — **Status: Already implemented**
+
+~~Large PRs with 100+ changed files may require pagination in `GetFilesChangedInPr()`.~~
+
+**Resolution:** `GetFilesChangedInPr()` already implements cursor-based pagination with `hasNextPage` and `first: 100` per page. No changes needed.
 
 **Files:** `services/github_read.go`
 
