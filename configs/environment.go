@@ -210,6 +210,15 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	return config, nil
 }
 
+// EffectiveConfigFile returns the config file path that the app will actually use.
+// If MainConfigFile is set (USE_MAIN_CONFIG=true), it takes precedence over ConfigFile.
+func (c *Config) EffectiveConfigFile() string {
+	if c.UseMainConfig && c.MainConfigFile != "" {
+		return c.MainConfigFile
+	}
+	return c.ConfigFile
+}
+
 // SecretPath resolves a secret name to a fully-qualified GCP Secret Manager resource path.
 // If the name already contains "projects/", it is returned as-is (for backward compatibility).
 // Otherwise, it builds the full path using the configured GoogleCloudProjectId.

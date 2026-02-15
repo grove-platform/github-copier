@@ -117,7 +117,7 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
 	fmt.Printf("║  Port:         %-48s║\n", config.Port)
 	fmt.Printf("║  Webhook Path: %-48s║\n", config.WebserverPath)
-	fmt.Printf("║  Config File:  %-48s║\n", config.ConfigFile)
+	fmt.Printf("║  Config File:  %-48s║\n", config.EffectiveConfigFile())
 	fmt.Printf("║  Dry Run:      %-48v║\n", config.DryRun)
 	fmt.Printf("║  Audit Log:    %-48v║\n", config.AuditEnabled)
 	fmt.Printf("║  Metrics:      %-48v║\n", config.MetricsEnabled)

@@ -48,10 +48,7 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 	var err error
 
 	// Determine which config file to load
-	configFile := config.ConfigFile
-	if config.MainConfigFile != "" {
-		configFile = config.MainConfigFile
-	}
+	configFile := config.EffectiveConfigFile()
 
 	// Try to load from local file first (for testing)
 	content, err = loadLocalConfigFile(configFile)
