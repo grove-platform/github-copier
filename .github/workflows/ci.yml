@@ -49,14 +49,9 @@ jobs:
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
       - name: Run gosec
-        # Individual false positives are suppressed with inline #nosec comments.
-        # Global exclusions for rules that produce widespread false positives:
-        #   G115: integer overflow on safe int<->int64 casts
-        #   G703: path traversal taint (CLI tools intentionally read user-supplied paths)
-        #   G704: SSRF taint (HTTP clients call known GitHub/Slack APIs)
-        #   G705: XSS taint (CLI tools print to stderr, not web responses)
-        #   G706: log injection taint (structured slog logger, not raw string concat)
-        run: gosec -exclude=G115,G703,G704,G705,G706 ./...
+        # All false positives are suppressed with inline #nosec comments.
+        # No global exclusions — every suppression is documented at the call site.
+        run: gosec ./...
 
   build:
     runs-on: ubuntu-latest

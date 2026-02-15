@@ -15,15 +15,11 @@ import (
 )
 
 // DefaultMainConfigLoader implements the ConfigLoader interface with main config support
-type DefaultMainConfigLoader struct {
-	configLoader ConfigLoader
-}
+type DefaultMainConfigLoader struct{}
 
 // NewMainConfigLoader creates a new main config loader
 func NewMainConfigLoader() ConfigLoader {
-	return &DefaultMainConfigLoader{
-		configLoader: NewConfigLoader(),
-	}
+	return &DefaultMainConfigLoader{}
 }
 
 // LoadConfig implements the ConfigLoader interface

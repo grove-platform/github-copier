@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // HealthStatus represents the health status of the application
@@ -441,4 +445,140 @@ func MetricsHandler(metricsCollector *MetricsCollector, fileStateService FileSta
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(metrics)
 	}
+}
+
+// ConfigDiagnosticResponse is the JSON structure returned by the /config endpoint.
+type ConfigDiagnosticResponse struct {
+	// Environment summarizes non-secret runtime configuration.
+	Environment ConfigEnvironment `json:"environment"`
+
+	// Workflows contains the resolved workflow definitions (if loadable).
+	// Nil when the config could not be loaded (see LoadError).
+	Workflows []ConfigDiagnosticWorkflow `json:"workflows,omitempty"`
+
+	// LoadError is set when the effective config file cannot be loaded or parsed.
+	LoadError string `json:"load_error,omitempty"`
+}
+
+// ConfigEnvironment is a sanitised view of configs.Config.
+// Secret fields are replaced with a presence indicator (e.g. "[SET]" / "[NOT SET]").
+type ConfigEnvironment struct {
+	Port             string `json:"port"`
+	DryRun           bool   `json:"dry_run"`
+	UseMainConfig    bool   `json:"use_main_config"`
+	EffectiveConfig  string `json:"effective_config_file"`
+	ConfigRepoOwner  string `json:"config_repo_owner"`
+	ConfigRepoName   string `json:"config_repo_name"`
+	ConfigRepoBranch string `json:"config_repo_branch"`
+	WebserverPath    string `json:"webserver_path"`
+
+	// Feature flags
+	AuditEnabled   bool `json:"audit_enabled"`
+	MetricsEnabled bool `json:"metrics_enabled"`
+	SlackEnabled   bool `json:"slack_enabled"`
+
+	// Tuning
+	ConfigCacheTTLSeconds           int `json:"config_cache_ttl_seconds"`
+	WebhookProcessingTimeoutSeconds int `json:"webhook_processing_timeout_seconds"`
+	WebhookMaxRetries               int `json:"webhook_max_retries"`
+	GitHubAPIMaxRetries             int `json:"github_api_max_retries"`
+
+	// Secrets (presence only)
+	PEMKey        string `json:"pem_key"`
+	WebhookSecret string `json:"webhook_secret"`
+	MongoURI      string `json:"mongo_uri"`
+	SlackWebhook  string `json:"slack_webhook_url"`
+}
+
+// ConfigDiagnosticWorkflow is a compact summary of a resolved workflow.
+type ConfigDiagnosticWorkflow struct {
+	Name           string   `json:"name"`
+	SourceRepo     string   `json:"source_repo"`
+	SourceBranch   string   `json:"source_branch"`
+	DestRepo       string   `json:"dest_repo"`
+	DestBranch     string   `json:"dest_branch"`
+	CommitStrategy string   `json:"commit_strategy"`
+	Transforms     int      `json:"transforms"`
+	Exclude        []string `json:"exclude,omitempty"`
+}
+
+// ConfigDiagnosticHandler handles the GET /config endpoint.
+// It returns a read-only view of the resolved runtime configuration with
+// all secrets redacted, useful for debugging workflow-matching issues.
+func ConfigDiagnosticHandler(container *ServiceContainer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := ConfigDiagnosticResponse{
+			Environment: buildConfigEnvironment(container.Config),
+		}
+
+		// Attempt to load and resolve the effective configuration.
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		yamlCfg, err := container.ConfigLoader.LoadConfig(ctx, container.Config)
+		if err != nil {
+			resp.LoadError = err.Error()
+		} else if yamlCfg != nil {
+			resp.Workflows = summariseWorkflows(yamlCfg)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// secretPresence returns "[SET]" if s is non-empty, "[NOT SET]" otherwise.
+func secretPresence(s string) string {
+	if s != "" {
+		return "[SET]"
+	}
+	return "[NOT SET]"
+}
+
+func buildConfigEnvironment(cfg *configs.Config) ConfigEnvironment {
+	return ConfigEnvironment{
+		Port:             cfg.Port,
+		DryRun:           cfg.DryRun,
+		UseMainConfig:    cfg.UseMainConfig,
+		EffectiveConfig:  cfg.EffectiveConfigFile(),
+		ConfigRepoOwner:  cfg.ConfigRepoOwner,
+		ConfigRepoName:   cfg.ConfigRepoName,
+		ConfigRepoBranch: cfg.ConfigRepoBranch,
+		WebserverPath:    cfg.WebserverPath,
+
+		AuditEnabled:   cfg.AuditEnabled,
+		MetricsEnabled: cfg.MetricsEnabled,
+		SlackEnabled:   cfg.SlackEnabled,
+
+		ConfigCacheTTLSeconds:           cfg.ConfigCacheTTLSeconds,
+		WebhookProcessingTimeoutSeconds: cfg.WebhookProcessingTimeoutSeconds,
+		WebhookMaxRetries:               cfg.WebhookMaxRetries,
+		GitHubAPIMaxRetries:             cfg.GitHubAPIMaxRetries,
+
+		PEMKey:        secretPresence(os.Getenv("GITHUB_APP_PRIVATE_KEY_B64")),
+		WebhookSecret: secretPresence(cfg.WebhookSecret),
+		MongoURI:      secretPresence(cfg.MongoURI),
+		SlackWebhook:  secretPresence(cfg.SlackWebhookURL),
+	}
+}
+
+func summariseWorkflows(cfg *types.YAMLConfig) []ConfigDiagnosticWorkflow {
+	out := make([]ConfigDiagnosticWorkflow, 0, len(cfg.Workflows))
+	for _, wf := range cfg.Workflows {
+		strategy := "direct"
+		if wf.CommitStrategy != nil {
+			strategy = string(wf.CommitStrategy.Type)
+		}
+		out = append(out, ConfigDiagnosticWorkflow{
+			Name:           wf.Name,
+			SourceRepo:     wf.Source.Repo,
+			SourceBranch:   wf.Source.Branch,
+			DestRepo:       wf.Destination.Repo,
+			DestBranch:     wf.Destination.Branch,
+			CommitStrategy: strategy,
+			Transforms:     len(wf.Transformations),
+			Exclude:        wf.Exclude,
+		})
+	}
+	return out
 }

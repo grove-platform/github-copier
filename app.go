@@ -151,6 +151,9 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		mux.HandleFunc("/metrics", services.MetricsHandler(container.MetricsCollector, container.FileStateService))
 	}
 
+	// Config diagnostic endpoint — shows resolved config with secrets redacted
+	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container))
+
 	// Info endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -162,6 +165,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		_, _ = fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
 		_, _ = fmt.Fprintf(w, "Health check: /health\n")
 		_, _ = fmt.Fprintf(w, "Readiness check: /ready\n")
+		_, _ = fmt.Fprintf(w, "Config diagnostic: /config\n")
 		if config.MetricsEnabled {
 			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
 		}

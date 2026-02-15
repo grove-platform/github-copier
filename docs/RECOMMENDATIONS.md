@@ -4,6 +4,20 @@ Improvement recommendations for the github-copier application, organized by cate
 
 Last updated: 2026-02-15
 
+## Progress Summary
+
+| Category      | Resolved | Remaining |
+|---------------|----------|-----------|
+| Bugs          | 3        | 0         |
+| Reliability   | 5        | 2         |
+| Security      | 3        | 0         |
+| Performance   | 3        | 0         |
+| Code Quality  | 2        | 1         |
+| Testing       | 3        | 1         |
+| Operational   | 2        | 2         |
+| Documentation | 3        | 0         |
+| **Total**     | **24**   | **5**     |
+
 ## Bugs / Correctness
 
 ### 1. ~~Mixed commit strategies for same target repo~~ (RESOLVED)
@@ -105,19 +119,23 @@ API rate limits and network timeouts are retryable; 404 (repo not found) and 403
 
 **Files:** `.env.test`, `.gitleaksignore`
 
-### 11. Tighten gosec exclusions
+### 11. ~~Tighten gosec exclusions~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-CI globally excludes `G703-G706` (taint analysis rules). These are broad. Consider using inline `#nosec G704` comments on specific lines instead, so new code gets checked by default.
+~~CI globally excludes `G703-G706` (taint analysis rules). These are broad.~~
 
-**Files:** `.github/workflows/ci.yml`, affected source files
+**Resolution:** Removed all global `gosec` exclusions (`G115`, `G703`-`G706`) from the CI workflow. G703-G706 no longer fire (code changes and gosec updates eliminated them). The single remaining G115 hit (safe `int -> int32` for PR numbers) is suppressed with an inline `#nosec G115` comment. All 16 existing suppressions are now inline with explanations.
 
-### 12. Add `toolchain` directive to `go.mod`
+**Files:** `.github/workflows/ci.yml`, `services/github_read.go`
 
-**Priority:** Low
+### 12. ~~Add `toolchain` directive to `go.mod`~~ (RESOLVED)
 
-The `go.mod` says `go 1.26.0` but nothing prevents contributors from building with an older toolchain. Add `toolchain go1.26.0` (Go 1.21+ feature) for deterministic builds.
+**Priority:** Low — **Status: Fixed**
+
+~~The `go.mod` says `go 1.26.0` but nothing prevents contributors from building with an older toolchain.~~
+
+**Resolution:** Added `toolchain go1.26.0` directive to `go.mod`. Contributors using Go 1.21+ will now automatically download and use the correct toolchain version, ensuring deterministic builds.
 
 **Files:** `go.mod`
 
@@ -171,13 +189,15 @@ The `go.mod` says `go 1.26.0` but nothing prevents contributors from building wi
 
 Everything lives in one package: auth, webhook handling, file processing, Slack, audit logging, config loading. Consider sub-packages like `services/github`, `services/config`, `services/notify` to reduce coupling and improve testability.
 
-### 18. Remove dead code paths
+### 18. ~~Remove dead code paths~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-The legacy `ConfigLoader` (non-main-config path) and `CONFIG_FILE` env var are still present but unused in any real deployment. Deprecation-log them now, remove in a future release.
+~~The legacy `ConfigLoader` (non-main-config path) and `CONFIG_FILE` env var are still present but unused in any real deployment. Deprecation-log them now, remove in a future release.~~
 
-**Files:** `configs/environment.go`, `services/config_loader.go`, `services/service_container.go`
+**Resolution:** Removed truly dead code from `config_loader.go`: `ValidateConfig`, `ConfigValidator`, `NewConfigValidator`, `ValidatePattern`, `TestPattern`, `TestTransform` (none were called anywhere). Removed unused `configLoader` field from `DefaultMainConfigLoader` in `main_config_loader.go`. Added deprecation warnings in `service_container.go` when the legacy single-file config path is used (`USE_MAIN_CONFIG=false`). Updated `cmd/config-validator/main.go` to call `PatternMatcher` and `PathTransformer` directly instead of through the removed `ConfigValidator` wrapper. The legacy `DefaultConfigLoader` and `CONFIG_FILE` env var are retained for backward compatibility but clearly marked as deprecated.
+
+**Files:** `services/config_loader.go`, `services/main_config_loader.go`, `services/service_container.go`, `cmd/config-validator/main.go`
 
 ## Testing
 
@@ -191,11 +211,16 @@ The legacy `ConfigLoader` (non-main-config path) and `CONFIG_FILE` env var are s
 
 **Files:** `services/integration_test.go`
 
-### 20. End-to-end webhook-to-commit test
+### 20. ~~End-to-end webhook-to-commit test~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-There's no integration test that sends a webhook payload and verifies the resulting GitHub API calls (create tree, create commit, create PR). This is the most critical path and is only tested implicitly.
+~~There's no integration test that sends a webhook payload and verifies the resulting GitHub API calls (create tree, create commit, create PR).~~
+
+**Resolution:** Multiple integration tests now cover this path:
+- `TestIntegration_MergedPR_DirectCommit` — full webhook-to-direct-commit pipeline (config load, GraphQL file list, source fetch, tree/commit/ref update).
+- `TestIntegration_TargetRepoBatching_MixedStrategies` — webhook-to-commit *and* webhook-to-PR, verifying batching and separate strategy handling.
+- `TestIntegration_MergedPR_NoMatchingWorkflows` and `TestIntegration_MergedPR_ConfigLoadError` — error/edge case flows.
 
 **Files:** `services/integration_test.go`
 
@@ -225,13 +250,15 @@ If a config has many workflows with complex regex patterns, `ProcessWorkflow()` 
 
 **Files:** `services/slack_notifier.go`, `services/webhook_handler_new.go`
 
-### 24. Add a `/config` diagnostic endpoint
+### 24. ~~Add a `/config` diagnostic endpoint~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-A read-only endpoint that shows the resolved effective config (all workflow configs resolved, defaults merged) without secrets. Useful for debugging "why didn't my workflow match?" without reading logs.
+~~A read-only endpoint that shows the resolved effective config (all workflow configs resolved, defaults merged) without secrets. Useful for debugging "why didn't my workflow match?" without reading logs.~~
 
-**Files:** `app.go`, `services/main_config_loader.go`
+**Resolution:** Added a `GET /config` endpoint that returns a JSON diagnostic view containing: (a) a sanitised environment summary with all secret fields redacted to `[SET]`/`[NOT SET]`, and (b) the resolved workflow list (name, source/dest repos and branches, commit strategy, transform count, excludes). On config load failure the response includes a `load_error` field while still returning the environment section. Tests cover both the error path and a mock-injected workflow summary.
+
+**Files:** `services/health_metrics.go`, `services/health_metrics_test.go`, `app.go`
 
 ### 25. Cloud Run `min-instances`
 
@@ -251,22 +278,32 @@ The processing phase logs which workflow matched each file, but the write phase 
 
 ## Documentation
 
-### 27. Add a CHANGELOG
+### 27. ~~Add a CHANGELOG~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-There's no record of what changed between deployments. A `CHANGELOG.md` or GitHub Releases workflow would help track changes across versions.
+~~There's no record of what changed between deployments.~~
 
-### 28. Config reference doc
+**Resolution:** Created `CHANGELOG.md` in the repository root following the [Keep a Changelog](https://keepachangelog.com/) format. Documents all Added, Changed, Fixed, and Security items from the current development cycle with cross-references to recommendation numbers.
 
-**Priority:** Medium
+**Files:** `CHANGELOG.md`
 
-There's no single-page reference of every config option with types, defaults, and examples. The info is scattered across ARCHITECTURE.md, FAQ.md, and inline comments. A dedicated `docs/CONFIG-REFERENCE.md` would save time for anyone writing a new workflow config.
+### 28. ~~Config reference doc~~ (RESOLVED)
 
-### 29. Local testing: webhook routing
+**Priority:** Medium — **Status: Fixed**
 
-**Priority:** Low
+~~There's no single-page reference of every config option with types, defaults, and examples.~~
 
-Document how to avoid the dual-delivery problem (local + Cloud Run both processing the same webhook). Recommend pointing the GitHub App webhook URL at smee during local testing, or using dry-run locally and letting Cloud Run handle real processing.
+**Resolution:** Created `docs/CONFIG-REFERENCE.md` with two major sections: (1) all environment variables organized by category with types, defaults, and descriptions; (2) complete workflow YAML schema covering main config, workflow config, transformations, commit strategy, defaults, and `$ref` support.
 
-**Files:** `docs/LOCAL-TESTING.md`, `docs/WEBHOOK-TESTING.md`
+**Files:** `docs/CONFIG-REFERENCE.md`
+
+### 29. ~~Local testing: webhook routing~~ (RESOLVED)
+
+**Priority:** Low — **Status: Fixed**
+
+~~Document how to avoid the dual-delivery problem (local + Cloud Run both processing the same webhook).~~
+
+**Resolution:** Added a "Webhook Routing: Avoiding Dual Delivery" section to `docs/LOCAL-TESTING.md` explaining why dual delivery happens and documenting four strategies: (1) swap the webhook URL, (2) local dry-run + Cloud Run live, (3) pause Cloud Run, (4) use a test-only source repository. Includes a quick decision guide table.
+
+**Files:** `docs/LOCAL-TESTING.md`
