@@ -40,6 +40,7 @@ var (
 // permanentSentinels lists sentinel errors that indicate a permanent failure.
 // These errors will not resolve by retrying the same operation.
 var permanentSentinels = []error{
+	ErrAuthentication,
 	ErrConfigLoad,
 	ErrConfigValidation,
 	ErrInstallationNotFound,

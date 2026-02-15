@@ -49,6 +49,7 @@ func TestIsPermanentError_PermanentSentinels(t *testing.T) {
 		err      error
 		sentinel error
 	}{
+		{"authentication", services.ErrAuthentication, services.ErrAuthentication},
 		{"config load", services.ErrConfigLoad, services.ErrConfigLoad},
 		{"config validation", services.ErrConfigValidation, services.ErrConfigValidation},
 		{"installation not found", services.ErrInstallationNotFound, services.ErrInstallationNotFound},
@@ -73,12 +74,11 @@ func TestIsPermanentError_PermanentSentinels(t *testing.T) {
 
 func TestIsPermanentError_NonPermanentSentinels(t *testing.T) {
 	// These sentinel errors are NOT classified as permanent — they may
-	// resolve on retry (e.g. auth can be refreshed, secrets re-fetched).
+	// resolve on retry (e.g. secrets re-fetched, content retried).
 	tests := []struct {
 		name string
 		err  error
 	}{
-		{"authentication", services.ErrAuthentication},
 		{"secret access", services.ErrSecretAccess},
 		{"content nil", services.ErrContentNil},
 	}
