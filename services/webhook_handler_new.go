@@ -241,20 +241,20 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		go func() {
 			defer container.wg.Done()
 			defer cancel()
-			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, deliveryID, config, container)
 		}()
 	} else {
 		container.wg.Add(1)
 		go func() {
 			defer container.wg.Done()
-			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, deliveryID, config, container)
 		}()
 	}
 }
 
 // processWebhookWithRetry wraps handleMergedPRWithContainer with panic recovery
 // and exponential-backoff retries for transient failures (#7).
-func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) {
+func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, deliveryID string, config *configs.Config, container *ServiceContainer) {
 	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
 	maxAttempts := config.WebhookMaxRetries + 1 // retries + initial attempt
 	delay := time.Duration(config.WebhookRetryInitialDelay) * time.Second
@@ -302,6 +302,7 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 	LogCritical("webhook processing failed after all retries",
 		"pr_number", prNumber,
 		"repo", webhookRepo,
+		"delivery_id", deliveryID,
 		"attempts", maxAttempts,
 		"error", lastErr,
 	)
@@ -311,6 +312,8 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 		Error:      fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr),
 		PRNumber:   prNumber,
 		SourceRepo: webhookRepo,
+		DeliveryID: deliveryID,
+		Attempts:   maxAttempts,
 	}); notifyErr != nil {
 		LogWarning("failed to send Slack error notification", "error", notifyErr)
 	}

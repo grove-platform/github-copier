@@ -145,6 +145,14 @@ func TestIntegration_MergedPR_DirectCommit(t *testing.T) {
 			"object": map[string]any{"sha": "base-sha-000"},
 		}),
 	)
+	// Mock GET commit for empty-commit detection
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/commits/base-sha-000$`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  "base-sha-000",
+			"tree": map[string]any{"sha": "old-tree-sha"},
+		}),
+	)
 	httpmock.RegisterRegexpResponder("POST",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/trees`),
 		httpmock.NewJsonResponderOrPanic(201, map[string]any{"sha": "new-tree-sha"}),
@@ -385,6 +393,208 @@ func TestIntegration_WebhookSignatureVerification(t *testing.T) {
 			t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 		}
 	})
+}
+
+// --- Integration test: target repo batching with mixed strategies ---
+
+func TestIntegration_TargetRepoBatching_MixedStrategies(t *testing.T) {
+	// Verifies that two workflows targeting the same repo but with different
+	// commit strategies (direct vs pull_request) produce separate write operations.
+	// Also verifies that two workflows with the same strategy are batched together.
+
+	owner := "test-org"
+	sourceRepo := "source-repo"
+	targetRepo := "target-repo"
+	branch := "main"
+	prNumber := 55
+
+	httpmock.Activate()
+	t.Cleanup(httpmock.DeactivateAndReset)
+
+	tm := NewTokenManager()
+	tm.SetInstallationAccessToken("test-token")
+	tm.SetTokenForOrgNoExpiry(owner, "test-token")
+	prev := defaultTokenManager
+	defaultTokenManager = tm
+	t.Cleanup(func() { defaultTokenManager = prev })
+
+	// GraphQL: return two changed files
+	httpmock.RegisterResponder("POST", "https://api.github.com/graphql",
+		func(req *http.Request) (*http.Response, error) {
+			return httpmock.NewJsonResponse(200, map[string]any{
+				"data": map[string]any{
+					"repository": map[string]any{
+						"pullRequest": map[string]any{
+							"files": map[string]any{
+								"edges": []map[string]any{
+									{"node": map[string]any{"path": "docs/guide.md", "additions": 5, "deletions": 0, "changeType": "MODIFIED"}},
+									{"node": map[string]any{"path": "examples/demo.go", "additions": 10, "deletions": 3, "changeType": "MODIFIED"}},
+								},
+								"pageInfo": map[string]any{"hasNextPage": false, "endCursor": ""},
+							},
+						},
+					},
+				},
+			})
+		},
+	)
+
+	// Source file content mocks
+	for _, path := range []string{"docs/guide.md", "examples/demo.go"} {
+		p := path
+		httpmock.RegisterRegexpResponder("GET",
+			regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+sourceRepo+`/contents/`+regexp.QuoteMeta(p)),
+			httpmock.NewJsonResponderOrPanic(200, map[string]any{
+				"type": "file", "name": p, "path": p, "encoding": "base64",
+				"content": base64.StdEncoding.EncodeToString([]byte("content of " + p)),
+			}),
+		)
+	}
+
+	// Target repo write endpoints (direct commit)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/ref/heads/`+branch+`$`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref": "refs/heads/" + branch, "object": map[string]any{"sha": "base-sha"},
+		}),
+	)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/commits/base-sha$`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha": "base-sha", "tree": map[string]any{"sha": "old-tree-sha"},
+		}),
+	)
+	directTreesURL := regexp.MustCompile(`^https://api\.github\.com/repos/` + owner + `/` + targetRepo + `/git/trees`)
+	httpmock.RegisterRegexpResponder("POST", directTreesURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"sha": "new-tree-sha"}),
+	)
+	directCommitsURL := "https://api.github.com/repos/" + owner + "/" + targetRepo + "/git/commits"
+	httpmock.RegisterResponder("POST", directCommitsURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"sha": "new-commit-sha"}),
+	)
+	httpmock.RegisterRegexpResponder("PATCH",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/refs/heads/`+branch),
+		httpmock.NewStringResponder(200, `{}`),
+	)
+
+	// Target repo PR endpoints (for pull_request strategy)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/pulls\?`),
+		httpmock.NewJsonResponderOrPanic(200, []map[string]any{}), // no existing PRs
+	)
+	httpmock.RegisterRegexpResponder("POST",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/refs$`),
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"ref": "refs/heads/copier/test", "object": map[string]any{"sha": "base-sha"}}),
+	)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/ref/(?:refs/)?heads/copier/`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref": "refs/heads/copier/test", "object": map[string]any{"sha": "base-sha"},
+		}),
+	)
+	httpmock.RegisterRegexpResponder("DELETE",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/refs/heads/copier/`),
+		httpmock.NewStringResponder(204, ""),
+	)
+	httpmock.RegisterRegexpResponder("PATCH",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+targetRepo+`/git/refs/heads/copier/`),
+		httpmock.NewStringResponder(200, `{}`),
+	)
+	prCreateURL := "https://api.github.com/repos/" + owner + "/" + targetRepo + "/pulls"
+	httpmock.RegisterResponder("POST", prCreateURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"number": 99, "html_url": "https://github.com/" + owner + "/" + targetRepo + "/pull/99"}),
+	)
+
+	// Deprecation file mock (404 = no existing file)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/config-repo/contents/`),
+		httpmock.NewStringResponder(404, `{"message":"Not Found"}`),
+	)
+
+	// Config: 3 workflows — two direct (should batch), one PR (separate operation)
+	mockConfig := &types.YAMLConfig{
+		Workflows: []types.Workflow{
+			{
+				Name:        "wf-direct-docs",
+				Source:      types.Source{Repo: owner + "/" + sourceRepo, Branch: branch},
+				Destination: types.Destination{Repo: owner + "/" + targetRepo, Branch: branch},
+				Transformations: []types.Transformation{
+					{Copy: &types.CopyTransform{From: "docs/guide.md", To: "docs/guide.md"}},
+				},
+				CommitStrategy: &types.CommitStrategyConfig{Type: "direct", CommitMessage: "sync docs"},
+			},
+			{
+				Name:        "wf-direct-examples",
+				Source:      types.Source{Repo: owner + "/" + sourceRepo, Branch: branch},
+				Destination: types.Destination{Repo: owner + "/" + targetRepo, Branch: branch},
+				Transformations: []types.Transformation{
+					{Copy: &types.CopyTransform{From: "examples/demo.go", To: "examples/demo.go"}},
+				},
+				CommitStrategy: &types.CommitStrategyConfig{Type: "direct", CommitMessage: "sync examples"},
+			},
+			{
+				Name:        "wf-pr-docs",
+				Source:      types.Source{Repo: owner + "/" + sourceRepo, Branch: branch},
+				Destination: types.Destination{Repo: owner + "/" + targetRepo, Branch: branch},
+				Transformations: []types.Transformation{
+					{Copy: &types.CopyTransform{From: "docs/guide.md", To: "pr-docs/guide.md"}},
+				},
+				CommitStrategy: &types.CommitStrategyConfig{
+					Type:          "pull_request",
+					CommitMessage: "sync via PR",
+					PRTitle:       "Copier: sync docs",
+				},
+			},
+		},
+	}
+
+	config := configs.NewConfig()
+	config.ConfigRepoOwner = owner
+	config.ConfigRepoName = "config-repo"
+	config.ConfigRepoBranch = "main"
+	config.AuditEnabled = false
+	config.DefaultCommitMessage = "chore: sync"
+
+	container, err := NewServiceContainer(config)
+	if err != nil {
+		t.Fatalf("NewServiceContainer: %v", err)
+	}
+	container.ConfigLoader = &mockConfigLoader{config: mockConfig}
+
+	req, _ := buildMergedPRWebhook(t, owner, sourceRepo, branch, prNumber, "")
+	w := httptest.NewRecorder()
+	HandleWebhookWithContainer(w, req, config, container)
+	container.Wait()
+
+	if w.Code != http.StatusAccepted {
+		t.Errorf("status = %d, want %d", w.Code, http.StatusAccepted)
+	}
+
+	info := httpmock.GetCallCountInfo()
+
+	// Count PATCH to main branch ref (only direct commits update this)
+	directRefUpdateKey := "PATCH =~^https://api\\.github\\.com/repos/" + owner + "/" + targetRepo + "/git/refs/heads/" + branch
+	prCreateCalls := info["POST "+prCreateURL]
+
+	// Find the direct ref update count from the call info map
+	directRefUpdates := 0
+	for k, v := range info {
+		if k == directRefUpdateKey {
+			directRefUpdates = v
+		}
+	}
+
+	t.Logf("Direct ref updates: %d, PR create calls: %d", directRefUpdates, prCreateCalls)
+
+	// Direct commit: the two direct-strategy workflows should batch into 1 ref update
+	if directRefUpdates != 1 {
+		t.Errorf("expected 1 direct ref update (batched), got %d", directRefUpdates)
+	}
+
+	// PR: separate operation should create 1 PR
+	if prCreateCalls != 1 {
+		t.Errorf("expected 1 PR created (separate strategy), got %d", prCreateCalls)
+	}
 }
 
 // --- Unit tests for extracted helper functions ---
