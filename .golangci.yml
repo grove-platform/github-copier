@@ -1,0 +1,54 @@
+# golangci-lint v2 configuration
+# Matches CI (golangci-lint v2.9.0) and local pre-commit.
+# Docs: https://golangci-lint.run/usage/configuration/
+version: "2"
+
+linters:
+  default: none
+  enable:
+    # Bug detection (default set)
+    - errcheck        # unchecked errors
+    - govet           # suspicious constructs
+    - ineffassign     # unused assignments
+    - staticcheck     # advanced static analysis (includes gosimple)
+    - unused          # unused code
+
+    # Style & quality
+    - misspell        # common typos in comments/strings
+    - revive          # extensible linter (replaces golint)
+
+  settings:
+    errcheck:
+      # Ignore intentionally discarded errors in defer cleanup.
+      # All such cases use the _ = expr pattern for explicitness.
+      exclude-functions:
+        - (io.Closer).Close
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true   # too noisy for internal-only code
+
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1029"   # context.WithValue key type — acceptable for request-scoped data
+        - "-ST1000"   # package comments — not enforced for this project
+        - "-ST1003"   # naming conventions — existing codebase uses mixed styles
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  # Don't limit the number of reported issues per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+  exclude-rules:
+    # Test files: allow dot-imports and unused parameters.
+    - path: _test\.go
+      linters:
+        - revive
+      text: "dot-imports|unused-parameter"

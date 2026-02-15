@@ -95,13 +95,15 @@ API rate limits and network timeouts are retryable; 404 (repo not found) and 403
 
 ## Security
 
-### 10. Rotate the test PEM key in `.env.test`
+### 10. ~~Rotate the test PEM key in `.env.test`~~ (RESOLVED)
 
-**Priority:** High
+**Priority:** High — **Status: Fixed**
 
-`.env.test` contains a real (expired) base64-encoded private key. Replace it with a purpose-generated test-only key that was never associated with a real GitHub App. Even expired keys in repos are a red flag for auditors.
+~~`.env.test` contains a real (expired) base64-encoded private key.~~
 
-**Files:** `.env.test`
+**Resolution:** Replaced the old key with a purpose-generated 2048-bit RSA test-only key that was never associated with any GitHub App. Added the fingerprint to `.gitleaksignore` and a comment clarifying its test-only nature.
+
+**Files:** `.env.test`, `.gitleaksignore`
 
 ### 11. Tighten gosec exclusions
 
@@ -153,11 +155,15 @@ The `go.mod` says `go 1.26.0` but nothing prevents contributors from building wi
 
 ## Code Quality
 
-### 16. Add a `.golangci.yml` config file
+### 16. ~~Add a `.golangci.yml` config file~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-No linter config file exists; all settings are implicit defaults. A config file would pin enabled linters, set severity levels, configure per-linter options, and document why certain checks are disabled. Keeps CI and local `pre-commit` behavior consistent.
+~~No linter config file exists; all settings are implicit defaults.~~
+
+**Resolution:** Created `.golangci.yml` (v2 format) pinning enabled linters (`errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`, `misspell`, `revive`), formatters (`gofmt`, `goimports`), and documenting suppressed staticcheck rules (`ST1000`, `ST1003`, `SA1029`). CI and local pre-commit now share the same config.
+
+**Files:** `.golangci.yml`
 
 ### 17. Split the `services/` package
 
@@ -175,13 +181,15 @@ The legacy `ConfigLoader` (non-main-config path) and `CONFIG_FILE` env var are s
 
 ## Testing
 
-### 19. Integration test for target repo batching
+### 19. ~~Integration test for target repo batching~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-Add a test that verifies correct behavior when multiple workflows target the same repo: file combination, strategy selection, and commit message sourcing.
+~~Add a test that verifies correct behavior when multiple workflows target the same repo.~~
 
-**Files:** `services/github_write_to_target_test.go`
+**Resolution:** Added `TestIntegration_TargetRepoBatching_MixedStrategies` which sends a webhook that triggers 3 workflows (2 direct + 1 PR) targeting the same repo. Verifies that the 2 direct workflows batch into 1 commit and the PR workflow produces a separate PR. Also updated the existing direct-commit integration test with the `MockGetCommit` mock for empty-commit detection.
+
+**Files:** `services/integration_test.go`
 
 ### 20. End-to-end webhook-to-commit test
 
@@ -207,11 +215,13 @@ If a config has many workflows with complex regex patterns, `ProcessWorkflow()` 
 
 ## Operational
 
-### 23. Structured error alerting
+### 23. ~~Structured error alerting~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-Slack notifications exist but aren't connected to processing failures. Add a Slack alert when a webhook fails to process (after retries), including the delivery ID and error context.
+~~Slack notifications exist but aren't connected to processing failures.~~
+
+**Resolution:** `ErrorEvent` now includes `DeliveryID` and `Attempts` fields. `NotifyError` renders them as Slack message fields. `processWebhookWithRetry` threads the GitHub delivery ID through to the final Slack alert, providing full traceability from webhook receipt to failure notification.
 
 **Files:** `services/slack_notifier.go`, `services/webhook_handler_new.go`
 

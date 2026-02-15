@@ -45,6 +45,8 @@ type ErrorEvent struct {
 	Error          error
 	PRNumber       int
 	SourceRepo     string
+	DeliveryID     string // GitHub webhook delivery ID for tracing
+	Attempts       int    // number of processing attempts (0 = not set)
 	AdditionalInfo map[string]interface{}
 }
 
@@ -152,6 +154,14 @@ func (sn *DefaultSlackNotifier) NotifyError(ctx context.Context, event *ErrorEve
 
 	if event.PRNumber > 0 {
 		fields = append(fields, SlackField{Title: "PR Number", Value: fmt.Sprintf("#%d", event.PRNumber), Short: true})
+	}
+
+	if event.DeliveryID != "" {
+		fields = append(fields, SlackField{Title: "Delivery ID", Value: event.DeliveryID, Short: true})
+	}
+
+	if event.Attempts > 0 {
+		fields = append(fields, SlackField{Title: "Attempts", Value: fmt.Sprintf("%d", event.Attempts), Short: true})
 	}
 
 	message := &SlackMessage{
