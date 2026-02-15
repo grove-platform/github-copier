@@ -9,14 +9,14 @@ Last updated: 2026-02-15
 | Category      | Resolved | Remaining |
 |---------------|----------|-----------|
 | Bugs          | 3        | 0         |
-| Reliability   | 5        | 2         |
+| Reliability   | 6        | 1         |
 | Security      | 3        | 0         |
 | Performance   | 3        | 0         |
 | Code Quality  | 2        | 1         |
 | Testing       | 3        | 1         |
 | Operational   | 2        | 2         |
 | Documentation | 3        | 0         |
-| **Total**     | **24**   | **5**     |
+| **Total**     | **25**   | **4**     |
 
 ## Bugs / Correctness
 
@@ -89,13 +89,15 @@ The in-memory `DeliveryTracker` prevents duplicate processing within a single in
 
 **Files:** `services/webhook_handler_new.go`, `configs/environment.go`
 
-### 8. Distinguish transient vs permanent errors
+### 8. ~~Distinguish transient vs permanent errors~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-API rate limits and network timeouts are retryable; 404 (repo not found) and 403 (no permission) are not. The retry logic in `rate_limit.go` handles rate limits, but other transient failures in the write path aren't retried.
+~~API rate limits and network timeouts are retryable; 404 (repo not found) and 403 (no permission) are not. The retry logic in `rate_limit.go` handles rate limits, but other transient failures in the write path aren't retried.~~
 
-**Files:** `services/rate_limit.go`, `services/github_write_to_target.go`
+**Resolution:** Added `IsPermanentError()` classifier in `errors.go` that detects non-retryable failures by checking: (a) sentinel errors (`ErrConfigLoad`, `ErrConfigValidation`, `ErrInstallationNotFound`, `ErrMergeConflict`) via `errors.Is()`, and (b) GitHub API `ErrorResponse` status codes (403, 404, 409, 410, 422) via `errors.As()`. The `processWebhookWithRetry` loop now calls `IsPermanentError()` after each failed attempt and breaks immediately for permanent errors, avoiding wasted retries. Slack alerts distinguish `webhook_processing_permanent_error` from `webhook_processing_exhausted`. Comprehensive tests cover all sentinel types, HTTP status codes, wrapped errors, and edge cases.
+
+**Files:** `services/errors.go`, `services/errors_test.go`, `services/webhook_handler_new.go`
 
 ### 9. ~~Background processing timeout~~ (RESOLVED)
 
