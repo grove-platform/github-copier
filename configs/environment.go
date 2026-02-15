@@ -57,6 +57,9 @@ type Config struct {
 	// PR merge polling configuration
 	PRMergePollMaxAttempts int
 	PRMergePollInterval    int // in milliseconds
+
+	// Config cache TTL in seconds (0 = disabled)
+	ConfigCacheTTLSeconds int
 }
 
 const (
@@ -99,6 +102,7 @@ const (
 	GitHubAPIInitialRetryDelay = "GITHUB_API_INITIAL_RETRY_DELAY"
 	PRMergePollMaxAttempts     = "PR_MERGE_POLL_MAX_ATTEMPTS"
 	PRMergePollInterval        = "PR_MERGE_POLL_INTERVAL"
+	ConfigCacheTTLSeconds      = "CONFIG_CACHE_TTL_SECONDS"
 )
 
 // NewConfig returns a new Config instance with default values
@@ -122,6 +126,7 @@ func NewConfig() *Config {
 		GitHubAPIInitialRetryDelay: 500,                                  // default initial retry delay in milliseconds (exponential backoff)
 		PRMergePollMaxAttempts:     20,                                   // default max attempts to poll PR for mergeability (~10 seconds with 500ms interval)
 		PRMergePollInterval:        500,                                  // default polling interval in milliseconds
+		ConfigCacheTTLSeconds:      300,                                  // default 5 minutes; set to 0 to disable caching
 	}
 }
 
@@ -202,6 +207,9 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	// PR merge polling configuration
 	config.PRMergePollMaxAttempts = getIntEnvWithDefault(PRMergePollMaxAttempts, config.PRMergePollMaxAttempts)
 	config.PRMergePollInterval = getIntEnvWithDefault(PRMergePollInterval, config.PRMergePollInterval)
+
+	// Config cache
+	config.ConfigCacheTTLSeconds = getIntEnvWithDefault(ConfigCacheTTLSeconds, config.ConfigCacheTTLSeconds)
 
 	if err := validateConfig(config); err != nil {
 		return nil, err
