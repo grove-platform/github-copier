@@ -188,7 +188,7 @@ func LogInfo(message string, args ...any) {
 
 // LogWarning writes a warning-level log.
 func LogWarning(message string, args ...any) {
-	slog.Warn(message, args...)
+	slog.Warn(message, args...) // #nosec G706 -- structured logging; args are key-value pairs, not user input
 	logToGCP(slog.LevelWarn, message, args...)
 }
 

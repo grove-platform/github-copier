@@ -144,7 +144,7 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- URL is hardcoded to api.github.com
 	if err != nil {
 		return nil, err
 	}
@@ -170,7 +170,7 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	filesReq.Header.Set("Authorization", "Bearer "+token)
 	filesReq.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	filesResp, err := client.Do(filesReq)
+	filesResp, err := client.Do(filesReq) // #nosec G704 -- URL is hardcoded to api.github.com
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +279,7 @@ func sendWebhook(url string, payload []byte, secret string) error {
 	}
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- URL is user-provided target for local webhook testing
 	if err != nil {
 		return err
 	}

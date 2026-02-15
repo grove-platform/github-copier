@@ -46,7 +46,9 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
 
-  exclude-rules:
+# In golangci-lint v2, exclude-rules moved from issues to top-level exclusions.
+exclusions:
+  rules:
     # Test files: allow dot-imports and unused parameters.
     - path: _test\.go
       linters:
