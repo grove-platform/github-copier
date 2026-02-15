@@ -272,7 +272,7 @@ func (sn *DefaultSlackNotifier) sendMessage(ctx context.Context, message *SlackM
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := sn.httpClient.Do(req)
+	resp, err := sn.httpClient.Do(req) // #nosec G704 -- URL is the Slack webhook URL from trusted config
 	if err != nil {
 		return fmt.Errorf("failed to send slack message: %w", err)
 	}

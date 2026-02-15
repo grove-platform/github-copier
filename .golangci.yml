@@ -36,6 +36,15 @@ linters:
         - "-ST1000"   # package comments — not enforced for this project
         - "-ST1003"   # naming conventions — existing codebase uses mixed styles
 
+  # In golangci-lint v2, exclusion rules live under linters.exclusions (not issues).
+  exclusions:
+    rules:
+      # Test files: allow dot-imports and unused parameters.
+      - path: _test\.go
+        linters:
+          - revive
+        text: "dot-imports|unused-parameter"
+
 formatters:
   enable:
     - gofmt
@@ -45,12 +54,3 @@ issues:
   # Don't limit the number of reported issues per linter.
   max-issues-per-linter: 0
   max-same-issues: 0
-
-# In golangci-lint v2, exclude-rules moved from issues to top-level exclusions.
-exclusions:
-  rules:
-    # Test files: allow dot-imports and unused parameters.
-    - path: _test\.go
-      linters:
-        - revive
-      text: "dot-imports|unused-parameter"
