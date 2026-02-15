@@ -276,8 +276,18 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 			break
 		}
 
+		// Don't retry permanent errors — they won't resolve by retrying (#8)
+		if IsPermanentError(lastErr) {
+			LogErrorCtx(ctx, "webhook processing failed with permanent error, skipping retry", lastErr, map[string]interface{}{
+				"pr_number": prNumber,
+				"repo":      webhookRepo,
+				"attempt":   attempt,
+			})
+			break
+		}
+
 		if attempt < maxAttempts {
-			LogWarningCtx(ctx, "webhook processing failed, retrying", map[string]interface{}{
+			LogWarningCtx(ctx, "webhook processing failed (transient), retrying", map[string]interface{}{
 				"pr_number":    prNumber,
 				"repo":         webhookRepo,
 				"attempt":      attempt,
@@ -298,18 +308,23 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 		}
 	}
 
-	// All attempts exhausted — alert via Slack
-	LogCritical("webhook processing failed after all retries",
+	// Processing failed — alert via Slack
+	operation := "webhook_processing_exhausted"
+	if IsPermanentError(lastErr) {
+		operation = "webhook_processing_permanent_error"
+	}
+	LogCritical("webhook processing failed",
 		"pr_number", prNumber,
 		"repo", webhookRepo,
 		"delivery_id", deliveryID,
 		"attempts", maxAttempts,
+		"permanent", IsPermanentError(lastErr),
 		"error", lastErr,
 	)
 	container.MetricsCollector.RecordWebhookFailed()
 	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
-		Operation:  "webhook_processing_exhausted",
-		Error:      fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr),
+		Operation:  operation,
+		Error:      fmt.Errorf("failed after %d attempt(s): %w", maxAttempts, lastErr),
 		PRNumber:   prNumber,
 		SourceRepo: webhookRepo,
 		DeliveryID: deliveryID,
