@@ -185,14 +185,72 @@ func createPullRequest(ctx context.Context, client *github.Client, defaultOwner,
 	return created, nil
 }
 
+// findExistingCopierPR searches for an open PR whose head branch starts with "copier/"
+// targeting the given base branch. Returns nil if none found.
+func findExistingCopierPR(ctx context.Context, client *github.Client, owner, repoName, baseBranch string) *github.PullRequest {
+	prs, _, err := client.PullRequests.List(ctx, owner, repoName, &github.PullRequestListOptions{
+		State: "open",
+		Base:  baseBranch,
+		ListOptions: github.ListOptions{
+			PerPage: 50,
+		},
+	})
+	if err != nil {
+		LogWarning("Failed to list PRs for dedup check; will create new PR", "repo", owner+"/"+repoName, "error", err)
+		return nil
+	}
+	for _, pr := range prs {
+		if strings.HasPrefix(pr.GetHead().GetRef(), "copier/") {
+			return pr
+		}
+	}
+	return nil
+}
+
 // addFilesViaPR creates a temporary branch, commits files to it using the provided commitMessage,
 // opens a pull request with prTitle and prBody, and optionally merges it automatically.
+// If an existing open PR from a copier/* branch is found, the files are pushed to that
+// branch and the PR is updated instead of creating a duplicate.
 func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
 	files []github.RepositoryContent, commitMessage string, prTitle string, prBody string, mergeWithoutReview bool,
 ) error {
 	defaultOwner := config.ConfigRepoOwner
-	tempBranch := "copier/" + time.Now().UTC().Format("20060102-150405")
 	baseBranch := strings.TrimPrefix(key.BranchPath, "refs/heads/")
+	owner, repoName := parseRepoPath(key.RepoName, defaultOwner)
+
+	// 0. Check for an existing open copier PR targeting this base branch.
+	existingPR := findExistingCopierPR(ctx, client, owner, repoName, baseBranch)
+	if existingPR != nil {
+		existingBranch := existingPR.GetHead().GetRef()
+		LogInfo("Found existing open copier PR; updating instead of creating new",
+			"pr_number", existingPR.GetNumber(),
+			"branch", existingBranch,
+			"repo", key.RepoName,
+		)
+
+		// Push new files to the existing branch
+		if err := commitFilesToBranch(ctx, config, client, key, files, existingBranch, commitMessage); err != nil {
+			return fmt.Errorf("commit to existing copier branch %s: %w", existingBranch, err)
+		}
+
+		// Update the PR title/body to reflect the latest content
+		_, _, err := client.PullRequests.Edit(ctx, owner, repoName, existingPR.GetNumber(), &github.PullRequest{
+			Title: github.Ptr(prTitle),
+			Body:  github.Ptr(prBody),
+		})
+		if err != nil {
+			LogWarning("Failed to update existing PR title/body", "pr_number", existingPR.GetNumber(), "error", err)
+		}
+
+		if mergeWithoutReview {
+			return autoMergePR(ctx, config, client, key.RepoName, defaultOwner, existingPR.GetNumber(), existingBranch)
+		}
+		LogInfo("Existing PR updated and awaiting review", "pr_number", existingPR.GetNumber())
+		return nil
+	}
+
+	// No existing PR — create a new temp branch and PR.
+	tempBranch := "copier/" + time.Now().UTC().Format("20060102-150405")
 
 	// 1. Create branch off the target
 	if _, err := createBranch(ctx, client, defaultOwner, key.RepoName, tempBranch, baseBranch); err != nil {
