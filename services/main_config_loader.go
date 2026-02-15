@@ -183,7 +183,44 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowReferences(ctx context.Contex
 		"total_workflows": len(mergedConfig.Workflows),
 	})
 
+	// Warn when multiple workflows target the same repo/branch with different strategies.
+	warnConflictingStrategies(ctx, mergedConfig.Workflows)
+
 	return mergedConfig, nil
+}
+
+// warnConflictingStrategies logs a warning when workflows share a destination
+// repo and branch but use different commit strategies (e.g., "direct" vs "pull_request").
+// This is informational — the app handles this correctly by creating separate
+// operations per strategy — but it may surprise operators who expect a single PR.
+func warnConflictingStrategies(ctx context.Context, workflows []types.Workflow) {
+	// Group workflow names by (repo, branch, strategy)
+	type destKey struct{ repo, branch string }
+	strategies := make(map[destKey]map[string][]string) // destKey -> strategy -> []workflowName
+
+	for _, wf := range workflows {
+		if wf.Destination.Repo == "" {
+			continue
+		}
+		dk := destKey{repo: wf.Destination.Repo, branch: wf.Destination.Branch}
+		if dk.branch == "" {
+			dk.branch = "main"
+		}
+		strategy := getCommitStrategyType(wf)
+		if strategies[dk] == nil {
+			strategies[dk] = make(map[string][]string)
+		}
+		strategies[dk][strategy] = append(strategies[dk][strategy], wf.Name)
+	}
+
+	for dk, stratMap := range strategies {
+		if len(stratMap) > 1 {
+			LogWarningCtx(ctx, "workflows targeting the same repo use different commit strategies; files will be written separately per strategy", map[string]interface{}{
+				"destination": dk.repo + ":" + dk.branch,
+				"strategies":  stratMap,
+			})
+		}
+	}
 }
 
 // loadWorkflowConfig loads a workflow config based on the reference type

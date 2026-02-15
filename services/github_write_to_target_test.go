@@ -454,6 +454,84 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	require.Equal(t, 0, test.CountByMethodAndURLRegexp("PUT", regexp.MustCompile(`/pulls/5/merge$`)))
 }
 
+// TestAddFilesToTargetRepos_MixedStrategies_ProducesSeparateOperations verifies
+// that two UploadKey entries for the same repo/branch but with different commit
+// strategies (direct vs pull_request) produce independent write operations.
+func TestAddFilesToTargetRepos_MixedStrategies_ProducesSeparateOperations(t *testing.T) {
+	_ = test.WithHTTPMock(t)
+
+	owner, repo := test.EnvOwnerRepo(t)
+	baseBranch := "main"
+
+	// Configure token / permissions
+	cfg := test.TestConfig()
+	services.DefaultTokenManager().SetInstallationAccessToken("")
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
+	require.NoError(t, err, "ConfigurePermissions should succeed")
+	test.SetupOrgToken(owner, "test-token")
+
+	// --- Mock direct-commit endpoints ---
+	baseRefURL, directCommitsURL, updateRefURL := test.MockGitHubWriteEndpoints(owner, repo, baseBranch)
+
+	// --- Mock PR-strategy endpoints ---
+	createRefURL := test.MockCreateRef(owner, repo)
+	tempHead := `copier/\d{8}-\d{6}`
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+tempHead+`$`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref": "refs/heads/copier/20250101-000000", "object": map[string]any{"sha": "baseSha"},
+		}),
+	)
+	httpmock.RegisterRegexpResponder("PATCH",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/refs/heads/`+tempHead+`$`),
+		httpmock.NewStringResponder(200, "{}"),
+	)
+	test.MockPullsAndMerge(owner, repo, 99)
+	test.MockDeleteTempRef(owner, repo)
+
+	// --- Build two batches for the SAME repo/branch but different strategies ---
+	directFiles := []github.RepositoryContent{{
+		Name:    github.Ptr("direct-file.txt"),
+		Path:    github.Ptr("direct-file.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("direct content"))),
+	}}
+	prFiles := []github.RepositoryContent{{
+		Name:    github.Ptr("pr-file.txt"),
+		Path:    github.Ptr("pr-file.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("pr content"))),
+	}}
+
+	filesToUpload := map[types.UploadKey]types.UploadFileContent{
+		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: "direct"}: {
+			TargetBranch:   baseBranch,
+			Content:        directFiles,
+			CommitStrategy: "direct",
+		},
+		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: "pull_request"}: {
+			TargetBranch:   baseBranch,
+			Content:        prFiles,
+			CommitStrategy: "pr",
+			AutoMergePR:    true,
+		},
+	}
+
+	services.AddFilesToTargetRepos(context.Background(), cfg, filesToUpload, nil, nil)
+
+	info := httpmock.GetCallCountInfo()
+
+	// Direct-commit path should fire: GET base ref, POST commit, PATCH update ref
+	require.GreaterOrEqual(t, info["GET "+baseRefURL], 1, "direct path: GET base ref")
+	require.GreaterOrEqual(t, info["POST "+directCommitsURL], 1, "direct path: POST commit")
+	require.GreaterOrEqual(t, info["PATCH "+updateRefURL], 1, "direct path: PATCH update ref")
+
+	// PR path should fire: POST create ref (temp branch) + POST pulls
+	require.GreaterOrEqual(t, info["POST "+createRefURL], 1, "PR path: POST create temp branch ref")
+	require.GreaterOrEqual(t, 1, test.CountByMethodAndURLRegexp("POST",
+		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls$`),
+	), "PR path: POST create PR")
+}
+
 func TestDeleteBranchIfExists_NilReference(t *testing.T) {
 	_ = test.WithHTTPMock(t)
 

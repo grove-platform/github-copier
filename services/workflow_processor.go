@@ -341,10 +341,12 @@ func (wp *workflowProcessor) addToUploadQueue(
 	// Update file name to target path
 	fileContent.Name = github.Ptr(targetPath)
 
-	// Create upload key
+	// Create upload key — includes CommitStrategy so that workflows with
+	// different strategies targeting the same repo produce separate operations.
 	key := types.UploadKey{
-		RepoName:   workflow.Destination.Repo,
-		BranchPath: workflow.Destination.Branch,
+		RepoName:       workflow.Destination.Repo,
+		BranchPath:     workflow.Destination.Branch,
+		CommitStrategy: getCommitStrategyType(workflow),
 	}
 
 	// Get existing entries from FileStateService
