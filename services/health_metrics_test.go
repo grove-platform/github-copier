@@ -140,7 +140,7 @@ func TestMetricsCollector_QueueSizes(t *testing.T) {
 func TestHealthHandler(t *testing.T) {
 	startTime := time.Now().Add(-1 * time.Hour)
 
-	handler := services.HealthHandler(startTime)
+	handler := services.HealthHandler(startTime, "v0.0.0-test")
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -377,7 +377,7 @@ func TestConfigDiagnosticHandler_EnvironmentFields(t *testing.T) {
 	container, err := services.NewServiceContainer(config)
 	require.NoError(t, err)
 
-	handler := services.ConfigDiagnosticHandler(container)
+	handler := services.ConfigDiagnosticHandler(container, "v1.2.3-test")
 
 	req := httptest.NewRequest("GET", "/config", nil)
 	w := httptest.NewRecorder()
@@ -390,6 +390,9 @@ func TestConfigDiagnosticHandler_EnvironmentFields(t *testing.T) {
 	var resp services.ConfigDiagnosticResponse
 	err = json.Unmarshal(w.Body.Bytes(), &resp)
 	require.NoError(t, err)
+
+	// Verify version
+	assert.Equal(t, "v1.2.3-test", resp.Version)
 
 	// Verify environment fields
 	env := resp.Environment
@@ -456,7 +459,7 @@ func TestConfigDiagnosticHandler_WorkflowSummary(t *testing.T) {
 		},
 	}
 
-	handler := services.ConfigDiagnosticHandler(container)
+	handler := services.ConfigDiagnosticHandler(container, "v0.0.0-test")
 
 	req := httptest.NewRequest("GET", "/config", nil)
 	w := httptest.NewRecorder()

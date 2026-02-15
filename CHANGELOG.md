@@ -27,6 +27,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Webhook idempotency** — In-memory `DeliveryTracker` prevents duplicate processing of the same `X-GitHub-Delivery` header within a single instance.
 - **Rate limiting** — GitHub API retry logic with exponential backoff.
 - **CLI tools** — `config-validator`, `test-webhook`, and `test-pem` utilities under `cmd/`.
+- **`/config` diagnostic endpoint** — Read-only endpoint showing resolved runtime config (secrets redacted) and workflow summary. (#24)
+- **Transient vs permanent error classification** — `IsPermanentError()` detects non-retryable failures (404, 403, config validation, etc.); retry loop skips retries immediately for permanent errors. (#8)
+- **Version stamping** — Binary version set via `-ldflags` at build time; exposed on `/health`, `/config`, startup banner, and `-version` flag.
+- **Release script** — `scripts/release.sh` automates CHANGELOG update, git tagging, push, and GitHub Release creation.
 
 ### Changed
 
@@ -35,20 +39,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **go-github** — Upgraded to v82; replaced deprecated `github.String`/`Int`/`Bool` with `github.Ptr`.
 - **Logging** — Migrated to `log/slog` with structured JSON output.
 - **Pre-commit hooks** — `golangci-lint` hook uses `language: system` with `--fix`; requires local v2.9.0 install.
-- **App banner** — Now displays `EffectiveConfigFile()` instead of the legacy `ConfigFile` default.
+- **App banner** — Now displays version and `EffectiveConfigFile()` instead of the legacy `ConfigFile` default.
+- **CI deploy trigger** — Deployment now triggers on version tag pushes (`v*`) instead of every push to `main`. Tags stamp the version into the Cloud Run revision.
+- **Legacy config deprecation** — `DefaultConfigLoader` (single-file config) is marked deprecated with runtime warnings; dead code (`ConfigValidator`, unused struct fields) removed. (#18)
 
 ### Fixed
 
 - **CI lint/security failures** — Resolved `golangci-lint` Go version incompatibility, `gosec` taint analysis false positives (G703–G706), and all `errcheck`/`staticcheck`/`unused` issues.
 - **gitleaks false positive** — Added `.gitleaksignore` entries for example and test-only PEM keys.
+- **Tightened gosec exclusions** — Removed all global `gosec` exclusions from CI; sole remaining false positive suppressed with inline `#nosec G115`. (#11)
 
 ### Security
 
 - **Rotated test PEM key** — `.env.test` now contains a purpose-generated test-only RSA key never associated with any real GitHub App. (#10)
+- **Go toolchain directive** — Added `toolchain go1.26.0` to `go.mod` for deterministic builds. (#12)
 
-All notable changes to this project will be documented in this file.
-
-## 17 Dec 2025
+## [0.1.0] - 2025-12-17
 
 ### Added
 - CI/CD pipeline with GitHub Actions (`.github/workflows/ci.yml`)
@@ -84,7 +90,7 @@ All notable changes to this project will be documented in this file.
 - Added gitleaks pre-commit hook for secrets detection
 - Added gosec security scanning in CI pipeline
 
-## Initial Release (Migration from mongodb/code-example-tooling)
+## [0.0.1] - Initial Release (Migration from mongodb/code-example-tooling)
 
 ### Features
 - Webhook service for automated file copying on PR merge

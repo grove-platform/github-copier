@@ -346,10 +346,11 @@ func calculateStats(durations []time.Duration) ProcessingTimeStats {
 // HealthHandler handles /health (liveness) endpoint.
 // Returns 200 if the process is running. This is a lightweight check
 // suitable for Cloud Run / Kubernetes liveness probes.
-func HealthHandler(startTime time.Time) http.HandlerFunc {
+func HealthHandler(startTime time.Time, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		health := map[string]interface{}{
 			"status":  "healthy",
+			"version": version,
 			"started": true,
 			"uptime":  time.Since(startTime).String(),
 		}
@@ -449,6 +450,9 @@ func MetricsHandler(metricsCollector *MetricsCollector, fileStateService FileSta
 
 // ConfigDiagnosticResponse is the JSON structure returned by the /config endpoint.
 type ConfigDiagnosticResponse struct {
+	// Version is the build version (set via -ldflags at build time).
+	Version string `json:"version"`
+
 	// Environment summarizes non-secret runtime configuration.
 	Environment ConfigEnvironment `json:"environment"`
 
@@ -505,9 +509,10 @@ type ConfigDiagnosticWorkflow struct {
 // ConfigDiagnosticHandler handles the GET /config endpoint.
 // It returns a read-only view of the resolved runtime configuration with
 // all secrets redacted, useful for debugging workflow-matching issues.
-func ConfigDiagnosticHandler(container *ServiceContainer) http.HandlerFunc {
+func ConfigDiagnosticHandler(container *ServiceContainer, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		resp := ConfigDiagnosticResponse{
+			Version:     version,
 			Environment: buildConfigEnvironment(container.Config),
 		}
 
