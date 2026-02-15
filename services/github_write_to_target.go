@@ -280,6 +280,7 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 }
 
 // commitFilesToBranch decodes file contents and creates a tree + commit on the temp branch.
+// If the resulting tree is identical to the branch's current tree, the commit is skipped.
 func commitFilesToBranch(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
 	files []github.RepositoryContent, tempBranch string, commitMessage string,
 ) error {
@@ -293,11 +294,21 @@ func commitFilesToBranch(ctx context.Context, config *configs.Config, client *gi
 	}
 
 	tempKey := types.UploadKey{RepoName: key.RepoName, BranchPath: "refs/heads/" + tempBranch}
-	treeSHA, baseSHA, err := createCommitTree(ctx, config, client, tempKey, entries)
+	tr, err := createCommitTree(ctx, config, client, tempKey, entries)
 	if err != nil {
 		return fmt.Errorf("create tree on temp branch: %w", err)
 	}
-	if err = createCommit(ctx, client, config.ConfigRepoOwner, tempKey, baseSHA, treeSHA, commitMessage); err != nil {
+
+	if tr.TreeSHA == tr.BaseTreeSHA {
+		LogInfo("Skipping empty commit on temp branch — tree unchanged",
+			"repo", key.RepoName,
+			"branch", tempBranch,
+			"tree_sha", tr.TreeSHA,
+		)
+		return nil
+	}
+
+	if err = createCommit(ctx, client, config.ConfigRepoOwner, tempKey, tr.BaseSHA, tr.TreeSHA, commitMessage); err != nil {
 		return fmt.Errorf("create commit on temp branch: %w", err)
 	}
 	return nil
@@ -339,7 +350,9 @@ func pollMergeability(ctx context.Context, client *github.Client, owner string, 
 	return
 }
 
-// addFilesToBranch builds a tree, creates a commit, and updates the ref (direct to target branch)
+// addFilesToBranch builds a tree, creates a commit, and updates the ref (direct to target branch).
+// If the resulting tree is identical to the current HEAD tree, the commit is skipped to avoid
+// empty commits (e.g., when a duplicate webhook creates changes already at HEAD).
 func addFilesToBranch(ctx context.Context, config *configs.Config, client *github.Client, key types.UploadKey,
 	files []github.RepositoryContent, message string) error {
 
@@ -352,12 +365,22 @@ func addFilesToBranch(ctx context.Context, config *configs.Config, client *githu
 		entries[f.GetName()] = content
 	}
 
-	treeSHA, baseSHA, err := createCommitTree(ctx, config, client, key, entries)
+	tr, err := createCommitTree(ctx, config, client, key, entries)
 	if err != nil {
 		LogCritical("Error creating commit tree", "error", err)
 		return err
 	}
-	if err := createCommit(ctx, client, config.ConfigRepoOwner, key, baseSHA, treeSHA, message); err != nil {
+
+	if tr.TreeSHA == tr.BaseTreeSHA {
+		LogInfo("Skipping empty commit — new tree is identical to HEAD tree",
+			"repo", key.RepoName,
+			"branch", key.BranchPath,
+			"tree_sha", tr.TreeSHA,
+		)
+		return nil
+	}
+
+	if err := createCommit(ctx, client, config.ConfigRepoOwner, key, tr.BaseSHA, tr.TreeSHA, message); err != nil {
 		LogCritical("Error creating commit", "error", err)
 		return err
 	}
@@ -404,9 +427,16 @@ func createBranch(ctx context.Context, client *github.Client, defaultOwner, repo
 	return newBranchRef, nil
 }
 
+// treeResult holds the output of createCommitTree so callers can detect no-op trees.
+type treeResult struct {
+	TreeSHA     string // SHA of the newly created tree
+	BaseSHA     string // SHA of the base commit (parent for the new commit)
+	BaseTreeSHA string // SHA of the base commit's tree — if equal to TreeSHA, nothing changed
+}
+
 // createCommitTree looks up the branch ref once, then builds a tree on top of that base commit.
 func createCommitTree(ctx context.Context, config *configs.Config, client *github.Client, targetBranch types.UploadKey,
-	files map[string]string) (treeSHA string, baseSHA string, err error) {
+	files map[string]string) (treeResult, error) {
 
 	defaultOwner := config.ConfigRepoOwner
 	// Normalize repo name for consistent logging
@@ -417,6 +447,7 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 	// 1) Get current ref with retry logic to handle GitHub API eventual consistency
 	// When a branch is just created, it may take a moment to be visible
 	var ref *github.Reference
+	var err error
 
 	maxRetries := config.GitHubAPIMaxRetries
 	retryDelay := time.Duration(config.GitHubAPIInitialRetryDelay) * time.Millisecond
@@ -442,9 +473,16 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 			err = fmt.Errorf("targetRef is nil after %d attempts", maxRetries)
 		}
 		LogCritical("Failed to get ref after max attempts", "repo", normalizedRepo, "attempts", maxRetries, "error", err)
-		return "", "", err
+		return treeResult{}, err
 	}
-	baseSHA = ref.GetObject().GetSHA()
+	baseSHA := ref.GetObject().GetSHA()
+
+	// 1b) Fetch the base commit to get its tree SHA (for no-op detection)
+	baseCommit, _, err := client.Git.GetCommit(ctx, owner, repoName, baseSHA)
+	if err != nil {
+		return treeResult{}, fmt.Errorf("failed to get base commit %s: %w", baseSHA, err)
+	}
+	baseTreeSHA := baseCommit.GetTree().GetSHA()
 
 	// 2) Build tree entries
 	var treeEntries []*github.TreeEntry
@@ -460,9 +498,13 @@ func createCommitTree(ctx context.Context, config *configs.Config, client *githu
 	// 3) Create tree on top of baseSHA
 	tree, _, err := client.Git.CreateTree(ctx, owner, repoName, baseSHA, treeEntries)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create tree: %w", err)
+		return treeResult{}, fmt.Errorf("failed to create tree: %w", err)
 	}
-	return tree.GetSHA(), baseSHA, nil
+	return treeResult{
+		TreeSHA:     tree.GetSHA(),
+		BaseSHA:     baseSHA,
+		BaseTreeSHA: baseTreeSHA,
+	}, nil
 }
 
 // createCommit makes the commit using the provided baseSHA, and updates the branch ref to the new commit.
