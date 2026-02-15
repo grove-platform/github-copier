@@ -174,6 +174,18 @@ func MockCreateRef(owner, repo string) string {
 	return url
 }
 
+// MockListOpenPRs mocks the "list open PRs" endpoint, returning the supplied PRs.
+// Pass nil or empty to simulate no existing open PRs.
+func MockListOpenPRs(owner, repo string, prs []map[string]any) {
+	if prs == nil {
+		prs = []map[string]any{}
+	}
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls\?`),
+		httpmock.NewJsonResponderOrPanic(200, prs),
+	)
+}
+
 // MockPullsAndMerge mocks creating and merging a PR.
 func MockPullsAndMerge(owner, repo string, number int) {
 	httpmock.RegisterResponder("POST",

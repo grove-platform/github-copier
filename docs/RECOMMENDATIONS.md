@@ -27,15 +27,13 @@ When two instances process the same webhook (e.g., local + Cloud Run), the secon
 
 **Files:** `services/github_write_to_target.go`
 
-### 3. PR title/body "last wins" is opaque
+### 3. ~~PR title/body "last wins" is opaque~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-When multiple workflows batch into one PR, the commit message, PR title, and body come from whichever workflow ran last. There's no logging indicating which workflow's metadata was used.
+~~When multiple workflows batch into one PR, the commit message, PR title, and body come from whichever workflow ran last. There's no logging indicating which workflow's metadata was used.~~
 
-**Fix:** Log which workflow's strategy was selected during the write phase.
-
-**Files:** `services/github_write_to_target.go`
+**Resolution:** `workflow_processor.go` now logs when a subsequent workflow overwrites a batched commit message or PR title, including the previous and new values and the workflow name responsible.
 
 ## Reliability
 
@@ -47,13 +45,13 @@ The in-memory `DeliveryTracker` prevents duplicate processing within a single in
 
 **Files:** `services/delivery_tracker.go`
 
-### 5. PR deduplication in target repos
+### 5. ~~PR deduplication in target repos~~ (RESOLVED)
 
-**Priority:** Low
+**Priority:** Low — **Status: Fixed**
 
-If the app processes two source PRs in quick succession, it can create duplicate open PRs in the target repo. Before creating a new PR, check for an existing open PR from a `copier/*` branch and update it instead.
+~~If the app processes two source PRs in quick succession, it can create duplicate open PRs in the target repo.~~
 
-**Files:** `services/github_write_to_target.go`
+**Resolution:** `addFilesViaPR` now calls `findExistingCopierPR` before creating a new branch. If an open PR from a `copier/*` branch targeting the same base branch exists, the app pushes new commits to that branch and updates the PR title/body instead of creating a duplicate.
 
 ### 6. Graceful partial failure
 

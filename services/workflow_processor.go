@@ -374,6 +374,10 @@ func (wp *workflowProcessor) addToUploadQueue(
 	msgCtx.CommitSHA = sourceCommitSHA
 	msgCtx.FileCount = len(content.Content)
 
+	// Track previous metadata so we can log when a later workflow overwrites it.
+	prevCommitMsg := content.CommitMessage
+	prevPRTitle := content.PRTitle
+
 	// Render commit message
 	if workflow.CommitStrategy != nil && workflow.CommitStrategy.CommitMessage != "" {
 		content.CommitMessage = wp.messageTemplater.RenderCommitMessage(workflow.CommitStrategy.CommitMessage, msgCtx)
@@ -391,6 +395,24 @@ func (wp *workflowProcessor) addToUploadQueue(
 	// Render PR body
 	if workflow.CommitStrategy != nil && workflow.CommitStrategy.PRBody != "" {
 		content.PRBody = wp.messageTemplater.RenderPRBody(workflow.CommitStrategy.PRBody, msgCtx)
+	}
+
+	// Log when a subsequent workflow in the same batch overwrites PR metadata.
+	if exists && prevCommitMsg != "" && prevCommitMsg != content.CommitMessage {
+		LogInfo("Workflow overwrites batched commit message (last wins)",
+			"workflow", workflow.Name,
+			"target", workflow.Destination.Repo,
+			"prev_commit_message", prevCommitMsg,
+			"new_commit_message", content.CommitMessage,
+		)
+	}
+	if exists && prevPRTitle != "" && prevPRTitle != content.PRTitle {
+		LogInfo("Workflow overwrites batched PR title (last wins)",
+			"workflow", workflow.Name,
+			"target", workflow.Destination.Repo,
+			"prev_pr_title", prevPRTitle,
+			"new_pr_title", content.PRTitle,
+		)
 	}
 
 	// Add back to FileStateService

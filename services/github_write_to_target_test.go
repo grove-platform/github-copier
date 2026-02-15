@@ -115,6 +115,9 @@ func TestAddFilesToTargetRepos_ViaPR_Succeeds(t *testing.T) {
 
 	test.SetupOrgToken(owner, "test-token")
 
+	// No existing open PRs
+	test.MockListOpenPRs(owner, repo, nil)
+
 	// Base ref used to create temp branch
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+baseBranch+`$`),
@@ -263,6 +266,7 @@ func TestAddFiles_ViaPR_MergeConflict_Dirty_NotMerged(t *testing.T) {
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
+	test.MockListOpenPRs(owner, repo, nil)
 
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+baseBranch+`$`),
@@ -395,6 +399,7 @@ func TestPriority_PRTitleDefaultsToCommitMessage_And_NoAutoMergeWhenConfigPresen
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 
 	test.SetupOrgToken(owner, "test-token")
+	test.MockListOpenPRs(owner, repo, nil)
 
 	httpmock.RegisterRegexpResponder("GET",
 		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+baseBranch+`$`),
@@ -470,6 +475,7 @@ func TestAddFilesToTargetRepos_MixedStrategies_ProducesSeparateOperations(t *tes
 	err := services.ConfigurePermissions(context.Background(), cfg)
 	require.NoError(t, err, "ConfigurePermissions should succeed")
 	test.SetupOrgToken(owner, "test-token")
+	test.MockListOpenPRs(owner, repo, nil)
 
 	// --- Mock direct-commit endpoints ---
 	baseRefURL, directCommitsURL, updateRefURL := test.MockGitHubWriteEndpoints(owner, repo, baseBranch)
@@ -530,6 +536,89 @@ func TestAddFilesToTargetRepos_MixedStrategies_ProducesSeparateOperations(t *tes
 	require.GreaterOrEqual(t, 1, test.CountByMethodAndURLRegexp("POST",
 		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls$`),
 	), "PR path: POST create PR")
+}
+
+// TestAddFilesViaPR_ReusesExistingCopierPR verifies that when an open PR from a
+// copier/* branch already exists, the app pushes to that branch and updates the PR
+// title/body instead of creating a duplicate PR.
+func TestAddFilesViaPR_ReusesExistingCopierPR(t *testing.T) {
+	_ = test.WithHTTPMock(t)
+	t.Setenv("COPIER_COMMIT_STRATEGY", "pr")
+
+	owner, repo := test.EnvOwnerRepo(t)
+	baseBranch := "main"
+	existingBranch := "copier/20260101-120000"
+
+	cfg := test.TestConfig()
+	services.DefaultTokenManager().SetInstallationAccessToken("")
+	test.MockGitHubAppTokenEndpoint(cfg.InstallationId)
+	err := services.ConfigurePermissions(context.Background(), cfg)
+	require.NoError(t, err, "ConfigurePermissions should succeed")
+
+	test.SetupOrgToken(owner, "test-token")
+
+	// Return an existing open PR from a copier/* branch
+	test.MockListOpenPRs(owner, repo, []map[string]any{
+		{
+			"number": 77,
+			"head":   map[string]any{"ref": existingBranch},
+			"base":   map[string]any{"ref": baseBranch},
+		},
+	})
+
+	// Mock the existing copier branch ref (for commit push)
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/ref/(?:refs/)?heads/`+regexp.QuoteMeta(existingBranch)+`$`),
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref": "refs/heads/" + existingBranch, "object": map[string]any{"sha": "existingSha"},
+		}),
+	)
+	httpmock.RegisterRegexpResponder("POST",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/trees(\?.*)?$`),
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"sha": "newTreeSha"}),
+	)
+	commitsURL := "https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"
+	httpmock.RegisterResponder("POST", commitsURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{"sha": "newCommitSha"}),
+	)
+	httpmock.RegisterRegexpResponder("PATCH",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+repo+`/git/refs/heads/`+regexp.QuoteMeta(existingBranch)+`$`),
+		httpmock.NewStringResponder(200, "{}"),
+	)
+	// Mock PR Edit (title/body update)
+	editPRURL := "https://api.github.com/repos/" + owner + "/" + repo + "/pulls/77"
+	httpmock.RegisterResponder("PATCH", editPRURL,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{"number": 77}),
+	)
+
+	files := []github.RepositoryContent{{
+		Name:    github.Ptr("updated-file.txt"),
+		Path:    github.Ptr("updated-file.txt"),
+		Content: github.Ptr(base64.StdEncoding.EncodeToString([]byte("new content"))),
+	}}
+	filesToUpload := map[types.UploadKey]types.UploadFileContent{
+		{RepoName: repo, BranchPath: "refs/heads/" + baseBranch, CommitStrategy: "pull_request"}: {
+			TargetBranch:   baseBranch,
+			Content:        files,
+			CommitStrategy: "pr",
+		},
+	}
+
+	services.AddFilesToTargetRepos(context.Background(), cfg, filesToUpload, nil, nil)
+
+	info := httpmock.GetCallCountInfo()
+
+	// Should NOT create a new branch or new PR
+	require.Equal(t, 0, test.CountByMethodAndURLRegexp("POST",
+		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/git/refs$`),
+	), "should not create a new branch ref")
+	require.Equal(t, 0, test.CountByMethodAndURLRegexp("POST",
+		regexp.MustCompile(`/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls$`),
+	), "should not create a new PR")
+
+	// Should commit to the existing branch and update the PR
+	require.Equal(t, 1, info["POST "+commitsURL], "should commit to existing branch")
+	require.Equal(t, 1, info["PATCH "+editPRURL], "should update PR title/body")
 }
 
 func TestDeleteBranchIfExists_NilReference(t *testing.T) {
