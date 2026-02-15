@@ -44,7 +44,7 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	// Initialize file state service
 	fileStateService := NewFileStateService()
 
-	// Initialize config loader based on configuration
+	// Initialize config loader based on configuration, wrapped with an optional TTL cache
 	var configLoader ConfigLoader
 	if config.UseMainConfig && config.MainConfigFile != "" {
 		// Use main config loader for new format with workflow references (when USE_MAIN_CONFIG=true)
@@ -53,6 +53,7 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		// Use default config loader for singular config file (when USE_MAIN_CONFIG=false)
 		configLoader = NewConfigLoader()
 	}
+	configLoader = NewCachedConfigLoader(configLoader, time.Duration(config.ConfigCacheTTLSeconds)*time.Second)
 
 	patternMatcher := NewPatternMatcher()
 	pathTransformer := NewPathTransformer()
