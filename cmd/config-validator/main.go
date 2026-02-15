@@ -141,12 +141,17 @@ func testPattern(patternType, pattern, filePath string) {
 		os.Exit(1)
 	}
 
-	validator := services.NewConfigValidator()
-	result, err := validator.TestPattern(pt, pattern, filePath)
-	if err != nil {
+	sp := types.SourcePattern{
+		Type:    pt,
+		Pattern: pattern,
+	}
+	if err := sp.Validate(); err != nil {
 		fmt.Printf("❌ Pattern validation error: %v\n", err)
 		os.Exit(1)
 	}
+
+	matcher := services.NewPatternMatcher()
+	result := matcher.Match(filePath, sp)
 
 	if result.Matched {
 		fmt.Println("✅ Pattern matched!")
@@ -174,8 +179,8 @@ func testTransform(source, template, varsStr string) {
 		}
 	}
 
-	validator := services.NewConfigValidator()
-	result, err := validator.TestTransform(source, template, variables)
+	transformer := services.NewPathTransformer()
+	result, err := transformer.Transform(source, template, variables)
 	if err != nil {
 		fmt.Printf("❌ Transform error: %v\n", err)
 		os.Exit(1)

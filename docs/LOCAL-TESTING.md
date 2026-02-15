@@ -456,6 +456,92 @@ export GITHUB_TOKEN=ghp_...
 # 9. Stop app (Ctrl+C in Terminal 1)
 ```
 
+## Webhook Routing: Avoiding Dual Delivery
+
+When testing locally with a **smee.io** proxy while a **Cloud Run** instance is also running, the same GitHub webhook can be processed by both instances simultaneously. This causes duplicate commits, duplicate PRs, or empty commits in target repositories.
+
+### Why It Happens
+
+The GitHub App's webhook URL is a global setting. When set to the Cloud Run URL (`https://...run.app/events`), only Cloud Run receives webhooks. When set to a smee.io channel, your local app receives them — but if you forget to switch back, Cloud Run stops receiving them. If you use smee as a *forwarding proxy* while Cloud Run is also pointed at the same webhook URL, both receive the event.
+
+The in-memory `DeliveryTracker` prevents duplicate processing within a single instance, but it cannot deduplicate across separate processes.
+
+### Recommended Strategies
+
+#### Strategy 1: Swap the webhook URL (simplest)
+
+Point the GitHub App webhook URL at your smee channel during local testing, then switch it back to Cloud Run when done.
+
+```
+# Local testing:
+GitHub App → Webhook URL: https://smee.io/your-channel
+
+# Production:
+GitHub App → Webhook URL: https://your-service.run.app/events
+```
+
+**Pros:** Zero risk of dual delivery.
+**Cons:** Requires manual toggling in GitHub App settings; Cloud Run receives nothing while you test.
+
+#### Strategy 2: Local dry-run + Cloud Run live (safest)
+
+Keep the webhook URL pointed at Cloud Run. Run your local app in **dry-run mode** with a smee proxy. The local app processes the webhook but makes no commits or PRs, so duplicate delivery is harmless.
+
+```bash
+# configs/.env
+DRY_RUN=true
+```
+
+```
+GitHub App → Webhook URL: https://your-service.run.app/events
+smee.io → forwards a copy to localhost:8080/events
+```
+
+**Pros:** Cloud Run continues operating normally; local testing is safe.
+**Cons:** You can't test actual commit/PR creation locally.
+
+#### Strategy 3: Pause Cloud Run during local testing
+
+Set Cloud Run to 0 instances while testing locally, then restore it.
+
+```bash
+# Pause Cloud Run
+gcloud run services update examples-copier \
+  --max-instances=0 --region=us-central1
+
+# Resume after testing
+gcloud run services update examples-copier \
+  --max-instances=10 --region=us-central1
+```
+
+**Pros:** Full live testing locally without dual delivery.
+**Cons:** Webhooks received by Cloud Run during the pause window are lost (GitHub retries a few times, but may give up).
+
+#### Strategy 4: Use a test-only source repository
+
+Create a separate test source repo (e.g. `copier-app-source-test`) that is **not** in the production main config. Point your local `.env` at a test config that includes it:
+
+```bash
+# configs/.env
+CONFIG_REPO_OWNER=cbullinger
+CONFIG_REPO_NAME=copier-app-source-test
+MAIN_CONFIG_FILE=.copier/test-main.yaml
+```
+
+Webhooks from this test repo will only match workflows in your test config. The production Cloud Run instance uses a different config that doesn't include this repo, so even if it receives the webhook, no workflows match and no work is done.
+
+**Pros:** Full isolation; no risk to production workflows.
+**Cons:** Requires maintaining a separate test repo and config.
+
+### Quick Decision Guide
+
+| Scenario | Recommended Strategy |
+|----------|---------------------|
+| Quick config validation | Strategy 2 (dry-run) |
+| Testing actual commits/PRs | Strategy 1 (swap URL) or Strategy 4 (test repo) |
+| Extended local development session | Strategy 3 (pause Cloud Run) |
+| CI / automated testing | Strategy 4 (test repo) |
+
 ## Tips for Effective Local Testing
 
 1. **Always start with dry-run mode** - Never test with real commits locally

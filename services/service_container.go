@@ -50,7 +50,10 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		// Use main config loader for new format with workflow references (when USE_MAIN_CONFIG=true)
 		configLoader = NewMainConfigLoader()
 	} else {
-		// Use default config loader for singular config file (when USE_MAIN_CONFIG=false)
+		// Deprecated: the legacy single-file config path will be removed in a future release.
+		LogWarning("DEPRECATION: USE_MAIN_CONFIG is not set or MAIN_CONFIG_FILE is empty. "+
+			"The legacy single-file config path will be removed in a future release. "+
+			"Migrate to the main config format. Falling back to: %s", config.EffectiveConfigFile())
 		configLoader = NewConfigLoader()
 	}
 	configLoader = NewCachedConfigLoader(configLoader, time.Duration(config.ConfigCacheTTLSeconds)*time.Second)

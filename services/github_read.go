@@ -40,7 +40,7 @@ func GetFilesChangedInPr(ctx context.Context, config *configs.Config, owner stri
 		variables := map[string]interface{}{
 			"owner":  githubv4.String(owner),
 			"name":   githubv4.String(repo),
-			"number": githubv4.Int(pr_number),
+			"number": githubv4.Int(pr_number), // #nosec G115 -- PR numbers won't overflow int32
 			"cursor": cursor,
 		}
 

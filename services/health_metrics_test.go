@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -348,6 +349,158 @@ func TestMetricsCollector_SuccessRateCalculation(t *testing.T) {
 			assert.InDelta(t, tt.wantRate, metrics.Webhooks.SuccessRate, 0.1)
 		})
 	}
+}
+
+func TestConfigDiagnosticHandler_EnvironmentFields(t *testing.T) {
+	config := &configs.Config{
+		Port:                            "8080",
+		DryRun:                          true,
+		UseMainConfig:                   true,
+		MainConfigFile:                  ".copier/main.yaml",
+		ConfigFile:                      "copier-config.yaml",
+		ConfigRepoOwner:                 "test-owner",
+		ConfigRepoName:                  "test-repo",
+		ConfigRepoBranch:                "main",
+		WebserverPath:                   "/events",
+		AuditEnabled:                    false,
+		MetricsEnabled:                  true,
+		SlackEnabled:                    true,
+		SlackWebhookURL:                 "https://hooks.slack.com/test",
+		WebhookSecret:                   "s3cret",
+		MongoURI:                        "",
+		ConfigCacheTTLSeconds:           60,
+		WebhookProcessingTimeoutSeconds: 300,
+		WebhookMaxRetries:               3,
+		GitHubAPIMaxRetries:             5,
+	}
+
+	container, err := services.NewServiceContainer(config)
+	require.NoError(t, err)
+
+	handler := services.ConfigDiagnosticHandler(container)
+
+	req := httptest.NewRequest("GET", "/config", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var resp services.ConfigDiagnosticResponse
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	// Verify environment fields
+	env := resp.Environment
+	assert.Equal(t, "8080", env.Port)
+	assert.True(t, env.DryRun)
+	assert.True(t, env.UseMainConfig)
+	assert.Equal(t, ".copier/main.yaml", env.EffectiveConfig)
+	assert.Equal(t, "test-owner", env.ConfigRepoOwner)
+	assert.Equal(t, "test-repo", env.ConfigRepoName)
+	assert.Equal(t, "main", env.ConfigRepoBranch)
+	assert.Equal(t, "/events", env.WebserverPath)
+	assert.True(t, env.MetricsEnabled)
+	assert.True(t, env.SlackEnabled)
+	assert.False(t, env.AuditEnabled)
+	assert.Equal(t, 60, env.ConfigCacheTTLSeconds)
+	assert.Equal(t, 300, env.WebhookProcessingTimeoutSeconds)
+	assert.Equal(t, 3, env.WebhookMaxRetries)
+	assert.Equal(t, 5, env.GitHubAPIMaxRetries)
+
+	// Secrets should be redacted
+	assert.Equal(t, "[SET]", env.WebhookSecret)
+	assert.Equal(t, "[SET]", env.SlackWebhook)
+	assert.Equal(t, "[NOT SET]", env.MongoURI)
+
+	// Config loading will fail (no real GitHub client), but the endpoint still works
+	assert.NotEmpty(t, resp.LoadError)
+	assert.Nil(t, resp.Workflows)
+}
+
+func TestConfigDiagnosticHandler_WorkflowSummary(t *testing.T) {
+	// Test the workflow summary with a mock config loader that returns a valid config
+	config := &configs.Config{
+		ConfigRepoOwner: "test-owner",
+		ConfigRepoName:  "test-repo",
+	}
+
+	container, err := services.NewServiceContainer(config)
+	require.NoError(t, err)
+
+	// Replace the config loader with one that returns test workflows
+	container.ConfigLoader = &mockConfigLoaderForDiagnostic{
+		config: &types.YAMLConfig{
+			Workflows: []types.Workflow{
+				{
+					Name:        "copy-go-examples",
+					Source:      types.Source{Repo: "org/source", Branch: "main"},
+					Destination: types.Destination{Repo: "org/dest", Branch: "main"},
+					Transformations: []types.Transformation{
+						{Move: &types.MoveTransform{From: "examples", To: "code"}},
+					},
+					CommitStrategy: &types.CommitStrategyConfig{Type: "pull_request"},
+				},
+				{
+					Name:        "copy-js-examples",
+					Source:      types.Source{Repo: "org/source", Branch: "main"},
+					Destination: types.Destination{Repo: "org/dest-2", Branch: "develop"},
+					Transformations: []types.Transformation{
+						{Glob: &types.GlobTransform{Pattern: "**/*.js", Transform: "js/${relative_path}"}},
+						{Glob: &types.GlobTransform{Pattern: "**/*.ts", Transform: "ts/${relative_path}"}},
+					},
+					Exclude: []string{"node_modules"},
+				},
+			},
+		},
+	}
+
+	handler := services.ConfigDiagnosticHandler(container)
+
+	req := httptest.NewRequest("GET", "/config", nil)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp services.ConfigDiagnosticResponse
+	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	assert.Empty(t, resp.LoadError)
+	require.Len(t, resp.Workflows, 2)
+
+	wf1 := resp.Workflows[0]
+	assert.Equal(t, "copy-go-examples", wf1.Name)
+	assert.Equal(t, "org/source", wf1.SourceRepo)
+	assert.Equal(t, "main", wf1.SourceBranch)
+	assert.Equal(t, "org/dest", wf1.DestRepo)
+	assert.Equal(t, "main", wf1.DestBranch)
+	assert.Equal(t, "pull_request", wf1.CommitStrategy)
+	assert.Equal(t, 1, wf1.Transforms)
+
+	wf2 := resp.Workflows[1]
+	assert.Equal(t, "copy-js-examples", wf2.Name)
+	assert.Equal(t, "org/dest-2", wf2.DestRepo)
+	assert.Equal(t, "develop", wf2.DestBranch)
+	assert.Equal(t, "direct", wf2.CommitStrategy) // nil commit_strategy defaults to "direct"
+	assert.Equal(t, 2, wf2.Transforms)
+	assert.Equal(t, []string{"node_modules"}, wf2.Exclude)
+}
+
+// mockConfigLoaderForDiagnostic returns a static config for testing the diagnostic endpoint.
+type mockConfigLoaderForDiagnostic struct {
+	config *types.YAMLConfig
+}
+
+func (m *mockConfigLoaderForDiagnostic) LoadConfig(_ context.Context, _ *configs.Config) (*types.YAMLConfig, error) {
+	return m.config, nil
+}
+
+func (m *mockConfigLoaderForDiagnostic) LoadConfigFromContent(_ string, _ string) (*types.YAMLConfig, error) {
+	return m.config, nil
 }
 
 func TestMetricsCollector_ConcurrentAccess(t *testing.T) {

@@ -19,10 +19,13 @@ type ConfigLoader interface {
 	LoadConfigFromContent(content string, filename string) (*types.YAMLConfig, error)
 }
 
-// DefaultConfigLoader implements the ConfigLoader interface
+// DefaultConfigLoader implements the ConfigLoader interface for the legacy
+// single-file config format. Deprecated: migrate to the main config format
+// (USE_MAIN_CONFIG=true) and use DefaultMainConfigLoader instead.
 type DefaultConfigLoader struct{}
 
-// NewConfigLoader creates a new config loader
+// NewConfigLoader creates a new legacy config loader.
+// Deprecated: use NewMainConfigLoader instead.
 func NewConfigLoader() ConfigLoader {
 	return &DefaultConfigLoader{}
 }
@@ -110,49 +113,6 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 	}
 
 	return content, nil
-}
-
-// ValidateConfig validates a YAML configuration
-func ValidateConfig(config *types.YAMLConfig) error {
-	return config.Validate()
-}
-
-// ConfigValidator provides validation utilities
-type ConfigValidator struct{}
-
-// NewConfigValidator creates a new config validator
-func NewConfigValidator() *ConfigValidator {
-	return &ConfigValidator{}
-}
-
-// ValidatePattern validates a pattern and returns any errors
-func (cv *ConfigValidator) ValidatePattern(patternType types.PatternType, pattern string) error {
-	sp := types.SourcePattern{
-		Type:    patternType,
-		Pattern: pattern,
-	}
-	return sp.Validate()
-}
-
-// TestPattern tests a pattern against a file path
-func (cv *ConfigValidator) TestPattern(patternType types.PatternType, pattern string, filePath string) (types.MatchResult, error) {
-	sp := types.SourcePattern{
-		Type:    patternType,
-		Pattern: pattern,
-	}
-
-	if err := sp.Validate(); err != nil {
-		return types.NewMatchResult(false, nil), err
-	}
-
-	matcher := NewPatternMatcher()
-	return matcher.Match(filePath, sp), nil
-}
-
-// TestTransform tests a path transformation
-func (cv *ConfigValidator) TestTransform(sourcePath string, template string, variables map[string]string) (string, error) {
-	transformer := NewPathTransformer()
-	return transformer.Transform(sourcePath, template, variables)
 }
 
 // loadLocalConfigFile attempts to load config from a local file
