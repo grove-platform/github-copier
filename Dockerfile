@@ -1,6 +1,9 @@
 # Build stage
 FROM golang:1.26.0-alpine AS builder
 
+# Version is set at build time (e.g. docker build --build-arg VERSION=v1.0.0)
+ARG VERSION=dev
+
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates
 
@@ -15,8 +18,8 @@ COPY . .
 
 # Build the binary
 # CGO_ENABLED=0 for static binary (no C dependencies)
-# -ldflags="-w -s" strips debug info to reduce size
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o github-copier .
+# -ldflags: -w -s strips debug info; -X stamps version into the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -X main.version=${VERSION}" -o github-copier .
 
 # Runtime stage - pin to specific version for reproducible builds
 FROM alpine:3.21

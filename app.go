@@ -14,6 +14,13 @@ import (
 	"github.com/grove-platform/github-copier/services"
 )
 
+// version is set at build time via -ldflags:
+//
+//	go build -ldflags "-X main.version=v1.0.0"
+//
+// When not set (local dev builds), it defaults to "dev".
+var version = "dev"
+
 func main() {
 	// Parse command line flags
 	var envFile string
@@ -23,8 +30,14 @@ func main() {
 	flag.StringVar(&envFile, "env", "./configs/.env", "Path to environment file")
 	flag.BoolVar(&dryRun, "dry-run", false, "Enable dry-run mode (no actual changes)")
 	flag.BoolVar(&validateOnly, "validate", false, "Validate configuration and exit")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	help := flag.Bool("help", false, "Show help")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	if *help {
 		printHelp()
@@ -115,6 +128,7 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Println("╔════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  GitHub Code Example Copier                                    ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  Version:      %-48s║\n", version)
 	fmt.Printf("║  Port:         %-48s║\n", config.Port)
 	fmt.Printf("║  Webhook Path: %-48s║\n", config.WebserverPath)
 	fmt.Printf("║  Config File:  %-48s║\n", config.EffectiveConfigFile())
@@ -141,7 +155,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 	})
 
 	// Liveness probe — lightweight, always 200 if process is running
-	mux.HandleFunc("/health", services.HealthHandler(container.StartTime))
+	mux.HandleFunc("/health", services.HealthHandler(container.StartTime, version))
 
 	// Readiness probe — checks GitHub auth, MongoDB connectivity
 	mux.HandleFunc("/ready", services.ReadinessHandler(container))
@@ -152,7 +166,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 	}
 
 	// Config diagnostic endpoint — shows resolved config with secrets redacted
-	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container))
+	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container, version))
 
 	// Info endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +175,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = fmt.Fprintf(w, "GitHub Code Example Copier\n")
+		_, _ = fmt.Fprintf(w, "GitHub Code Example Copier %s\n", version)
 		_, _ = fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
 		_, _ = fmt.Fprintf(w, "Health check: /health\n")
 		_, _ = fmt.Fprintf(w, "Readiness check: /ready\n")
