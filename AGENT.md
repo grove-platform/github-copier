@@ -77,6 +77,13 @@ Per-request file state is managed via `FileStateService` in the `ServiceContaine
 
 Webhook idempotency is handled by `DeliveryTracker` (TTL-based, in-memory).
 
+## Target Repo Batching
+
+Multiple workflows targeting the **same destination repo** are batched into a single commit/PR.
+The last workflow's commit strategy, PR title/body, and auto-merge setting wins.
+To get separate PRs per workflow, use different destination repos or branches.
+See `docs/ARCHITECTURE.md` § "Target Repo Batching" for full details.
+
 ## Config Example
 
 ```yaml
