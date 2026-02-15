@@ -22,7 +22,7 @@ The GitHub copier is a GitHub app that automatically copies code examples and fi
 - Path transformations with variable substitution
 - Multiple target repositories
 - Flexible commit strategies (direct or PR)
-- **Batch PRs** - Combine multiple rules into one PR per target repo
+- **Target Repo Batching** - All workflows targeting the same repo are combined into one commit/PR
 - **PR Template Integration** - Fetch and merge PR templates from target repos
 - **File Exclusion** - Exclude patterns to filter out unwanted files
 - Deprecation tracking
@@ -67,6 +67,30 @@ workflows:
 ### Can one file match multiple workflows?
 
 Yes. A file can match multiple workflows and be copied to multiple targets. This is useful for copying the same file to different repositories or branches.
+
+### What happens when multiple workflows target the same repo?
+
+Files from all workflows that share the same destination repo are **batched into a single commit or PR**. The app does not create separate commits/PRs per workflow.
+
+**Key behaviors:**
+- All matched files are combined into one commit tree
+- The **last workflow's commit strategy wins** (PR title, body, commit message, auto-merge setting)
+- If one workflow uses `direct` and another uses `pull_request` for the same target, the last strategy wins — they are not separated
+
+**Example:** If workflow A (direct commit) and workflow B (PR with auto-merge) both target `org/docs`, the result is a single operation using workflow B's strategy — because it runs last.
+
+**To get separate PRs per workflow**, use different destination repos or branches:
+
+```yaml
+# These create separate PRs because the branches differ:
+- name: "go-examples"
+  destination: { repo: "org/docs", branch: "copier/go" }
+
+- name: "python-examples"
+  destination: { repo: "org/docs", branch: "copier/python" }
+```
+
+See [Architecture > Target Repo Batching](ARCHITECTURE.md#5-target-repo-batching) for details.
 
 ### Where should I store the config file?
 

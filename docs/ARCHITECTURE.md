@@ -481,11 +481,60 @@ if file.Status == "DELETED" {
 - Deprecation queue: `{repo}:{targetPath}`
 - Thread-safe operations with mutex locks
 
-#### 5. Batch Operations
-- All files for same target are batched together
-- Single commit per target repository
-- Single PR per target (if using PR strategy)
-- Deprecation file updated once with all entries
+#### 5. Target Repo Batching
+
+When a webhook is processed, matched files from **all workflows that share the same destination repo** are batched together into a single write operation. This is a deliberate design choice to avoid creating multiple commits or PRs in the same target repo from a single source PR.
+
+**How it works:**
+
+1. All workflows are processed in order; each matched file is queued by target repo
+2. After all workflows finish, files are grouped by destination repo
+3. One commit or PR is created per destination repo (not per workflow)
+
+**Implications:**
+
+| Scenario | Behavior |
+|----------|----------|
+| 2 workflows → same repo, both `direct` | One direct commit with all files |
+| 2 workflows → same repo, both `pull_request` | One PR with all files |
+| 1 `direct` + 1 `pull_request` → same repo | Files are combined; the **last workflow's strategy wins** |
+| 2 workflows → different repos | Separate commit/PR per repo (independent) |
+
+**What gets merged when workflows share a target:**
+
+- **Files**: All matched files from all workflows are combined into one commit tree
+- **Commit message**: Uses the last workflow's `commit_message`
+- **PR title/body**: Uses the last workflow's `pr_title` and `pr_body`
+- **Auto-merge**: Uses the last workflow's `auto_merge` setting
+- **PR template**: Fetched once if any workflow sets `use_pr_template: true`
+
+**Example:**
+
+```yaml
+# These two workflows target the same repo:
+workflows:
+  - name: "go-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Go examples"
+
+  - name: "python-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Python examples"
+```
+
+Result: **One PR** with files from both workflows. The PR title will be "Update Python examples" (last workflow wins).
+
+**Design rationale:**
+
+- Avoids multiple PRs or commits to the same branch from a single source event
+- Reduces noise in target repos (one PR per source PR, not one per workflow)
+- Simplifies review — all changes from a source PR are in one place
+
+**If you need separate commits/PRs per workflow**, use different destination repos or branches for each workflow.
 
 ## Configuration Examples
 
