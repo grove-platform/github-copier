@@ -33,9 +33,9 @@ Example:
 	pemPath := os.Args[1]
 	appID := os.Args[2]
 
-	pemData, err := os.ReadFile(pemPath) // #nosec G304 -- CLI tool, path from user arg
+	pemData, err := os.ReadFile(pemPath) // #nosec G304 G703 -- CLI tool, path from user arg
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Failed to read PEM file %q: %v\n", pemPath, err)
+		fmt.Fprintf(os.Stderr, "❌ Failed to read PEM file %q: %v\n", pemPath, err) // #nosec G705 -- CLI stderr, not web output
 		os.Exit(1)
 	}
 	fmt.Printf("✓ Read PEM file: %s (%d bytes)\n", pemPath, len(pemData))
@@ -64,7 +64,7 @@ Example:
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	fmt.Println("\nContacting GitHub API...")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) // #nosec G704 -- URL is hardcoded to api.github.com/app
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ API request failed: %v\n", err)
 		os.Exit(1)
@@ -81,7 +81,7 @@ Example:
 	if resp.StatusCode == http.StatusOK {
 		fmt.Printf("✅ Authentication successful!\n\nApp info:\n%s\n", body)
 	} else {
-		fmt.Fprintf(os.Stderr, "❌ Authentication failed (HTTP %d)\n%s\n", resp.StatusCode, body)
+		fmt.Fprintf(os.Stderr, "❌ Authentication failed (HTTP %d)\n%s\n", resp.StatusCode, body) // #nosec G705 -- CLI stderr, not web output
 		os.Exit(1)
 	}
 }

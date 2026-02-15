@@ -201,7 +201,7 @@ func getInstallationAccessToken(installationId, jwtTokenStr string, hc *http.Cli
 	if hc == nil {
 		hc = http.DefaultClient
 	}
-	resp, err := hc.Do(req)
+	resp, err := hc.Do(req) // #nosec G704 -- URL is hardcoded to api.github.com; installationId is from trusted config
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("execute request: %w", err)
 	}
@@ -323,7 +323,7 @@ func getInstallationIDForOrg(ctx context.Context, config *configs.Config, org st
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	hc := defaultTokenManager.GetHTTPClient()
-	resp, err := hc.Do(req)
+	resp, err := hc.Do(req) // #nosec G704 -- URL is hardcoded to api.github.com/app/installations
 	if err != nil {
 		return "", fmt.Errorf("request failed: %w", err)
 	}
