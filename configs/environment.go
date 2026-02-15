@@ -60,73 +60,86 @@ type Config struct {
 
 	// Config cache TTL in seconds (0 = disabled)
 	ConfigCacheTTLSeconds int
+
+	// Webhook background processing timeout in seconds (0 = no timeout)
+	WebhookProcessingTimeoutSeconds int
+
+	// Webhook retry configuration
+	WebhookMaxRetries        int // max retry attempts for failed webhook processing
+	WebhookRetryInitialDelay int // initial delay between retries in seconds (doubles each attempt)
 }
 
 const (
-	EnvFile                    = "ENV"
-	Port                       = "PORT"
-	ConfigRepoName             = "CONFIG_REPO_NAME"
-	ConfigRepoOwner            = "CONFIG_REPO_OWNER"
-	AppId                      = "GITHUB_APP_ID"
-	AppClientId                = "GITHUB_APP_CLIENT_ID"
-	InstallationId             = "INSTALLATION_ID"
-	CommitterName              = "COMMITTER_NAME"
-	CommitterEmail             = "COMMITTER_EMAIL"
-	ConfigFile                 = "CONFIG_FILE"
-	MainConfigFile             = "MAIN_CONFIG_FILE"
-	UseMainConfig              = "USE_MAIN_CONFIG"
-	DeprecationFile            = "DEPRECATION_FILE"
-	WebserverPath              = "WEBSERVER_PATH"
-	ConfigRepoBranch           = "CONFIG_REPO_BRANCH"
-	PEMKeyName                 = "PEM_NAME"            // #nosec G101 -- env var name, not a credential
-	WebhookSecretName          = "WEBHOOK_SECRET_NAME" // #nosec G101 -- env var name, not a credential
-	WebhookSecret              = "WEBHOOK_SECRET"      // #nosec G101 -- env var name, not a credential
-	CopierLogName              = "COPIER_LOG_NAME"
-	GoogleCloudProjectId       = "GOOGLE_CLOUD_PROJECT_ID"
-	DefaultRecursiveCopy       = "DEFAULT_RECURSIVE_COPY"
-	DefaultPRMerge             = "DEFAULT_PR_MERGE"
-	DefaultCommitMessage       = "DEFAULT_COMMIT_MESSAGE"
-	DryRun                     = "DRY_RUN"
-	AuditEnabled               = "AUDIT_ENABLED"
-	MongoURI                   = "MONGO_URI"
-	MongoURISecretName         = "MONGO_URI_SECRET_NAME" // #nosec G101 -- env var name, not a credential
-	AuditDatabase              = "AUDIT_DATABASE"
-	AuditCollection            = "AUDIT_COLLECTION"
-	MetricsEnabled             = "METRICS_ENABLED"
-	SlackWebhookURL            = "SLACK_WEBHOOK_URL" // #nosec G101 -- env var name, not a credential
-	SlackChannel               = "SLACK_CHANNEL"
-	SlackUsername              = "SLACK_USERNAME"
-	SlackIconEmoji             = "SLACK_ICON_EMOJI"
-	SlackEnabled               = "SLACK_ENABLED"
-	GitHubAPIMaxRetries        = "GITHUB_API_MAX_RETRIES"
-	GitHubAPIInitialRetryDelay = "GITHUB_API_INITIAL_RETRY_DELAY"
-	PRMergePollMaxAttempts     = "PR_MERGE_POLL_MAX_ATTEMPTS"
-	PRMergePollInterval        = "PR_MERGE_POLL_INTERVAL"
-	ConfigCacheTTLSeconds      = "CONFIG_CACHE_TTL_SECONDS"
+	EnvFile                         = "ENV"
+	Port                            = "PORT"
+	ConfigRepoName                  = "CONFIG_REPO_NAME"
+	ConfigRepoOwner                 = "CONFIG_REPO_OWNER"
+	AppId                           = "GITHUB_APP_ID"
+	AppClientId                     = "GITHUB_APP_CLIENT_ID"
+	InstallationId                  = "INSTALLATION_ID"
+	CommitterName                   = "COMMITTER_NAME"
+	CommitterEmail                  = "COMMITTER_EMAIL"
+	ConfigFile                      = "CONFIG_FILE"
+	MainConfigFile                  = "MAIN_CONFIG_FILE"
+	UseMainConfig                   = "USE_MAIN_CONFIG"
+	DeprecationFile                 = "DEPRECATION_FILE"
+	WebserverPath                   = "WEBSERVER_PATH"
+	ConfigRepoBranch                = "CONFIG_REPO_BRANCH"
+	PEMKeyName                      = "PEM_NAME"            // #nosec G101 -- env var name, not a credential
+	WebhookSecretName               = "WEBHOOK_SECRET_NAME" // #nosec G101 -- env var name, not a credential
+	WebhookSecret                   = "WEBHOOK_SECRET"      // #nosec G101 -- env var name, not a credential
+	CopierLogName                   = "COPIER_LOG_NAME"
+	GoogleCloudProjectId            = "GOOGLE_CLOUD_PROJECT_ID"
+	DefaultRecursiveCopy            = "DEFAULT_RECURSIVE_COPY"
+	DefaultPRMerge                  = "DEFAULT_PR_MERGE"
+	DefaultCommitMessage            = "DEFAULT_COMMIT_MESSAGE"
+	DryRun                          = "DRY_RUN"
+	AuditEnabled                    = "AUDIT_ENABLED"
+	MongoURI                        = "MONGO_URI"
+	MongoURISecretName              = "MONGO_URI_SECRET_NAME" // #nosec G101 -- env var name, not a credential
+	AuditDatabase                   = "AUDIT_DATABASE"
+	AuditCollection                 = "AUDIT_COLLECTION"
+	MetricsEnabled                  = "METRICS_ENABLED"
+	SlackWebhookURL                 = "SLACK_WEBHOOK_URL" // #nosec G101 -- env var name, not a credential
+	SlackChannel                    = "SLACK_CHANNEL"
+	SlackUsername                   = "SLACK_USERNAME"
+	SlackIconEmoji                  = "SLACK_ICON_EMOJI"
+	SlackEnabled                    = "SLACK_ENABLED"
+	GitHubAPIMaxRetries             = "GITHUB_API_MAX_RETRIES"
+	GitHubAPIInitialRetryDelay      = "GITHUB_API_INITIAL_RETRY_DELAY"
+	PRMergePollMaxAttempts          = "PR_MERGE_POLL_MAX_ATTEMPTS"
+	PRMergePollInterval             = "PR_MERGE_POLL_INTERVAL"
+	ConfigCacheTTLSeconds           = "CONFIG_CACHE_TTL_SECONDS"
+	WebhookProcessingTimeoutSeconds = "WEBHOOK_PROCESSING_TIMEOUT_SECONDS"
+	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
+	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
 )
 
 // NewConfig returns a new Config instance with default values
 func NewConfig() *Config {
 	return &Config{
-		Port:                       "8080",
-		CommitterName:              "Copier Bot",
-		CommitterEmail:             "bot@example.com",
-		ConfigFile:                 "copier-config.yaml",
-		DeprecationFile:            "deprecated_examples.json",
-		WebserverPath:              "/events",
-		ConfigRepoBranch:           "main",                               // Default branch to fetch config file from
-		PEMKeyName:                 "CODE_COPIER_PEM",                    // short secret name; resolved to full path at runtime via SecretPath()
-		WebhookSecretName:          "webhook-secret",                     // short secret name; resolved to full path at runtime via SecretPath()
-		CopierLogName:              "copy-copier-log",                    // default log name for logging to GCP
-		GoogleCloudProjectId:       "github-copy-code-examples",          // default project ID for logging to GCP
-		DefaultRecursiveCopy:       true,                                 // system-wide default for recursive copying that individual config entries can override.
-		DefaultPRMerge:             false,                                // system-wide default for PR merge without review that individual config entries can override.
-		DefaultCommitMessage:       "Automated PR with updated examples", // default commit message used when per-config commit_message is absent.
-		GitHubAPIMaxRetries:        3,                                    // default number of retry attempts for GitHub API calls
-		GitHubAPIInitialRetryDelay: 500,                                  // default initial retry delay in milliseconds (exponential backoff)
-		PRMergePollMaxAttempts:     20,                                   // default max attempts to poll PR for mergeability (~10 seconds with 500ms interval)
-		PRMergePollInterval:        500,                                  // default polling interval in milliseconds
-		ConfigCacheTTLSeconds:      300,                                  // default 5 minutes; set to 0 to disable caching
+		Port:                            "8080",
+		CommitterName:                   "Copier Bot",
+		CommitterEmail:                  "bot@example.com",
+		ConfigFile:                      "copier-config.yaml",
+		DeprecationFile:                 "deprecated_examples.json",
+		WebserverPath:                   "/events",
+		ConfigRepoBranch:                "main",                               // Default branch to fetch config file from
+		PEMKeyName:                      "CODE_COPIER_PEM",                    // short secret name; resolved to full path at runtime via SecretPath()
+		WebhookSecretName:               "webhook-secret",                     // short secret name; resolved to full path at runtime via SecretPath()
+		CopierLogName:                   "copy-copier-log",                    // default log name for logging to GCP
+		GoogleCloudProjectId:            "github-copy-code-examples",          // default project ID for logging to GCP
+		DefaultRecursiveCopy:            true,                                 // system-wide default for recursive copying that individual config entries can override.
+		DefaultPRMerge:                  false,                                // system-wide default for PR merge without review that individual config entries can override.
+		DefaultCommitMessage:            "Automated PR with updated examples", // default commit message used when per-config commit_message is absent.
+		GitHubAPIMaxRetries:             3,                                    // default number of retry attempts for GitHub API calls
+		GitHubAPIInitialRetryDelay:      500,                                  // default initial retry delay in milliseconds (exponential backoff)
+		PRMergePollMaxAttempts:          20,                                   // default max attempts to poll PR for mergeability (~10 seconds with 500ms interval)
+		PRMergePollInterval:             500,                                  // default polling interval in milliseconds
+		ConfigCacheTTLSeconds:           300,                                  // default 5 minutes; set to 0 to disable caching
+		WebhookProcessingTimeoutSeconds: 300,                                  // default 5 minutes; 0 = no timeout
+		WebhookMaxRetries:               2,                                    // default 2 retries (3 total attempts)
+		WebhookRetryInitialDelay:        5,                                    // default 5 seconds initial delay (doubles each retry)
 	}
 }
 
@@ -210,6 +223,11 @@ func LoadEnvironment(envFile string) (*Config, error) {
 
 	// Config cache
 	config.ConfigCacheTTLSeconds = getIntEnvWithDefault(ConfigCacheTTLSeconds, config.ConfigCacheTTLSeconds)
+
+	// Webhook processing
+	config.WebhookProcessingTimeoutSeconds = getIntEnvWithDefault(WebhookProcessingTimeoutSeconds, config.WebhookProcessingTimeoutSeconds)
+	config.WebhookMaxRetries = getIntEnvWithDefault(WebhookMaxRetries, config.WebhookMaxRetries)
+	config.WebhookRetryInitialDelay = getIntEnvWithDefault(WebhookRetryInitialDelay, config.WebhookRetryInitialDelay)
 
 	if err := validateConfig(config); err != nil {
 		return nil, err

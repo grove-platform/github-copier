@@ -55,25 +55,25 @@ The in-memory `DeliveryTracker` prevents duplicate processing within a single in
 
 **Resolution:** `addFilesViaPR` now calls `findExistingCopierPR` before creating a new branch. If an open PR from a `copier/*` branch targeting the same base branch exists, the app pushes new commits to that branch and updates the PR title/body instead of creating a duplicate.
 
-### 6. Graceful partial failure
+### 6. ~~Graceful partial failure~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-If 3 workflows match but the 2nd fails mid-processing (e.g., API error creating a branch), the 1st workflow's files are already committed but the 3rd never runs. Consider processing all workflows independently and reporting per-workflow success/failure.
+~~If 3 workflows match but the 2nd fails mid-processing, the 3rd never runs.~~
 
-**Files:** `services/webhook_handler_new.go`
-
-### 7. Retry failed background processing
-
-**Priority:** Medium
-
-The webhook handler sends 200 OK immediately and processes in a background goroutine. If the goroutine fails (network error, transient API failure), the webhook is lost — GitHub already got a 200 OK so it won't retry.
-
-**Options:**
-- (a) Simple in-memory retry queue with backoff
-- (b) Write failed events to MongoDB and re-process on a schedule
+**Resolution:** `processFilesWithWorkflows` now processes each workflow independently and returns a `map[string]error` of per-workflow failures. A failed workflow no longer blocks others. `handleMergedPRWithContainer` returns an aggregate error when any workflows fail, enabling the retry mechanism to re-attempt the full batch.
 
 **Files:** `services/webhook_handler_new.go`
+
+### 7. ~~Retry failed background processing~~ (RESOLVED)
+
+**Priority:** Medium — **Status: Fixed**
+
+~~The webhook handler sends 200 OK immediately and processes in a background goroutine. If the goroutine fails, the webhook is lost.~~
+
+**Resolution:** Implemented option (a) — `processWebhookWithRetry` wraps `handleMergedPRWithContainer` with exponential-backoff retries (configurable via `WEBHOOK_MAX_RETRIES`, default 2, and `WEBHOOK_RETRY_INITIAL_DELAY`, default 5s). Panics are converted to errors via `runWithRecovery`. After all retries are exhausted, a Slack alert is sent with the delivery context. Retries are skipped if the context deadline is exceeded.
+
+**Files:** `services/webhook_handler_new.go`, `configs/environment.go`
 
 ### 8. Distinguish transient vs permanent errors
 
@@ -83,13 +83,15 @@ API rate limits and network timeouts are retryable; 404 (repo not found) and 403
 
 **Files:** `services/rate_limit.go`, `services/github_write_to_target.go`
 
-### 9. Background processing timeout
+### 9. ~~Background processing timeout~~ (RESOLVED)
 
-**Priority:** Medium
+**Priority:** Medium — **Status: Fixed**
 
-The background goroutine that processes webhooks has no timeout. A stuck GitHub API call could leave it running indefinitely. Add a `context.WithTimeout` on the background work.
+~~The background goroutine that processes webhooks has no timeout. A stuck GitHub API call could leave it running indefinitely.~~
 
-**Files:** `services/webhook_handler_new.go`
+**Resolution:** The background goroutine now applies `context.WithTimeout` using the configurable `WEBHOOK_PROCESSING_TIMEOUT_SECONDS` env var (default 300s / 5 minutes). When the timeout fires, the context is cancelled, in-flight API calls abort, and the retry loop stops with a log and Slack alert. Set to 0 to disable the timeout.
+
+**Files:** `services/webhook_handler_new.go`, `configs/environment.go`
 
 ## Security
 

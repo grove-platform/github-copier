@@ -227,33 +227,111 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		})
 	}
 
-	// Process asynchronously in background with a new context
-	// Don't use the request context as it will be cancelled when the request completes
+	// Process asynchronously in background with a new context.
+	// Don't use the request context as it will be cancelled when the request completes.
 	bgCtx := context.Background()
-	container.wg.Add(1)
-	go func() {
-		defer container.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				LogCritical("panic in webhook handler", "pr_number", prNumber, "repo_owner", repoOwner, "repo_name", repoName, "recovered", r)
-				container.MetricsCollector.RecordWebhookFailed()
-				if notifyErr := container.SlackNotifier.NotifyError(bgCtx, &ErrorEvent{
-					Operation:  "panic_recovery",
-					Error:      fmt.Errorf("panic: %v", r),
-					PRNumber:   prNumber,
-					SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
-				}); notifyErr != nil {
-					LogWarning("failed to send Slack error notification", "error", notifyErr)
-				}
-			}
+
+	// Apply a timeout to prevent stuck API calls from running indefinitely (#9).
+	if config.WebhookProcessingTimeoutSeconds > 0 {
+		var cancel context.CancelFunc
+		bgCtx, cancel = context.WithTimeout(bgCtx, time.Duration(config.WebhookProcessingTimeoutSeconds)*time.Second)
+		// cancel is called after processing completes (in the goroutine below)
+		_ = cancel // used in defer below
+		container.wg.Add(1)
+		go func() {
+			defer container.wg.Done()
+			defer cancel()
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
 		}()
-		handleMergedPRWithContainer(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+	} else {
+		container.wg.Add(1)
+		go func() {
+			defer container.wg.Done()
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+		}()
+	}
+}
+
+// processWebhookWithRetry wraps handleMergedPRWithContainer with panic recovery
+// and exponential-backoff retries for transient failures (#7).
+func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) {
+	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
+	maxAttempts := config.WebhookMaxRetries + 1 // retries + initial attempt
+	delay := time.Duration(config.WebhookRetryInitialDelay) * time.Second
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = runWithRecovery(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+		if lastErr == nil {
+			return // success
+		}
+
+		// Don't retry if context is done (timeout or cancellation)
+		if ctx.Err() != nil {
+			LogErrorCtx(ctx, "webhook processing failed — context expired, skipping retry", lastErr, map[string]interface{}{
+				"pr_number": prNumber,
+				"repo":      webhookRepo,
+				"attempt":   attempt,
+			})
+			break
+		}
+
+		if attempt < maxAttempts {
+			LogWarningCtx(ctx, "webhook processing failed, retrying", map[string]interface{}{
+				"pr_number":    prNumber,
+				"repo":         webhookRepo,
+				"attempt":      attempt,
+				"max_attempts": maxAttempts,
+				"retry_delay":  delay.String(),
+				"error":        lastErr.Error(),
+			})
+
+			select {
+			case <-time.After(delay):
+				delay *= 2 // exponential backoff
+			case <-ctx.Done():
+				LogWarningCtx(ctx, "retry wait interrupted by context cancellation", map[string]interface{}{
+					"pr_number": prNumber,
+				})
+				break
+			}
+		}
+	}
+
+	// All attempts exhausted — alert via Slack
+	LogCritical("webhook processing failed after all retries",
+		"pr_number", prNumber,
+		"repo", webhookRepo,
+		"attempts", maxAttempts,
+		"error", lastErr,
+	)
+	container.MetricsCollector.RecordWebhookFailed()
+	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		Operation:  "webhook_processing_exhausted",
+		Error:      fmt.Errorf("failed after %d attempts: %w", maxAttempts, lastErr),
+		PRNumber:   prNumber,
+		SourceRepo: webhookRepo,
+	}); notifyErr != nil {
+		LogWarning("failed to send Slack error notification", "error", notifyErr)
+	}
+}
+
+// runWithRecovery calls handleMergedPRWithContainer in a panic-safe wrapper,
+// converting panics into errors.
+func runWithRecovery(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = fmt.Errorf("panic: %v", r)
+			LogCritical("panic in webhook handler", "pr_number", prNumber, "repo_owner", repoOwner, "repo_name", repoName, "recovered", r)
+		}
 	}()
+	return handleMergedPRWithContainer(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
 }
 
 // handleMergedPRWithContainer orchestrates processing of a merged PR:
 // auth → config → match workflows → fetch changed files → process → upload → notify.
-func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) {
+// Returns an error if a retryable failure occurred (#6 — per-workflow error tracking).
+func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) error {
 	startTime := time.Now()
 	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
 
@@ -262,20 +340,21 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		if err := ConfigurePermissions(ctx, config); err != nil {
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
 			container.MetricsCollector.RecordWebhookFailed()
-			return
+			notifySlackError(ctx, container, "auth", err, prNumber, webhookRepo)
+			return fmt.Errorf("auth: %w", err)
 		}
 	}
 
 	// 2. Load config and find matching workflows
 	yamlConfig, err := loadAndMatchWorkflows(ctx, config, container, webhookRepo, baseBranch, prNumber)
 	if err != nil {
-		return // already logged and notified
+		return fmt.Errorf("config: %w", err)
 	}
 
 	// 3. Fetch changed files from the source PR
 	changedFiles, err := fetchChangedFiles(ctx, config, container, repoOwner, repoName, prNumber, webhookRepo)
 	if err != nil {
-		return // already logged and notified
+		return fmt.Errorf("fetch_files: %w", err)
 	}
 
 	// 4. Snapshot metrics before processing
@@ -283,13 +362,24 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	filesUploadedBefore := container.MetricsCollector.GetFilesUploaded()
 	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
 
-	// 5. Process workflows, upload files, and update deprecations
-	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
+	// 5. Process workflows independently, collecting per-workflow errors (#6)
+	workflowErrors := processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
 	uploadAndDeprecateFiles(ctx, config, container)
 
 	// 6. Report completion
 	reportCompletion(ctx, container, webhookRepo, prNumber, sourceCommitSHA, startTime,
 		filesMatchedBefore, filesUploadedBefore, filesFailedBefore)
+
+	// Return an aggregate error if any workflows failed (enables retry for partial failures)
+	if len(workflowErrors) > 0 {
+		errMsgs := make([]string, 0, len(workflowErrors))
+		for wfName, wfErr := range workflowErrors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", wfName, wfErr))
+		}
+		return fmt.Errorf("%d workflow(s) failed: %s", len(workflowErrors), strings.Join(errMsgs, "; "))
+	}
+
+	return nil
 }
 
 // loadAndMatchWorkflows loads the YAML config and filters to workflows matching
@@ -407,9 +497,11 @@ func notifySlackError(ctx context.Context, container *ServiceContainer, operatio
 	}
 }
 
-// processFilesWithWorkflows processes changed files using the workflow system
+// processFilesWithWorkflows processes changed files using the workflow system.
+// Each workflow is processed independently (#6 — graceful partial failure).
+// Returns a map of workflow name → error for any that failed; nil if all succeeded.
 func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSHA string,
-	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, config *configs.Config, container *ServiceContainer) {
+	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, config *configs.Config, container *ServiceContainer) map[string]error {
 
 	LogInfoCtx(ctx, "processing files with workflows", map[string]interface{}{
 		"file_count":     len(changedFiles),
@@ -426,11 +518,15 @@ func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSH
 		config,
 	)
 
-	// Process each workflow
+	workflowErrors := make(map[string]error)
+
+	// Process each workflow independently
 	for _, workflow := range yamlConfig.Workflows {
 		if err := ctx.Err(); err != nil {
 			LogWebhookOperation(ctx, "workflow_processing", "workflow processing cancelled", err)
-			return
+			// Mark remaining workflows as cancelled
+			workflowErrors[workflow.Name] = fmt.Errorf("cancelled: %w", err)
+			continue
 		}
 
 		err := workflowProcessor.ProcessWorkflow(ctx, workflow, changedFiles, prNumber, sourceCommitSHA)
@@ -438,12 +534,19 @@ func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSH
 			LogErrorCtx(ctx, "failed to process workflow", err, map[string]interface{}{
 				"workflow_name": workflow.Name,
 			})
-			// Continue processing other workflows
+			workflowErrors[workflow.Name] = err
+			// Continue processing other workflows — don't let one failure block the rest
 			continue
 		}
 	}
 
 	LogInfoCtx(ctx, "workflow processing complete", map[string]interface{}{
 		"workflow_count": len(yamlConfig.Workflows),
+		"failed_count":   len(workflowErrors),
 	})
+
+	if len(workflowErrors) == 0 {
+		return nil
+	}
+	return workflowErrors
 }
