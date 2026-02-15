@@ -92,10 +92,21 @@ func uploadToTarget(ctx context.Context, config *configs.Config, key types.Uploa
 
 	switch params.strategy {
 	case "direct":
-		LogInfo("Using direct commit strategy", "repo", key.RepoName, "branch", key.BranchPath)
+		LogInfo("Using direct commit strategy",
+			"repo", key.RepoName,
+			"branch", key.BranchPath,
+			"strategy_source", key.CommitStrategy,
+			"file_count", len(value.Content),
+		)
 		return addFilesToBranch(ctx, config, client, key, value.Content, params.commitMsg)
 	default: // "pr" or "pull_request"
-		LogInfo("Using PR commit strategy", "repo", key.RepoName, "branch", key.BranchPath, "auto_merge", params.mergeWithoutReview)
+		LogInfo("Using PR commit strategy",
+			"repo", key.RepoName,
+			"branch", key.BranchPath,
+			"strategy_source", key.CommitStrategy,
+			"file_count", len(value.Content),
+			"auto_merge", params.mergeWithoutReview,
+		)
 		return addFilesViaPR(ctx, config, client, key, value.Content, params.commitMsg, params.prTitle, params.prBody, params.mergeWithoutReview)
 	}
 }

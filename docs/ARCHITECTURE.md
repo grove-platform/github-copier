@@ -483,13 +483,13 @@ if file.Status == "DELETED" {
 
 #### 5. Target Repo Batching
 
-When a webhook is processed, matched files from **all workflows that share the same destination repo** are batched together into a single write operation. This is a deliberate design choice to avoid creating multiple commits or PRs in the same target repo from a single source PR.
+When a webhook is processed, matched files from multiple workflows are grouped by a composite key of **(destination repo, branch, commit strategy)**. Workflows that share all three values are batched into a single write operation; workflows that differ on any dimension produce separate operations.
 
 **How it works:**
 
-1. All workflows are processed in order; each matched file is queued by target repo
-2. After all workflows finish, files are grouped by destination repo
-3. One commit or PR is created per destination repo (not per workflow)
+1. All workflows are processed in order; each matched file is queued by `(repo, branch, strategy)`
+2. After all workflows finish, files sharing the same key are combined
+3. One commit or PR is created per unique key (not per workflow)
 
 **Implications:**
 
@@ -497,21 +497,23 @@ When a webhook is processed, matched files from **all workflows that share the s
 |----------|----------|
 | 2 workflows → same repo, both `direct` | One direct commit with all files |
 | 2 workflows → same repo, both `pull_request` | One PR with all files |
-| 1 `direct` + 1 `pull_request` → same repo | Files are combined; the **last workflow's strategy wins** |
+| 1 `direct` + 1 `pull_request` → same repo | **Two separate operations** — one direct commit and one PR |
 | 2 workflows → different repos | Separate commit/PR per repo (independent) |
 
-**What gets merged when workflows share a target:**
+**What gets merged when workflows share a key:**
 
-- **Files**: All matched files from all workflows are combined into one commit tree
+- **Files**: All matched files from all workflows with the same key are combined into one commit tree
 - **Commit message**: Uses the last workflow's `commit_message`
 - **PR title/body**: Uses the last workflow's `pr_title` and `pr_body`
 - **Auto-merge**: Uses the last workflow's `auto_merge` setting
 - **PR template**: Fetched once if any workflow sets `use_pr_template: true`
 
-**Example:**
+> **Note:** At config load time the app logs a warning when workflows target the same `(repo, branch)` with different commit strategies, so operators are aware that multiple operations will be created.
+
+**Example — same strategy (batched):**
 
 ```yaml
-# These two workflows target the same repo:
+# These two workflows share repo, branch, AND strategy → batched into one PR:
 workflows:
   - name: "go-examples"
     destination: { repo: "org/docs", branch: "main" }
@@ -526,15 +528,33 @@ workflows:
       pr_title: "Update Python examples"
 ```
 
-Result: **One PR** with files from both workflows. The PR title will be "Update Python examples" (last workflow wins).
+Result: **One PR** with files from both workflows. The PR title will be "Update Python examples" (last workflow wins for metadata).
+
+**Example — different strategies (separate operations):**
+
+```yaml
+# These two workflows share repo and branch but differ on strategy → two operations:
+workflows:
+  - name: "go-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "direct"
+
+  - name: "python-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Python examples"
+```
+
+Result: **One direct commit** (Go files) and **one PR** (Python files).
 
 **Design rationale:**
 
-- Avoids multiple PRs or commits to the same branch from a single source event
-- Reduces noise in target repos (one PR per source PR, not one per workflow)
-- Simplifies review — all changes from a source PR are in one place
-
-**If you need separate commits/PRs per workflow**, use different destination repos or branches for each workflow.
+- Avoids multiple PRs or commits to the same branch from a single source event *when strategies match*
+- Respects each workflow's intended commit strategy when they differ
+- Reduces noise in target repos while remaining predictable
+- A config-time warning alerts operators to mixed-strategy destinations
 
 ## Configuration Examples
 
