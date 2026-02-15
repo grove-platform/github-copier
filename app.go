@@ -92,8 +92,13 @@ func main() {
 
 	// Configure GitHub permissions
 	if err := services.ConfigurePermissions(ctx, config); err != nil {
-		fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
-		os.Exit(1)
+		if config.DryRun {
+			services.LogWarning("GitHub authentication failed (non-fatal in dry-run mode)", "error", err)
+			fmt.Printf("⚠️  GitHub auth skipped (dry-run): %v\n", err)
+		} else {
+			fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Print startup banner
