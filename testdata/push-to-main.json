@@ -1,0 +1,76 @@
+{
+  "ref": "refs/heads/main",
+  "before": "abc123before",
+  "after": "def456after",
+  "created": false,
+  "deleted": false,
+  "forced": false,
+  "base_ref": null,
+  "compare": "https://github.com/cbullinger/copier-app-source-test/compare/abc123before...def456after",
+  "commits": [
+    {
+      "id": "def456after",
+      "tree_id": "tree123",
+      "distinct": true,
+      "message": "Direct push: fix typo in example",
+      "timestamp": "2025-02-16T10:30:00-08:00",
+      "url": "https://github.com/cbullinger/copier-app-source-test/commit/def456after",
+      "author": {
+        "name": "Test User",
+        "email": "test@example.com",
+        "username": "testuser"
+      },
+      "committer": {
+        "name": "Test User",
+        "email": "test@example.com",
+        "username": "testuser"
+      },
+      "added": [],
+      "removed": [],
+      "modified": [
+        "examples/go/main.go"
+      ]
+    }
+  ],
+  "head_commit": {
+    "id": "def456after",
+    "tree_id": "tree123",
+    "distinct": true,
+    "message": "Direct push: fix typo in example",
+    "timestamp": "2025-02-16T10:30:00-08:00",
+    "url": "https://github.com/cbullinger/copier-app-source-test/commit/def456after",
+    "author": {
+      "name": "Test User",
+      "email": "test@example.com",
+      "username": "testuser"
+    },
+    "committer": {
+      "name": "Test User",
+      "email": "test@example.com",
+      "username": "testuser"
+    },
+    "added": [],
+    "removed": [],
+    "modified": [
+      "examples/go/main.go"
+    ]
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    },
+    "default_branch": "main"
+  },
+  "pusher": {
+    "name": "testuser",
+    "email": "test@example.com"
+  },
+  "sender": {
+    "login": "testuser"
+  },
+  "installation": {
+    "id": 12345678
+  }
+}

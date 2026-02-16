@@ -1,253 +1,312 @@
-# Test Payloads
+# Test Data
 
-Test files for local integration testing of the github-copier app.
-
-## Quick Start (Isolated Testing)
-
-```bash
-# 1. Copy and configure test environment
-cp testdata/.env.test .env.test
-# Edit .env.test with your GitHub App credentials
-
-# 2. Copy config to your test source repo (cbullinger/copier-app-source-test)
-# Upload testdata/source-repo-files/.copier/main.yaml to .copier/main.yaml
-
-# 3. Start the app with test config
-ENV_FILE=.env.test go run app.go
-
-# 4. In another terminal, start webhook tunnel
-smee --url https://smee.io/YOUR_CHANNEL --target http://localhost:8080/events
-
-# 5. Create a PR in your test source repo and merge it
-```
+Test fixtures for local and CI testing of the github-copier application.
 
 ## Directory Structure
 
 ```
 testdata/
-├── .env.test                    # Test environment variables (copy to .env.test)
-├── source-repo-files/           # Files to copy to your test source repo
+├── README.md                     # This file
+├── .env.test                     # Test environment template
+├── test-config.yaml              # Example workflow config (inline format)
+├── source-repo-files/            # Files to copy to a test source repo
 │   └── .copier/
-│       └── main.yaml            # Workflow config for test repos
-├── test-pr-merged.json          # Sample webhook payload
-├── test-config.yaml             # Example config (reference only)
-└── example-pr-merged.json       # Generic example payload
+│       └── main.yaml             # Main config format example
+│
+├── # Webhook Payloads - Merged PRs (should trigger processing)
+├── example-pr-merged.json        # Generic merged PR example
+├── test-pr-merged.json           # Test repo merged PR
+├── pr-multiple-workflows.json    # Files matching multiple workflows
+├── pr-large-changeset.json       # Large PR (35+ files) for pagination testing
+├── pr-renamed-files.json         # Files with status: renamed
+├── pr-with-deprecations.json     # Mix of added and removed files
+│
+├── # Webhook Payloads - Non-merged (should be ignored)
+├── pr-closed-not-merged.json     # Closed without merge
+├── pr-opened.json                # PR opened event
+├── pr-synchronize.json           # PR updated with new commits
+├── pr-no-matching-files.json     # Merged but no files match patterns
+│
+└── push-to-main.json             # Direct push event (if supported)
 ```
 
-## Test Repositories
+## Quick Start
 
-| Repo | Purpose |
-|------|---------|
-| `cbullinger/copier-app-source-test` | Source repo (receives PRs, triggers webhooks) |
-| `cbullinger/copier-app-dest-1` | Destination for Go examples |
-| `cbullinger/copier-app-dest-2` | Destination for Python examples |
-
-## Configured Workflows
-
-The test config (`source-repo-files/.copier/main.yaml`) defines:
-
-| Workflow | Source Pattern | Destination | Transform |
-|----------|---------------|-------------|-----------|
-| `test-go-to-dest1` | `examples/go/**` | `copier-app-dest-1` | `examples/go/` → `go-examples/` |
-| `test-python-to-dest2` | `examples/python/**` | `copier-app-dest-2` | `examples/python/` → `python-examples/` |
-| `test-docs-to-dest1` | `docs/**` | `copier-app-dest-1` | `docs/` → `documentation/` |
-
-## Files
-
-### example-pr-merged.json
-A complete example of a merged PR webhook payload with:
-- Multiple file changes (added, modified, removed)
-- Go and Python examples
-- Database and auth categories
-- Realistic file structure
-
-## Usage
-
-### Option 1: Use Example Payload
+### Option 1: Automated Integration Tests
 
 ```bash
-# Build the test tool
-go build -o test-webhook ./cmd/test-webhook
+# Run full integration test suite
+./scripts/integration-test.sh
 
-# Send example payload
+# Quick smoke test only
+./scripts/integration-test.sh --quick
+
+# Verbose output
+./scripts/integration-test.sh --verbose
+```
+
+### Option 2: Manual Testing
+
+```bash
+# 1. Start the app in dry-run mode
+make run-local-quick
+
+# 2. In another terminal, send a test webhook
+make test-webhook-example
+
+# Or use the test-webhook CLI directly
 ./test-webhook -payload testdata/example-pr-merged.json
 ```
 
-### Option 2: Fetch Real PR Data
+### Option 3: Test with Real GitHub Data
 
 ```bash
-# Set GitHub token
+# Set your GitHub token (see "GitHub Token Requirements" below)
 export GITHUB_TOKEN=ghp_your_token_here
 
-# Test with real PR
+# Fetch and send real PR data
 ./test-webhook -pr 123 -owner myorg -repo myrepo
 ```
 
-### Option 3: Use Helper Script
+#### GitHub Token Requirements
+
+The token is used to fetch PR metadata and file lists from the GitHub API.
+
+**Classic Personal Access Token:**
+- Go to https://github.com/settings/tokens
+- Generate new token (classic)
+- Required scope: `repo` (or `public_repo` for public repos only)
+
+**Fine-grained Personal Access Token:**
+- Go to https://github.com/settings/tokens?type=beta
+- Select the specific repositories you need
+- Required permissions:
+  - Pull requests: **Read-only**
+  - Contents: **Read-only**
+
+## Test Payloads
+
+> **Important:** Test payloads contain fake PR numbers. The app will match workflows
+> but fail when fetching files from GitHub (the PR doesn't exist). To test the full
+> pipeline, use a **real PR number** with `./test-webhook -pr <NUMBER> -owner <OWNER> -repo <REPO>`.
+
+### Merged PRs (Trigger Processing)
+
+| File | Description | Expected Behavior |
+|------|-------------|-------------------|
+| `example-pr-merged.json` | Generic example with Go/Python files | Matches workflows, fails on file fetch (fake PR) |
+| `test-pr-merged.json` | Test repo specific | Matches workflows, fails on file fetch (fake PR) |
+| `pr-multiple-workflows.json` | Files for Go, Python, JS, and docs | Should trigger multiple workflows |
+| `pr-large-changeset.json` | 35 files across multiple categories | Tests batch processing |
+| `pr-renamed-files.json` | Files with `status: renamed` | Tests rename handling |
+| `pr-with-deprecations.json` | Mix of added and removed files | Tests deprecation tracking |
+
+### Non-Merged Events (Should Be Ignored)
+
+| File | Description | Expected Behavior |
+|------|-------------|-------------------|
+| `pr-closed-not-merged.json` | Closed without merge | Should be acknowledged but not processed |
+| `pr-opened.json` | PR opened event | Should be ignored |
+| `pr-synchronize.json` | PR updated | Should be ignored |
+| `pr-no-matching-files.json` | Merged but only CI/config files | No files match patterns |
+
+## What You Can Test
+
+### With Fake Payloads (testdata/*.json)
+
+These test payloads use fake PR numbers, so they validate:
+- ✅ Webhook signature verification
+- ✅ Payload parsing
+- ✅ Config loading and caching
+- ✅ Workflow matching (source repo + branch)
+- ✅ Slack error notifications
+- ❌ File fetching (fails - PR doesn't exist)
+- ❌ File processing and copying
+
+### With Real PRs (-pr flag)
+
+Using a real PR number tests the complete pipeline:
+```bash
+export GITHUB_TOKEN=ghp_...
+./test-webhook -pr <REAL_PR_NUMBER> -owner cbullinger -repo copier-app-source-test -secret test-secret
+```
+
+This validates:
+- ✅ Everything above, plus:
+- ✅ File fetching from GitHub
+- ✅ Pattern matching on actual files
+- ✅ File content retrieval
+- ✅ Path transformations
+- ✅ Commit/PR creation (unless DRY_RUN=true)
+- ✅ Slack success notifications
+
+### Other Events
+
+| File | Description | Expected Behavior |
+|------|-------------|-------------------|
+| `push-to-main.json` | Direct push to main branch | Depends on app configuration |
+
+## Configuration Files
+
+### test-config.yaml
+
+Example workflow configuration using the **inline workflows format**:
+
+```yaml
+workflows:
+  - name: "workflow-name"
+    source:
+      repo: "owner/repo"
+      branch: "main"
+      patterns:
+        - "examples/go/**"
+    destination:
+      repo: "owner/target-repo"
+      branch: "main"
+    transformations:
+      - move:
+          from: "examples/go/"
+          to: "go-examples/"
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Sync examples"
+```
+
+### source-repo-files/.copier/main.yaml
+
+Example main config using the **workflow_configs format** (for source repos):
+
+```yaml
+defaults:
+  commit_strategy:
+    type: "pull_request"
+    auto_merge: false
+
+workflow_configs:
+  - source: "inline"
+    workflows:
+      - name: "workflow-name"
+        # ... workflow definition
+```
+
+## Environment Configuration
+
+Copy `.env.test` to the project root and configure:
 
 ```bash
-# Make script executable
-chmod +x scripts/test-with-pr.sh
-
-# Test with real PR (interactive)
-./scripts/test-with-pr.sh 123 myorg myrepo
+cp testdata/.env.test .env.test
+# Edit .env.test with your values
 ```
 
-## Testing Scenarios
+Key settings for testing:
 
-### Test Pattern Matching
-
-Create custom payloads to test specific patterns:
-
-**Test Regex Pattern:**
-```json
-{
-  "files": [
-    {
-      "filename": "examples/go/database/connect.go",
-      "status": "added"
-    }
-  ]
-}
-```
-
-**Test Glob Pattern:**
-```json
-{
-  "files": [
-    {
-      "filename": "examples/go/main.go",
-      "status": "added"
-    },
-    {
-      "filename": "examples/python/main.py",
-      "status": "added"
-    }
-  ]
-}
-```
-
-### Test Deprecation
-
-```json
-{
-  "files": [
-    {
-      "filename": "examples/deprecated-example.go",
-      "status": "removed"
-    }
-  ]
-}
-```
-
-### Test Multiple Languages
-
-```json
-{
-  "files": [
-    {
-      "filename": "examples/go/database/connect.go",
-      "status": "added"
-    },
-    {
-      "filename": "examples/python/database/connect.py",
-      "status": "added"
-    },
-    {
-      "filename": "examples/javascript/database/connect.js",
-      "status": "added"
-    }
-  ]
-}
-```
+| Variable | Description | Test Value |
+|----------|-------------|------------|
+| `DRY_RUN` | Skip actual writes | `true` for safe testing |
+| `COPIER_DISABLE_CLOUD_LOGGING` | Use stdout logging | `true` |
+| `LOG_LEVEL` | Logging verbosity | `debug` for troubleshooting |
+| `AUDIT_ENABLED` | MongoDB audit logging | `false` (no MongoDB needed) |
 
 ## Creating Custom Payloads
 
-1. Copy `example-pr-merged.json`
-2. Modify the `files` array to match your test case
+1. Copy an existing payload as a template
+2. Modify the `files` array to test specific patterns
 3. Update PR metadata as needed
-4. Save with descriptive name (e.g., `test-go-examples.json`)
 
-## Testing with Dry-Run Mode
+Example for testing a specific pattern:
 
-Test without making actual commits:
-
-```bash
-# Start app in dry-run mode
-DRY_RUN=true ./github-copier &
-
-# Send test webhook
-./test-webhook -payload testdata/example-pr-merged.json
-
-# Check logs for pattern matching and transformations
+```json
+{
+  "action": "closed",
+  "pull_request": {
+    "merged": true,
+    "merge_commit_sha": "abc123"
+  },
+  "repository": {
+    "full_name": "cbullinger/copier-app-source-test"
+  },
+  "files": [
+    {
+      "filename": "examples/go/your-test-file.go",
+      "status": "added"
+    }
+  ]
+}
 ```
 
 ## Validating Results
 
-After sending a test webhook:
+### Check Application Logs
 
-1. **Check Application Logs**
-   ```bash
-   # Local
-   # Logs go to stdout (JSON format via slog)
-   
-   # Cloud Run
-   gcloud run services logs read github-copier --limit=50
-   ```
-
-2. **Check Metrics**
-   ```bash
-   curl http://localhost:8080/metrics | jq
-   ```
-
-3. **Check Audit Logs** (if enabled)
-   ```javascript
-   db.audit_events.find().sort({timestamp: -1}).limit(10)
-   ```
-
-4. **Verify Pattern Matching**
-   - Check which files were matched
-   - Verify path transformations
-   - Confirm message templating
-
-## Common Test Cases
-
-### Test Case 1: New Go Examples
 ```bash
-./test-webhook -payload testdata/example-pr-merged.json
+# Logs go to stdout in local mode
+# Look for:
+# - "webhook received" - payload arrived
+# - "PR merged" - event recognized
+# - "found matching workflows" - config loaded
+# - "File matched transformation" - pattern matched
+# - "[DRY-RUN] Would upload" - files would be written
 ```
-Expected: Files copied to target repo with transformed paths
 
-### Test Case 2: Real PR from Production
-```bash
-export GITHUB_TOKEN=ghp_...
-./scripts/test-with-pr.sh 456 mongodb docs-realm
-```
-Expected: Real PR data fetched and processed
+### Check Metrics
 
-### Test Case 3: Dry-Run Validation
 ```bash
-DRY_RUN=true ./github-copier &
-./test-webhook -payload testdata/example-pr-merged.json
+curl http://localhost:8080/metrics | jq
 ```
-Expected: Processing logged but no commits made
+
+### Check Health
+
+```bash
+curl http://localhost:8080/health | jq
+```
+
+## Test Repositories
+
+For isolated end-to-end testing, you can set up dedicated test repositories:
+
+| Repo | Purpose |
+|------|---------|
+| `your-org/copier-source-test` | Source repo that triggers webhooks |
+| `your-org/copier-dest-test-1` | First destination repo |
+| `your-org/copier-dest-test-2` | Second destination repo |
+
+Configure these in your test workflow config and `.env.test`.
 
 ## Troubleshooting
 
-### Webhook Returns 401
-- Check webhook secret matches
-- Verify signature generation
+### Webhook returns 401
 
-### Files Not Matched
-- Check pattern in copier-config.yaml
-- Use `config-validator test-pattern` to debug
+Signature verification failed. Either:
+- Set `WEBHOOK_SECRET` to match your test secret
+- Clear `WEBHOOK_SECRET` to skip verification in testing
 
-### Path Transformation Wrong
-- Use `config-validator test-transform` to debug
-- Check variable names in template
+### No files matched
 
-### No Response
-- Verify app is running
-- Check webhook URL is correct
-- Review application logs
+Use `config-validator` to test patterns:
 
+```bash
+./config-validator test-pattern \
+  -type glob \
+  -pattern 'examples/go/**' \
+  -file 'examples/go/main.go'
+```
+
+### App won't start
+
+Check for port conflicts:
+
+```bash
+lsof -i :8080
+```
+
+Check logs:
+
+```bash
+cat /tmp/integration-test-app.log
+```
+
+## See Also
+
+- [LOCAL-TESTING.md](../docs/LOCAL-TESTING.md) - Full local testing guide
+- [WEBHOOK-TESTING.md](../docs/WEBHOOK-TESTING.md) - Webhook-specific testing
+- [CONFIG-REFERENCE.md](../docs/CONFIG-REFERENCE.md) - Configuration schema

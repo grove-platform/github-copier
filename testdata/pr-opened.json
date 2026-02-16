@@ -1,0 +1,46 @@
+{
+  "action": "opened",
+  "number": 20,
+  "pull_request": {
+    "number": 20,
+    "state": "open",
+    "merged": false,
+    "merge_commit_sha": null,
+    "title": "Add new Python examples",
+    "draft": false,
+    "head": {
+      "ref": "feature/python-examples",
+      "sha": "abc123new456",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/python/new_feature.py",
+      "status": "added",
+      "additions": 50,
+      "deletions": 0,
+      "changes": 50
+    }
+  ]
+}

@@ -122,6 +122,21 @@ This approach tests the full end-to-end flow including real GitHub auth and API 
 | `REPO_NAME` | Default repository name |
 | `WEBHOOK_URL` | Default webhook URL |
 
+### GitHub Token Requirements
+
+When using `-pr` mode to fetch real PR data, a GitHub token is required.
+
+**Classic Personal Access Token:**
+- Generate at: https://github.com/settings/tokens
+- Required scope: `repo` (or `public_repo` for public repos only)
+
+**Fine-grained Personal Access Token:**
+- Generate at: https://github.com/settings/tokens?type=beta
+- Repository access: Select the repos you need
+- Required permissions:
+  - Pull requests: **Read-only**
+  - Contents: **Read-only**
+
 ## Validating Results
 
 ### App Logs (stdout)

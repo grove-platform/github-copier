@@ -1,0 +1,70 @@
+{
+  "action": "closed",
+  "number": 45,
+  "pull_request": {
+    "number": 45,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "rename123files456",
+    "title": "Rename examples to follow naming convention",
+    "head": {
+      "ref": "chore/rename-examples",
+      "sha": "rename789sha",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/go/database/db_connect.go",
+      "status": "renamed",
+      "previous_filename": "examples/go/database/connect.go",
+      "additions": 5,
+      "deletions": 5,
+      "changes": 10
+    },
+    {
+      "filename": "examples/go/database/db_query.go",
+      "status": "renamed",
+      "previous_filename": "examples/go/database/query.go",
+      "additions": 3,
+      "deletions": 3,
+      "changes": 6
+    },
+    {
+      "filename": "examples/python/database/py_connect.py",
+      "status": "renamed",
+      "previous_filename": "examples/python/database/connect.py",
+      "additions": 2,
+      "deletions": 2,
+      "changes": 4
+    },
+    {
+      "filename": "examples/go/auth/auth_login.go",
+      "status": "renamed",
+      "previous_filename": "examples/go/auth/login.go",
+      "additions": 0,
+      "deletions": 0,
+      "changes": 0
+    }
+  ]
+}
