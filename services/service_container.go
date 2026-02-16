@@ -65,11 +65,14 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	metricsCollector := NewMetricsCollector()
 
 	// Initialize Slack notifier
-	slackNotifier := NewSlackNotifier(
+	// Use plain text mode for Workflow Builder webhooks (they don't support attachments)
+	slackNotifier := NewSlackNotifierWithOptions(
 		config.SlackWebhookURL,
 		config.SlackChannel,
 		config.SlackUsername,
 		config.SlackIconEmoji,
+		config.SlackPlainText,
+		config.SlackMessageVariable,
 	)
 
 	// Initialize audit logger

@@ -384,9 +384,12 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	workflowErrors := processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
 	uploadAndDeprecateFiles(ctx, config, container)
 
-	// 6. Report completion
+	// 6. Collect unique target repos for notification
+	targetRepos := collectTargetRepos(yamlConfig)
+
+	// 7. Report completion
 	reportCompletion(ctx, container, webhookRepo, prNumber, sourceCommitSHA, startTime,
-		filesMatchedBefore, filesUploadedBefore, filesFailedBefore)
+		filesMatchedBefore, filesUploadedBefore, filesFailedBefore, targetRepos)
 
 	// Return an aggregate error if any workflows failed (enables retry for partial failures)
 	if len(workflowErrors) > 0 {
@@ -478,7 +481,7 @@ func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, contai
 }
 
 // reportCompletion calculates processing metrics and sends a Slack notification.
-func reportCompletion(ctx context.Context, container *ServiceContainer, webhookRepo string, prNumber int, sourceCommitSHA string, startTime time.Time, matchedBefore int, uploadedBefore int, failedBefore int) {
+func reportCompletion(ctx context.Context, container *ServiceContainer, webhookRepo string, prNumber int, sourceCommitSHA string, startTime time.Time, matchedBefore int, uploadedBefore int, failedBefore int, targetRepos []string) {
 	filesMatched := container.MetricsCollector.GetFilesMatched() - matchedBefore
 	filesUploaded := container.MetricsCollector.GetFilesUploaded() - uploadedBefore
 	filesFailed := container.MetricsCollector.GetFilesUploadFailed() - failedBefore
@@ -494,6 +497,7 @@ func reportCompletion(ctx context.Context, container *ServiceContainer, webhookR
 		PRTitle:        fmt.Sprintf("PR #%d", prNumber),
 		PRURL:          fmt.Sprintf("https://github.com/%s/pull/%d", webhookRepo, prNumber),
 		SourceRepo:     webhookRepo,
+		TargetRepos:    targetRepos,
 		FilesMatched:   filesMatched,
 		FilesCopied:    filesUploaded,
 		FilesFailed:    filesFailed,
@@ -501,6 +505,24 @@ func reportCompletion(ctx context.Context, container *ServiceContainer, webhookR
 	}); notifyErr != nil {
 		LogWarningCtx(ctx, "failed to send Slack PR processed notification", map[string]interface{}{"error": notifyErr.Error()})
 	}
+}
+
+// collectTargetRepos extracts unique target repository names from workflows.
+func collectTargetRepos(yamlConfig *types.YAMLConfig) []string {
+	if yamlConfig == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var repos []string
+	for _, wf := range yamlConfig.Workflows {
+		repo := wf.Destination.Repo
+		if repo != "" && !seen[repo] {
+			seen[repo] = true
+			repos = append(repos, repo)
+		}
+	}
+	return repos
 }
 
 // notifySlackError is a helper to send a Slack error notification, logging any failure.

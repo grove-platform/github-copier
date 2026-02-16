@@ -158,13 +158,54 @@ File Count: 2
 
 ### Environment Variables
 
-| Variable            | Description                  | Default                   | Required |
-|---------------------|------------------------------|---------------------------|----------|
-| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL   | -                         | Yes      |
-| `SLACK_CHANNEL`     | Channel to post to           | `#code-examples`          | No       |
-| `SLACK_USERNAME`    | Bot username                 | `Examples Copier`         | No       |
-| `SLACK_ICON_EMOJI`  | Bot icon emoji               | `:robot_face:`            | No       |
-| `SLACK_ENABLED`     | Enable/disable notifications | `true` if webhook URL set | No       |
+| Variable                | Description                  | Default                   | Required |
+|-------------------------|------------------------------|---------------------------|----------|
+| `SLACK_WEBHOOK_URL`     | Slack incoming webhook URL   | -                         | Yes      |
+| `SLACK_CHANNEL`         | Channel to post to           | `#code-examples`          | No       |
+| `SLACK_USERNAME`        | Bot username                 | `Examples Copier`         | No       |
+| `SLACK_ICON_EMOJI`      | Bot icon emoji               | `:robot_face:`            | No       |
+| `SLACK_ENABLED`         | Enable/disable notifications | `true` if webhook URL set | No       |
+| `SLACK_PLAIN_TEXT`      | Use plain text only (for Workflow Builder) | `false`     | No       |
+| `SLACK_MESSAGE_VARIABLE`| Variable name for Workflow Builder | `text`             | No       |
+
+### Webhook Types
+
+There are two types of Slack webhooks, and they have different capabilities:
+
+#### Slack App Incoming Webhook (Recommended)
+
+Created via a Slack App, supports full rich formatting:
+- Rich message attachments with colors
+- Custom username and icon
+- Channel override
+- Formatted fields
+
+**Setup:**
+1. Go to https://api.slack.com/apps
+2. Click "Create New App" → "From scratch"
+3. Add the "Incoming Webhooks" feature
+4. Activate and create a webhook for your channel
+5. Copy the webhook URL
+
+#### Workflow Builder Webhook
+
+Created via Slack Workflow Builder, only supports plain text:
+- No attachments or blocks
+- No custom username/icon
+- No channel override
+
+Workflow Builder webhooks use URLs like `https://hooks.slack.com/triggers/...` (note: `/triggers/` instead of `/services/`).
+
+**The notifier auto-detects Workflow Builder webhooks** by checking for `/triggers/` in the URL and automatically uses plain text mode.
+
+**Important:** You must set `SLACK_MESSAGE_VARIABLE` to match the variable name you configured in your Slack Workflow. When creating a workflow with "Starts with a webhook" trigger, Slack prompts you to define input variables. Set this to whatever name you used (e.g., `text`, `data`, `message`):
+
+```bash
+SLACK_WEBHOOK_URL="https://hooks.slack.com/triggers/..."
+SLACK_MESSAGE_VARIABLE=data  # Must match your workflow's input variable name
+```
+
+The notifier will send a payload like `{"data": "message content"}` which your workflow can then use in a "Send a message" step.
 
 ### Disabling Notifications
 

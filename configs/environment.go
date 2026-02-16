@@ -44,11 +44,13 @@ type Config struct {
 	MetricsEnabled     bool
 
 	// Slack notifications
-	SlackWebhookURL string
-	SlackChannel    string
-	SlackUsername   string
-	SlackIconEmoji  string
-	SlackEnabled    bool
+	SlackWebhookURL      string
+	SlackChannel         string
+	SlackUsername        string
+	SlackIconEmoji       string
+	SlackEnabled         bool
+	SlackPlainText       bool   // Use plain text only (required for Workflow Builder webhooks)
+	SlackMessageVariable string // Variable name for Workflow Builder webhooks (default: "text")
 
 	// GitHub API retry configuration
 	GitHubAPIMaxRetries        int
@@ -105,6 +107,8 @@ const (
 	SlackUsername                   = "SLACK_USERNAME"
 	SlackIconEmoji                  = "SLACK_ICON_EMOJI"
 	SlackEnabled                    = "SLACK_ENABLED"
+	SlackPlainText                  = "SLACK_PLAIN_TEXT"       // Use for Workflow Builder webhooks
+	SlackMessageVariable            = "SLACK_MESSAGE_VARIABLE" // Variable name for Workflow Builder (default: "text")
 	GitHubAPIMaxRetries             = "GITHUB_API_MAX_RETRIES"
 	GitHubAPIInitialRetryDelay      = "GITHUB_API_INITIAL_RETRY_DELAY"
 	PRMergePollMaxAttempts          = "PR_MERGE_POLL_MAX_ATTEMPTS"
@@ -212,6 +216,8 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.SlackUsername = getEnvWithDefault(SlackUsername, "Examples Copier")
 	config.SlackIconEmoji = getEnvWithDefault(SlackIconEmoji, ":robot_face:")
 	config.SlackEnabled = getBoolEnvWithDefault(SlackEnabled, config.SlackWebhookURL != "")
+	config.SlackPlainText = getBoolEnvWithDefault(SlackPlainText, false)
+	config.SlackMessageVariable = getEnvWithDefault(SlackMessageVariable, "text")
 
 	// GitHub API retry configuration
 	config.GitHubAPIMaxRetries = getIntEnvWithDefault(GitHubAPIMaxRetries, config.GitHubAPIMaxRetries)
