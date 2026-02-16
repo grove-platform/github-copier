@@ -1,0 +1,80 @@
+{
+  "action": "closed",
+  "number": 30,
+  "pull_request": {
+    "number": 30,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "multi123workflow456",
+    "title": "Add examples for multiple languages",
+    "head": {
+      "ref": "feature/multi-language",
+      "sha": "head789sha",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/go/database/connection.go",
+      "status": "added",
+      "additions": 60,
+      "deletions": 0,
+      "changes": 60
+    },
+    {
+      "filename": "examples/go/database/query.go",
+      "status": "added",
+      "additions": 80,
+      "deletions": 0,
+      "changes": 80
+    },
+    {
+      "filename": "examples/python/database/connection.py",
+      "status": "added",
+      "additions": 45,
+      "deletions": 0,
+      "changes": 45
+    },
+    {
+      "filename": "examples/python/database/query.py",
+      "status": "added",
+      "additions": 55,
+      "deletions": 0,
+      "changes": 55
+    },
+    {
+      "filename": "docs/database-guide.md",
+      "status": "added",
+      "additions": 120,
+      "deletions": 0,
+      "changes": 120
+    },
+    {
+      "filename": "examples/javascript/database/connection.js",
+      "status": "added",
+      "additions": 40,
+      "deletions": 0,
+      "changes": 40
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "action": "closed",
+  "number": 35,
+  "pull_request": {
+    "number": 35,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "nomatch123sha456",
+    "title": "Update CI configuration",
+    "head": {
+      "ref": "chore/update-ci",
+      "sha": "ci789sha",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": ".github/workflows/ci.yml",
+      "status": "modified",
+      "additions": 10,
+      "deletions": 5,
+      "changes": 15
+    },
+    {
+      "filename": ".github/dependabot.yml",
+      "status": "added",
+      "additions": 20,
+      "deletions": 0,
+      "changes": 20
+    },
+    {
+      "filename": "Makefile",
+      "status": "modified",
+      "additions": 5,
+      "deletions": 2,
+      "changes": 7
+    }
+  ]
+}
