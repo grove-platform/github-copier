@@ -5,7 +5,7 @@ Webhook service: PR merged → match files → transform paths → copy to targe
 ## File Map
 
 ```
-app.go                              # entrypoint, HTTP server, graceful shutdown
+app.go                              # Entrypoint, HTTP server, graceful shutdown
 services/
   webhook_handler_new.go            # HandleWebhookWithContainer() orchestrator
   workflow_processor.go             # ProcessWorkflow() - core file matching logic
@@ -22,6 +22,7 @@ services/
   file_state_service.go             # Tracks upload/deprecate queues (thread-safe)
   main_config_loader.go             # LoadConfig() with $ref support
   config_loader.go                  # Config loading & validation
+  config_cache.go                   # CachedConfigLoader (TTL-based config caching)
   service_container.go              # DI container
   health_metrics.go                 # /health (liveness), /ready (readiness), /metrics
   audit_logger.go                   # MongoDB audit logging
@@ -33,14 +34,18 @@ types/
 configs/environment.go              # Config struct, LoadEnvironment()
 tests/utils.go                      # Test helpers, httpmock setup
 cmd/
-  config-validator/main.go          # CLI: validate configs, test patterns, init templates
-  test-webhook/main.go              # CLI: send test webhook payloads (with delivery ID)
-  test-pem/main.go                  # CLI: verify PEM key + App ID against GitHub API
+  config-validator/                 # CLI: validate configs, test patterns, init templates
+  test-webhook/                     # CLI: send test webhook payloads (with delivery ID)
+  test-pem/                         # CLI: verify PEM key + App ID against GitHub API
 scripts/
   ci-local.sh                       # Run full CI pipeline locally (build, test, lint, vet)
   run-local.sh                      # Run app locally with dev settings
   deploy-cloudrun.sh                # Deploy to Google Cloud Run
   integration-test.sh               # End-to-end integration test
+  release.sh                        # Create versioned release (tag, changelog, GitHub Release)
+  test-slack.sh                     # Test Slack notification integration
+  diagnose-github-auth.sh           # Debug GitHub App authentication issues
+  check-installation-repos.sh       # List repos accessible to GitHub App installation
 ```
 
 ## Key Types
@@ -95,13 +100,53 @@ workflows:
     commit_strategy: { type: pull_request, pr_title: "Sync docs" }  # type: direct|pull_request
 ```
 
-## Test Commands
+## Quick Reference
 
 ```bash
-go test -race ./...                              # all with race detector
-go test ./services/... -run TestWorkflow -v      # specific
-golangci-lint run ./...                          # lint
+# Build & Run
+make build                                       # build binary
+make run                                         # run with .env
+./github-copier -env .env.test                   # run with specific env file
+
+# Testing
+go test -race ./...                              # all tests with race detector
+go test ./services/... -run TestWorkflow -v      # specific test
+make test                                        # run all tests via Makefile
+
+# Linting
+golangci-lint run ./...                          # lint (config: .golangci.yml)
+make lint                                        # lint via Makefile
+
+# CI (local)
+./scripts/ci-local.sh                            # full CI: build, test, lint, vet
+
+# Release
+./scripts/release.sh v1.2.3                      # create release (see below)
+./scripts/release.sh v1.2.3 --dry-run            # preview without changes
 ```
+
+## Release Process
+
+Releases use semantic versioning (`vMAJOR.MINOR.PATCH`) and are automated via `scripts/release.sh`.
+
+**Prerequisites:**
+- Clean working tree on `main` branch
+- `gh` CLI authenticated
+- `CHANGELOG.md` has content in `[Unreleased]` section
+
+**What the script does:**
+1. Validates version format and prerequisites
+2. Renames `[Unreleased]` → `[vX.Y.Z] - YYYY-MM-DD` in `CHANGELOG.md`
+3. Adds fresh `[Unreleased]` section
+4. Commits: `Release vX.Y.Z`
+5. Creates annotated git tag
+6. Pushes to origin (triggers CI deploy via `v*` tag)
+7. Creates GitHub Release with changelog excerpt
+
+**Changelog convention:**
+- Follow [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format
+- Sections: `Added`, `Changed`, `Fixed`, `Security`, `Deprecated`, `Removed`
+- Add entries to `[Unreleased]` as you work; the release script promotes them
 
 ## Edit Patterns
 
@@ -125,3 +170,14 @@ golangci-lint run ./...                          # lint
 - Tests use `httpmock`; see `tests/utils.go`
 - Always run tests with `-race` flag
 - **Changelog**: Update `CHANGELOG.md` for all notable changes (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/))
+
+## Key Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| `docs/ARCHITECTURE.md` | System design, data flow, batching behavior |
+| `docs/CONFIG-REFERENCE.md` | Full config schema and field reference |
+| `docs/DEPLOYMENT.md` | Cloud Run deployment, secrets setup |
+| `docs/TROUBLESHOOTING.md` | Common issues and debugging |
+| `docs/LOCAL-TESTING.md` | Running and testing locally |
+| `testdata/README.md` | Test fixtures and webhook payload examples |
