@@ -382,7 +382,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// 5. Process workflows independently, collecting per-workflow errors (#6)
 	workflowErrors := processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
-	uploadAndDeprecateFiles(ctx, config, container, repoOwner, repoName, baseBranch)
+	uploadAndDeprecateFiles(ctx, config, container, repoOwner, repoName, baseBranch, prNumber)
 
 	// 6. Collect unique target repos for notification
 	targetRepos := collectTargetRepos(yamlConfig)
@@ -459,7 +459,7 @@ func fetchChangedFiles(ctx context.Context, config *configs.Config, container *S
 
 // uploadAndDeprecateFiles drains the file-state queues, uploading files to target
 // repos and updating the deprecation file in the source repo.
-func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, sourceRepoOwner, sourceRepoName, sourceBranch string) {
+func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, sourceRepoOwner, sourceRepoName, sourceBranch string, prNumber int) {
 	// Upload queued files
 	filesToUpload := container.FileStateService.GetFilesToUpload()
 	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
@@ -468,16 +468,31 @@ func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, contai
 	// Build deprecation map and update file in the source repo
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
 	filesToDeprecate := make(map[string]types.Configs)
+	var deprecatedFiles []string
 	for _, entries := range deprecationMap {
 		for _, entry := range entries {
 			filesToDeprecate[entry.FileName] = types.Configs{
 				TargetRepo:   entry.Repo,
 				TargetBranch: entry.Branch,
 			}
+			deprecatedFiles = append(deprecatedFiles, entry.FileName)
 		}
 	}
 	UpdateDeprecationFile(ctx, config, filesToDeprecate, sourceRepoOwner, sourceRepoName, sourceBranch)
 	container.FileStateService.ClearFilesToDeprecate()
+
+	// Send Slack notification if files were deprecated
+	if len(deprecatedFiles) > 0 {
+		sourceRepo := fmt.Sprintf("%s/%s", sourceRepoOwner, sourceRepoName)
+		if notifyErr := container.SlackNotifier.NotifyDeprecation(ctx, &DeprecationEvent{
+			PRNumber:   prNumber,
+			SourceRepo: sourceRepo,
+			FileCount:  len(deprecatedFiles),
+			Files:      deprecatedFiles,
+		}); notifyErr != nil {
+			LogWarningCtx(ctx, "failed to send Slack deprecation notification", map[string]interface{}{"error": notifyErr.Error()})
+		}
+	}
 }
 
 // reportCompletion calculates processing metrics and sends a Slack notification.

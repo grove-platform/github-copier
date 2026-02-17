@@ -59,6 +59,13 @@ func createTestWorkflow(name string, transformations []types.Transformation) typ
 	}
 }
 
+// createTestWorkflowWithDeprecation creates a test workflow with deprecation tracking enabled
+func createTestWorkflowWithDeprecation(name string, transformations []types.Transformation) types.Workflow {
+	wf := createTestWorkflow(name, transformations)
+	wf.DeprecationCheck = &types.DeprecationConfig{Enabled: true}
+	return wf
+}
+
 func createMoveTransformation(from, to string) types.Transformation {
 	return types.Transformation{
 		Move: &types.MoveTransform{From: from, To: to},
@@ -159,7 +166,7 @@ func TestWorkflowProcessor_MoveTransformation(t *testing.T) {
 				test.TestConfig(),
 			)
 
-			workflow := createTestWorkflow("test-workflow", []types.Transformation{
+			workflow := createTestWorkflowWithDeprecation("test-workflow", []types.Transformation{
 				createMoveTransformation(tt.from, tt.to),
 			})
 
@@ -229,7 +236,7 @@ func TestWorkflowProcessor_CopyTransformation(t *testing.T) {
 				test.TestConfig(),
 			)
 
-			workflow := createTestWorkflow("test-workflow", []types.Transformation{
+			workflow := createTestWorkflowWithDeprecation("test-workflow", []types.Transformation{
 				createCopyTransformation(tt.from, tt.to),
 			})
 
@@ -304,7 +311,7 @@ func TestWorkflowProcessor_GlobTransformation(t *testing.T) {
 				test.TestConfig(),
 			)
 
-			workflow := createTestWorkflow("test-workflow", []types.Transformation{
+			workflow := createTestWorkflowWithDeprecation("test-workflow", []types.Transformation{
 				createGlobTransformation(tt.pattern, tt.transform),
 			})
 
@@ -372,7 +379,7 @@ func TestWorkflowProcessor_RegexTransformation(t *testing.T) {
 				test.TestConfig(),
 			)
 
-			workflow := createTestWorkflow("test-workflow", []types.Transformation{
+			workflow := createTestWorkflowWithDeprecation("test-workflow", []types.Transformation{
 				createRegexTransformation(tt.pattern, tt.transform),
 			})
 
@@ -493,7 +500,8 @@ func TestWorkflowProcessor_ExcludePatterns(t *testing.T) {
 					createMoveTransformation("src", "dest"),
 					createMoveTransformation("vendor", "vendor"),
 				},
-				Exclude: tt.exclude,
+				Exclude:          tt.exclude,
+				DeprecationCheck: &types.DeprecationConfig{Enabled: true},
 			}
 
 			changedFiles := []types.ChangedFile{
@@ -546,6 +554,7 @@ func TestWorkflowProcessor_MultipleTransformations(t *testing.T) {
 			createMoveTransformation("docs", "documentation"),
 			createCopyTransformation("README.md", "docs/README.md"),
 		},
+		DeprecationCheck: &types.DeprecationConfig{Enabled: true},
 	}
 
 	changedFiles := []types.ChangedFile{
@@ -659,7 +668,8 @@ func TestWorkflowProcessor_InvalidExcludePattern(t *testing.T) {
 			createMoveTransformation("src", "dest"),
 		},
 		// Invalid glob pattern - should be handled gracefully
-		Exclude: []string{"[invalid"},
+		Exclude:          []string{"[invalid"},
+		DeprecationCheck: &types.DeprecationConfig{Enabled: true},
 	}
 
 	changedFiles := []types.ChangedFile{
@@ -704,7 +714,8 @@ func TestWorkflowProcessor_CustomDeprecationFile(t *testing.T) {
 			createMoveTransformation("src", "dest"),
 		},
 		DeprecationCheck: &types.DeprecationConfig{
-			File: "custom_deprecation.json",
+			Enabled: true,
+			File:    "custom_deprecation.json",
 		},
 	}
 
@@ -720,6 +731,8 @@ func TestWorkflowProcessor_CustomDeprecationFile(t *testing.T) {
 	assert.True(t, exists, "expected custom deprecation file to be used")
 	require.Len(t, entries, 1, "expected one entry in custom deprecation file")
 	assert.Equal(t, "dest/main.go", entries[0].FileName)
+	assert.Equal(t, "src/main.go", entries[0].SourcePath, "expected source path to be recorded")
+	assert.Equal(t, 1, entries[0].PRNumber, "expected PR number to be recorded")
 }
 
 // ============================================================================
@@ -769,6 +782,8 @@ func TestWorkflowProcessor_FileStatusHandling(t *testing.T) {
 			workflow := createTestWorkflow("test-workflow", []types.Transformation{
 				createMoveTransformation("src", "dest"),
 			})
+			// Enable deprecation tracking for this test
+			workflow.DeprecationCheck = &types.DeprecationConfig{Enabled: true}
 
 			changedFiles := []types.ChangedFile{
 				{Path: "src/main.go", Status: tt.status},
@@ -788,6 +803,45 @@ func TestWorkflowProcessor_FileStatusHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestWorkflowProcessor_DeprecationDisabledByDefault(t *testing.T) {
+	// Test that deprecation tracking does NOT happen when DeprecationCheck.Enabled is false/unset
+	fileStateService := services.NewFileStateService()
+	processor := services.NewWorkflowProcessor(
+		services.NewPatternMatcher(),
+		services.NewPathTransformer(),
+		fileStateService,
+		nil,
+		&mockMessageTemplater{},
+		test.TestConfig(),
+	)
+
+	// Create workflow WITHOUT deprecation enabled
+	workflow := createTestWorkflow("test-workflow", []types.Transformation{
+		createMoveTransformation("src", "dest"),
+	})
+	// DeprecationCheck is nil - should not track deprecations
+
+	changedFiles := []types.ChangedFile{
+		{Path: "src/main.go", Status: "removed"},
+	}
+
+	err := processor.ProcessWorkflow(context.Background(), workflow, changedFiles, 1, "abc123")
+	require.NoError(t, err)
+
+	deprecated := fileStateService.GetFilesToDeprecate()
+	assert.Empty(t, deprecated, "expected NO deprecation tracking when DeprecationCheck is nil")
+
+	// Also test when DeprecationCheck exists but Enabled is false
+	workflow.DeprecationCheck = &types.DeprecationConfig{Enabled: false, File: "test.json"}
+	fileStateService.ClearFilesToDeprecate()
+
+	err = processor.ProcessWorkflow(context.Background(), workflow, changedFiles, 1, "abc123")
+	require.NoError(t, err)
+
+	deprecated = fileStateService.GetFilesToDeprecate()
+	assert.Empty(t, deprecated, "expected NO deprecation tracking when DeprecationCheck.Enabled is false")
 }
 
 // ============================================================================
@@ -845,7 +899,7 @@ func TestWorkflowProcessor_PathTransformationEdgeCases(t *testing.T) {
 				test.TestConfig(),
 			)
 
-			workflow := createTestWorkflow("test-workflow", []types.Transformation{tt.transform})
+			workflow := createTestWorkflowWithDeprecation("test-workflow", []types.Transformation{tt.transform})
 
 			changedFiles := []types.ChangedFile{
 				{Path: tt.sourcePath, Status: "removed"},
@@ -863,3 +917,59 @@ func TestWorkflowProcessor_PathTransformationEdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// ============================================================================
+// Tests for Auto-Merge Batching Behavior
+// ============================================================================
+
+// TestFileStateService_AutoMergeBatching_AllTrue tests that when all entries
+// in a batch have auto_merge: true, the batch retains auto_merge: true.
+func TestFileStateService_AutoMergeBatching_AllTrue(t *testing.T) {
+	fileStateService := services.NewFileStateService()
+
+	key := types.UploadKey{
+		RepoName:       "test-org/dest-repo",
+		BranchPath:     "main",
+		CommitStrategy: "pull_request",
+	}
+
+	// First upload with auto_merge: true
+	fileStateService.AddFileToUpload(key, types.UploadFileContent{
+		TargetBranch:   "main",
+		CommitStrategy: "pull_request",
+		AutoMergePR:    true,
+	})
+
+	uploads := fileStateService.GetFilesToUpload()
+	require.Len(t, uploads, 1, "expected one upload entry")
+	assert.True(t, uploads[key].AutoMergePR, "expected auto_merge to be true")
+}
+
+// TestFileStateService_AutoMergeBatching_AllFalse tests that when all entries
+// in a batch have auto_merge: false, the batch has auto_merge: false.
+func TestFileStateService_AutoMergeBatching_AllFalse(t *testing.T) {
+	fileStateService := services.NewFileStateService()
+
+	key := types.UploadKey{
+		RepoName:       "test-org/dest-repo",
+		BranchPath:     "main",
+		CommitStrategy: "pull_request",
+	}
+
+	// Upload with auto_merge: false
+	fileStateService.AddFileToUpload(key, types.UploadFileContent{
+		TargetBranch:   "main",
+		CommitStrategy: "pull_request",
+		AutoMergePR:    false,
+	})
+
+	uploads := fileStateService.GetFilesToUpload()
+	require.Len(t, uploads, 1, "expected one upload entry")
+	assert.False(t, uploads[key].AutoMergePR, "expected auto_merge to be false")
+}
+
+// Note: The actual conflict detection and AND logic happens in workflow_processor.go's
+// queueUpload function when adding files to an existing batch. Testing this requires
+// either mocking GitHub API calls or testing at the integration level.
+// The conflict warning is logged when workflows with different auto_merge settings
+// target the same repo, and AND logic is applied (any false results in false).

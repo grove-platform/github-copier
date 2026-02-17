@@ -142,7 +142,7 @@ func (wp *workflowProcessor) ProcessWorkflow(
 	for i := range matches {
 		mr := &matches[i]
 		if mr.isDelete {
-			wp.addToDeprecationMap(mr.workflow, mr.targetPath)
+			wp.addToDeprecationMap(mr.workflow, mr.targetPath, mr.file.Path, mr.prNumber)
 			filesMatched++
 			continue
 		}
@@ -379,17 +379,24 @@ func (wp *workflowProcessor) isExcluded(path string, excludePatterns []string) b
 	return false
 }
 
-// addToDeprecationMap adds a file to the deprecation map
-func (wp *workflowProcessor) addToDeprecationMap(workflow types.Workflow, targetPath string) {
+// addToDeprecationMap adds a file to the deprecation map if deprecation tracking is enabled
+func (wp *workflowProcessor) addToDeprecationMap(workflow types.Workflow, targetPath string, sourcePath string, prNumber int) {
+	// Only track deprecations if explicitly enabled
+	if workflow.DeprecationCheck == nil || !workflow.DeprecationCheck.Enabled {
+		return
+	}
+
 	deprecationFile := "deprecated_examples.json"
-	if workflow.DeprecationCheck != nil && workflow.DeprecationCheck.File != "" {
+	if workflow.DeprecationCheck.File != "" {
 		deprecationFile = workflow.DeprecationCheck.File
 	}
 
 	entry := types.DeprecatedFileEntry{
-		FileName: targetPath,
-		Repo:     workflow.Destination.Repo,
-		Branch:   workflow.Destination.Branch,
+		FileName:   targetPath,
+		Repo:       workflow.Destination.Repo,
+		Branch:     workflow.Destination.Branch,
+		SourcePath: sourcePath,
+		PRNumber:   prNumber,
 	}
 
 	wp.fileStateService.AddFileToDeprecate(deprecationFile, entry)
@@ -423,6 +430,25 @@ func (wp *workflowProcessor) queueUpload(
 			CommitStrategy: types.CommitStrategy(getCommitStrategyType(workflow)),
 			UsePRTemplate:  getUsePRTemplate(workflow),
 			AutoMergePR:    getAutoMerge(workflow),
+		}
+	} else {
+		// When batching multiple workflows, use AND logic for auto-merge (conservative):
+		// auto-merge is only enabled if ALL workflows in the batch want it.
+		// Log a warning when workflows have conflicting auto-merge settings.
+		workflowAutoMerge := getAutoMerge(workflow)
+		if workflowAutoMerge != content.AutoMergePR {
+			LogWarning("Workflows in batch have conflicting auto_merge settings; using AND logic (auto-merge disabled)",
+				"workflow", workflow.Name,
+				"target", key.RepoName,
+				"workflow_auto_merge", workflowAutoMerge,
+				"batch_auto_merge", content.AutoMergePR,
+			)
+			// AND logic: if either is false, result is false
+			content.AutoMergePR = false
+		}
+		// For PR template, use OR logic - if any workflow wants it, use it
+		if getUsePRTemplate(workflow) && !content.UsePRTemplate {
+			content.UsePRTemplate = true
 		}
 	}
 
