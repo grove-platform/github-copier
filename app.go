@@ -140,6 +140,7 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Printf("║  Dry Run:      %-48v║\n", config.DryRun)
 	fmt.Printf("║  Audit Log:    %-48v║\n", config.AuditEnabled)
 	fmt.Printf("║  Metrics:      %-48v║\n", config.MetricsEnabled)
+	fmt.Printf("║  Slack:        %-48v║\n", config.SlackEnabled)
 	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 }
