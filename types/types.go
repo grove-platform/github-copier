@@ -92,10 +92,12 @@ type Configs struct {
 }
 type DeprecationFile []DeprecatedFileEntry
 type DeprecatedFileEntry struct {
-	FileName  string `json:"filename"`
-	Repo      string `json:"repo"`
-	Branch    string `json:"branch"`
-	DeletedOn string `json:"deleted_on"`
+	FileName   string `json:"filename"`
+	Repo       string `json:"repo"`
+	Branch     string `json:"branch"`
+	DeletedOn  string `json:"deleted_on"`
+	SourcePath string `json:"source_path,omitempty"` // Original source file path
+	PRNumber   int    `json:"pr_number,omitempty"`   // PR that caused the deletion
 }
 
 // **** UPLOAD TYPES **** //

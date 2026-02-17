@@ -74,7 +74,27 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 		}
 	}
 
+	// Build a set of existing entries for duplicate detection
+	// Key format: "filename|repo|branch" to identify unique entries
+	existingEntries := make(map[string]bool)
+	for _, entry := range deprecationFile {
+		key := entry.FileName + "|" + entry.Repo + "|" + entry.Branch
+		existingEntries[key] = true
+	}
+
+	entriesAdded := 0
 	for key, value := range filesToDeprecate {
+		// Check for duplicates before appending (prevents issues with webhook redelivery)
+		entryKey := key + "|" + value.TargetRepo + "|" + value.TargetBranch
+		if existingEntries[entryKey] {
+			LogInfo("Skipping duplicate deprecation entry",
+				"filename", key,
+				"repo", value.TargetRepo,
+				"branch", value.TargetBranch,
+			)
+			continue
+		}
+
 		newDeprecatedFileEntry := types.DeprecatedFileEntry{
 			FileName:  key,
 			Repo:      value.TargetRepo,
@@ -82,6 +102,14 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 			DeletedOn: time.Now().Format(time.RFC3339),
 		}
 		deprecationFile = append(deprecationFile, newDeprecatedFileEntry)
+		existingEntries[entryKey] = true // Mark as added to prevent duplicates within current batch
+		entriesAdded++
+	}
+
+	// Early return if all entries were duplicates
+	if entriesAdded == 0 {
+		LogInfo("All deprecation entries already exist; skipping update")
+		return
 	}
 
 	updatedJSON, err := json.MarshalIndent(deprecationFile, "", "  ")
