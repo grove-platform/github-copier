@@ -436,14 +436,14 @@ go tool cover -html=coverage.out
 Test without making actual changes:
 
 ```bash
-DRY_RUN=true ./github-copier
+./github-copier -env .env.test -dry-run
 ```
 
 In dry-run mode:
-- Webhooks are processed
-- Files are matched and transformed
-- Audit events are logged
-- **NO actual commits or PRs are created**
+- Webhooks are received and processed through the full pipeline
+- Files are matched and path transformations are applied
+- GitHub auth failures are tolerated (logged as warnings)
+- **No commits, PRs, or file uploads are created**
 
 ### Structured Logging
 
@@ -465,12 +465,18 @@ github-copier/
 ├── github-app-manifest.yml   # GitHub App permissions documentation
 ├── cmd/
 │   ├── config-validator/     # CLI validation tool
+│   ├── test-pem/             # PEM key validation tool
 │   └── test-webhook/         # Webhook testing tool
 ├── configs/
 │   ├── environment.go        # Environment configuration
 │   ├── .env.local.example    # Local environment template
-│   ├── env.yaml.example      # YAML environment template
 │   └── copier-config.example.yaml # Config template
+├── scripts/
+│   ├── release.sh            # Create versioned releases
+│   ├── deploy-cloudrun.sh    # Cloud Run deployment
+│   ├── ci-local.sh           # Run CI checks locally
+│   ├── integration-test.sh   # End-to-end integration tests
+│   └── ...                   # Additional helper scripts
 ├── services/
 │   ├── webhook_handler_new.go # Webhook handler (orchestrator)
 │   ├── workflow_processor.go  # ProcessWorkflow() - core logic
@@ -484,21 +490,21 @@ github-copier/
 │   ├── token_manager.go       # Thread-safe token state management
 │   ├── rate_limit.go          # GitHub API rate limit handling
 │   ├── delivery_tracker.go    # Webhook idempotency (deduplication)
-│   ├── errors.go              # Sentinel errors
+│   ├── errors.go              # Sentinel errors & classification
 │   ├── logger.go              # Structured logging (slog)
 │   ├── service_container.go   # Dependency injection container
 │   ├── file_state_service.go  # Thread-safe upload/deprecation queues
-│   ├── health_metrics.go      # Health, readiness & metrics endpoints
-│   ├── audit_logger.go        # MongoDB audit logging
+│   ├── health_metrics.go      # Health, readiness, metrics & config endpoints
 │   ├── slack_notifier.go      # Slack notifications
 │   └── pr_template_fetcher.go # PR template resolution
 ├── types/
 │   ├── config.go              # Configuration types
 │   └── types.go               # Core types
 └── docs/
-    ├── ARCHITECTURE.md        # Architecture overview
-    ├── DEPLOYMENT.md          # Deployment guide (Cloud Run)
-    ├── FAQ.md                 # Frequently asked questions
+    ├── DEPLOYMENT.md          # Deployment & rollback guide
+    ├── CONFIG-REFERENCE.md    # Environment variables & YAML schema
+    ├── WEBHOOK-TESTING.md     # Webhook testing guide
+    ├── SLACK-NOTIFICATIONS.md # Slack integration guide
     └── ...                    # Additional documentation
 ```
 
@@ -511,23 +517,51 @@ container := NewServiceContainer(config)
 // All services initialized and wired together
 ```
 
+## Releasing
+
+The project uses semantic versioning (`vMAJOR.MINOR.PATCH`) with GitHub Releases. Pushing a version tag triggers CI to build, test, and deploy to Cloud Run.
+
+### Release Workflow
+
+1. Merge your changes to `main`.
+2. Run the release script:
+
+```bash
+# Preview what will happen (no changes made)
+./scripts/release.sh v1.2.0 --dry-run
+
+# Create the release
+./scripts/release.sh v1.2.0
+```
+
+The script:
+1. Validates the version format and that the working tree is clean on `main`
+2. Renames the `[Unreleased]` section in `CHANGELOG.md` to `[v1.2.0] - YYYY-MM-DD`
+3. Commits the changelog update and creates an annotated git tag
+4. Pushes the tag to origin — this triggers the CI `deploy` job
+5. Creates a GitHub Release with the changelog excerpt
+
+### CI Deploy Pipeline
+
+The `deploy` job in `.github/workflows/ci.yml` runs only on version tag pushes:
+
+- Authenticates to Google Cloud via Workload Identity Federation
+- Deploys to Cloud Run with the version stamped as a build arg (`VERSION`)
+- Tags the Cloud Run revision with the version for easy rollback
+
+### Version Stamping
+
+The version tag is injected at build time via `-ldflags`:
+
+```bash
+go build -ldflags "-X main.Version=v1.2.0" -o github-copier .
+```
+
+The version appears in the startup banner and the `/health` endpoint response.
+
 ## Deployment
 
-See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete deployment guide.
-
-### Google Cloud Run
-
-```bash
-cd github-copier
-./scripts/deploy-cloudrun.sh
-```
-
-### Docker
-
-```bash
-docker build -t github-copier .
-docker run -p 8080:8080 --env-file env.yaml github-copier
-```
+See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the complete deployment and rollback guide.
 
 ## Security
 
@@ -535,7 +569,6 @@ docker run -p 8080:8080 --env-file env.yaml github-copier
 - **Webhook Idempotency** - Duplicate delivery detection via `X-GitHub-Delivery`
 - **Secret Management** - Google Cloud Secret Manager
 - **Least Privilege** - Minimal GitHub App permissions (see `github-app-manifest.yml`)
-- **Audit Trail** - Complete operation logging
 
 ## Documentation
 
@@ -549,19 +582,20 @@ docker run -p 8080:8080 --env-file env.yaml github-copier
 
 ### Reference
 
+- **[Config Reference](docs/CONFIG-REFERENCE.md)** - Environment variables and YAML schema
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and components
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[FAQ](docs/FAQ.md)** - Frequently asked questions
-- **[Deprecation Tracking](docs/DEPRECATION-TRACKING-EXPLAINED.md)** - How deprecation tracking works
+- **[Changelog](CHANGELOG.md)** - Release history
 
 ### Features
 
 - **[Slack Notifications](docs/SLACK-NOTIFICATIONS.md)** - Slack integration guide
-- **[Webhook Testing](docs/WEBHOOK-TESTING.md)** - Test with real PR data
+- **[Webhook Testing](docs/WEBHOOK-TESTING.md)** - Webhook testing guide
 - **[GitHub App Manifest](github-app-manifest.yml)** - Required permissions and events
 
 ### Tools
 
 - **[Config Validator](cmd/config-validator/README.md)** - CLI tool for validating configs
 - **[Test Webhook](cmd/test-webhook/README.md)** - CLI tool for testing webhooks
-- **[Scripts](scripts/README.md)** - Helper scripts for deployment and testing
+- **[Scripts](scripts/README.md)** - Helper scripts for deployment, testing, and releases
