@@ -398,7 +398,7 @@ func TestWorkflowProcessor_RegexTransformation(t *testing.T) {
 // ============================================================================
 
 func TestWorkflowProcessor_ExcludePatterns(t *testing.T) {
-	// Note: Exclude patterns use glob matching (doublestar), not regex
+	// Note: Exclude patterns use regex matching (consistent with documentation and SourcePattern.ExcludePatterns)
 	tests := []struct {
 		name         string
 		exclude      []string
@@ -406,46 +406,64 @@ func TestWorkflowProcessor_ExcludePatterns(t *testing.T) {
 		wantExcluded bool
 	}{
 		{
-			name:         "exclude by extension glob",
-			exclude:      []string{"**/*_test.go"},
+			name:         "exclude by extension regex",
+			exclude:      []string{".*_test\\.go$"},
 			sourcePath:   "src/main_test.go",
 			wantExcluded: true,
 		},
 		{
-			name:         "exclude by directory glob",
-			exclude:      []string{"vendor/**"},
+			name:         "exclude by directory regex",
+			exclude:      []string{"^vendor/"},
 			sourcePath:   "vendor/pkg/lib.go",
 			wantExcluded: true,
 		},
 		{
-			name:         "exclude by filename glob",
-			exclude:      []string{"**/.DS_Store"},
+			name:         "exclude by filename regex",
+			exclude:      []string{"\\.DS_Store$"},
 			sourcePath:   "src/.DS_Store",
 			wantExcluded: true,
 		},
 		{
 			name:         "not excluded - no match",
-			exclude:      []string{"**/*_test.go"},
+			exclude:      []string{".*_test\\.go$"},
 			sourcePath:   "src/main.go",
 			wantExcluded: false,
 		},
 		{
 			name:         "multiple exclude patterns - first matches",
-			exclude:      []string{"**/*_test.go", "vendor/**"},
+			exclude:      []string{".*_test\\.go$", "^vendor/"},
 			sourcePath:   "src/main_test.go",
 			wantExcluded: true,
 		},
 		{
 			name:         "multiple exclude patterns - second matches",
-			exclude:      []string{"**/*_test.go", "vendor/**"},
+			exclude:      []string{".*_test\\.go$", "^vendor/"},
 			sourcePath:   "vendor/lib.go",
 			wantExcluded: true,
 		},
 		{
 			name:         "multiple exclude patterns - none match",
-			exclude:      []string{"**/*_test.go", "vendor/**"},
+			exclude:      []string{".*_test\\.go$", "^vendor/"},
 			sourcePath:   "src/main.go",
 			wantExcluded: false,
+		},
+		{
+			name:         "exclude spec files",
+			exclude:      []string{".*\\.spec\\.ts$"},
+			sourcePath:   "src/utils/logger.spec.ts",
+			wantExcluded: true,
+		},
+		{
+			name:         "exclude eslint config",
+			exclude:      []string{"\\.eslintrc"},
+			sourcePath:   "examples/typescript/.eslintrc.json",
+			wantExcluded: true,
+		},
+		{
+			name:         "exclude node_modules directory",
+			exclude:      []string{"node_modules/"},
+			sourcePath:   "examples/typescript/node_modules/pkg/index.js",
+			wantExcluded: true,
 		},
 	}
 

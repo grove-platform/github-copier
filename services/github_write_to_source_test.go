@@ -10,7 +10,7 @@ import (
 
 func TestUpdateDeprecationFile_EmptyMap(t *testing.T) {
 	// When the map is empty, UpdateDeprecationFile should return early without panic.
-	UpdateDeprecationFile(context.Background(), configs.NewConfig(), map[string]types.Configs{})
+	UpdateDeprecationFile(context.Background(), configs.NewConfig(), map[string]types.Configs{}, "owner", "repo", "main")
 }
 
 func TestUpdateDeprecationFile_WithFiles(t *testing.T) {

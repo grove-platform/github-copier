@@ -11,17 +11,22 @@ import (
 	"github.com/grove-platform/github-copier/types"
 )
 
-// UpdateDeprecationFile updates the deprecation file with the provided data map.
-func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToDeprecate map[string]types.Configs) {
+// UpdateDeprecationFile updates the deprecation file in the source repo with the provided data map.
+// The deprecation file tracks which files have been deleted from the source repo.
+func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToDeprecate map[string]types.Configs, sourceRepoOwner, sourceRepoName, sourceBranch string) {
 	// Early return if there are no files to deprecate - prevents blank commits
 	if len(filesToDeprecate) == 0 {
 		LogInfo("No deprecated files to record; skipping deprecation file update")
 		return
 	}
 
+	sourceRepo := fmt.Sprintf("%s/%s", sourceRepoOwner, sourceRepoName)
+
 	if config.DryRun {
 		LogInfo("[DRY-RUN] Would update deprecation file",
 			"file", config.DeprecationFile,
+			"source_repo", sourceRepo,
+			"source_branch", sourceBranch,
 			"deprecated_count", len(filesToDeprecate),
 		)
 		for path := range filesToDeprecate {
@@ -30,38 +35,43 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 		return
 	}
 
-	// Fetch the deprecation file from the repository
+	// Fetch the deprecation file from the source repository
 	client := GetRestClient()
 
 	fileContent, _, _, err := client.Repositories.GetContents(
 		ctx,
-		config.ConfigRepoOwner,
-		config.ConfigRepoName,
+		sourceRepoOwner,
+		sourceRepoName,
 		config.DeprecationFile,
 		&github.RepositoryContentGetOptions{
-			Ref: config.ConfigRepoBranch,
+			Ref: sourceBranch,
 		},
 	)
-	if err != nil {
-		LogError("Error getting deprecation file", "error", err)
-		return
-	}
-	if fileContent == nil {
-		LogError("Deprecation file content is nil")
-		return
-	}
-
-	content, err := fileContent.GetContent()
-	if err != nil {
-		LogError("Error decoding deprecation file", "error", err)
-		return
-	}
 
 	var deprecationFile types.DeprecationFile
-	err = json.Unmarshal([]byte(content), &deprecationFile)
+
 	if err != nil {
-		LogError("Failed to unmarshal deprecation file", "file", config.DeprecationFile, "error", err)
+		// If file doesn't exist, start with empty array
+		LogInfo("Deprecation file not found, will create new one",
+			"file", config.DeprecationFile,
+			"source_repo", sourceRepo,
+		)
+		deprecationFile = types.DeprecationFile{}
+	} else if fileContent == nil {
+		LogError("Deprecation file content is nil")
 		return
+	} else {
+		content, err := fileContent.GetContent()
+		if err != nil {
+			LogError("Error decoding deprecation file", "error", err)
+			return
+		}
+
+		err = json.Unmarshal([]byte(content), &deprecationFile)
+		if err != nil {
+			LogError("Failed to unmarshal deprecation file", "file", config.DeprecationFile, "error", err)
+			return
+		}
 	}
 
 	for key, value := range filesToDeprecate {
@@ -81,39 +91,48 @@ func UpdateDeprecationFile(ctx context.Context, config *configs.Config, filesToD
 	}
 
 	message := fmt.Sprintf("Updating %s.", config.DeprecationFile)
-	uploadDeprecationFileChanges(ctx, config, message, string(updatedJSON))
+	uploadDeprecationFileChanges(ctx, config, message, string(updatedJSON), sourceRepoOwner, sourceRepoName, sourceBranch, fileContent)
 
-	LogInfo("Successfully updated deprecation file", "file", config.DeprecationFile, "entries", len(filesToDeprecate))
+	LogInfo("Successfully updated deprecation file",
+		"file", config.DeprecationFile,
+		"source_repo", sourceRepo,
+		"entries", len(filesToDeprecate),
+	)
 }
 
-func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, message string, newDeprecationFileContents string) {
+func uploadDeprecationFileChanges(ctx context.Context, config *configs.Config, message string, newDeprecationFileContents string, sourceRepoOwner, sourceRepoName, sourceBranch string, existingContent *github.RepositoryContent) {
 	client := GetRestClient()
-
-	targetFileContent, _, _, err := client.Repositories.GetContents(ctx, config.ConfigRepoOwner, config.ConfigRepoName,
-		config.DeprecationFile, &github.RepositoryContentGetOptions{Ref: config.ConfigRepoBranch})
-
-	if err != nil {
-		LogError("Error getting deprecation file contents", "error", err)
-		return
-	}
-	if targetFileContent == nil {
-		LogError("Target deprecation file content is nil")
-		return
-	}
 
 	options := &github.RepositoryContentFileOptions{
 		Message: github.Ptr(message),
 		Content: []byte(newDeprecationFileContents),
-		Branch:  github.Ptr(config.ConfigRepoBranch),
-		Committer: &github.CommitAuthor{Name: github.Ptr(config.CommitterName),
-			Email: github.Ptr(config.CommitterEmail)},
+		Branch:  github.Ptr(sourceBranch),
+		Committer: &github.CommitAuthor{
+			Name:  github.Ptr(config.CommitterName),
+			Email: github.Ptr(config.CommitterEmail),
+		},
 	}
 
-	options.SHA = targetFileContent.SHA
-	_, _, err = client.Repositories.UpdateFile(ctx, config.ConfigRepoOwner, config.ConfigRepoName, config.DeprecationFile, options)
+	var err error
+	if existingContent != nil && existingContent.SHA != nil {
+		// Update existing file
+		options.SHA = existingContent.SHA
+		_, _, err = client.Repositories.UpdateFile(ctx, sourceRepoOwner, sourceRepoName, config.DeprecationFile, options)
+	} else {
+		// Create new file
+		_, _, err = client.Repositories.CreateFile(ctx, sourceRepoOwner, sourceRepoName, config.DeprecationFile, options)
+	}
+
 	if err != nil {
-		LogError("Cannot update deprecation file", "error", err)
+		LogError("Cannot update deprecation file",
+			"error", err,
+			"source_repo", fmt.Sprintf("%s/%s", sourceRepoOwner, sourceRepoName),
+		)
+		return
 	}
 
-	LogInfo("Deprecation file updated.")
+	LogInfo("Deprecation file updated.",
+		"source_repo", fmt.Sprintf("%s/%s", sourceRepoOwner, sourceRepoName),
+		"branch", sourceBranch,
+	)
 }

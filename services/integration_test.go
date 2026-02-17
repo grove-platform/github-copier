@@ -166,9 +166,9 @@ func TestIntegration_MergedPR_DirectCommit(t *testing.T) {
 		httpmock.NewStringResponder(200, `{}`),
 	)
 
-	// 5. Mock deprecation file endpoint (UpdateDeprecationFile reads then updates)
+	// 5. Mock deprecation file endpoint (UpdateDeprecationFile reads from source repo)
 	httpmock.RegisterRegexpResponder("GET",
-		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/config-repo/contents/`),
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+owner+`/`+sourceRepo+`/contents/deprecated`),
 		httpmock.NewStringResponder(404, `{"message":"Not Found"}`),
 	)
 

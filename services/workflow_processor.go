@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -363,15 +364,15 @@ func (wp *workflowProcessor) extractGlobVariables(pattern, path string) map[stri
 	return variables
 }
 
-// isExcluded checks if a file path matches any exclude pattern
+// isExcluded checks if a file path matches any exclude pattern (using regex)
 func (wp *workflowProcessor) isExcluded(path string, excludePatterns []string) bool {
 	for _, pattern := range excludePatterns {
-		matched, err := doublestar.Match(pattern, path)
+		re, err := regexp.Compile(pattern)
 		if err != nil {
-			LogWarning("Invalid exclude pattern", "pattern", pattern, "error", err)
+			LogWarning("Invalid exclude regex pattern", "pattern", pattern, "error", err)
 			continue
 		}
-		if matched {
+		if re.MatchString(path) {
 			return true
 		}
 	}
