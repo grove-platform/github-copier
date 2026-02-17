@@ -382,7 +382,7 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 
 	// 5. Process workflows independently, collecting per-workflow errors (#6)
 	workflowErrors := processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
-	uploadAndDeprecateFiles(ctx, config, container)
+	uploadAndDeprecateFiles(ctx, config, container, repoOwner, repoName, baseBranch)
 
 	// 6. Collect unique target repos for notification
 	targetRepos := collectTargetRepos(yamlConfig)
@@ -458,14 +458,14 @@ func fetchChangedFiles(ctx context.Context, config *configs.Config, container *S
 }
 
 // uploadAndDeprecateFiles drains the file-state queues, uploading files to target
-// repos and updating the deprecation file.
-func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer) {
+// repos and updating the deprecation file in the source repo.
+func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, sourceRepoOwner, sourceRepoName, sourceBranch string) {
 	// Upload queued files
 	filesToUpload := container.FileStateService.GetFilesToUpload()
 	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
-	// Build deprecation map and update file
+	// Build deprecation map and update file in the source repo
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
 	filesToDeprecate := make(map[string]types.Configs)
 	for _, entries := range deprecationMap {
@@ -476,7 +476,7 @@ func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, contai
 			}
 		}
 	}
-	UpdateDeprecationFile(ctx, config, filesToDeprecate)
+	UpdateDeprecationFile(ctx, config, filesToDeprecate, sourceRepoOwner, sourceRepoName, sourceBranch)
 	container.FileStateService.ClearFilesToDeprecate()
 }
 
