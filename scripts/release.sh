@@ -147,8 +147,8 @@ if [ "$DRY_RUN" = true ]; then
   RELEASE_NOTES=$(sed -n '/^## \[Unreleased\]/,/^## \[/{/^## \[/d;p;}' "$CHANGELOG")
 fi
 
-# Trim leading/trailing whitespace
-RELEASE_NOTES=$(echo "$RELEASE_NOTES" | sed -e '/./,$!d' -e :a -e '/^\n*$/{$d;N;ba}')
+# Trim leading/trailing whitespace (using perl for macOS compatibility)
+RELEASE_NOTES=$(echo "$RELEASE_NOTES" | perl -0777 -pe 's/^\s+//; s/\s+$//')
 
 if [ -z "$RELEASE_NOTES" ]; then
   warn "No release notes extracted — the GitHub Release will have minimal content"
