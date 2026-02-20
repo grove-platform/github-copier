@@ -1,10 +1,11 @@
 package services_test
 
 import (
+	"context"
 	"encoding/base64"
 	"testing"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/grove-platform/github-copier/services"
 	"github.com/stretchr/testify/require"
 
@@ -99,7 +100,8 @@ func TestRetrieveFileContents_Success(t *testing.T) {
 	payload := "hello"
 	stubContentsForBothOwners(path, b64(payload), owner, repo)
 
-	rc, err := services.RetrieveFileContents(path)
+	cfg := test.TestConfig()
+	rc, err := services.RetrieveFileContents(context.Background(), cfg, path)
 	require.NoError(t, err, "expected RetrieveFileContents to succeed")
 	require.IsType(t, github.RepositoryContent{}, rc)
 	require.Equal(t, path, rc.GetPath())

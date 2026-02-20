@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/shurcooL/githubv4"
 )
 
@@ -92,10 +92,12 @@ type Configs struct {
 }
 type DeprecationFile []DeprecatedFileEntry
 type DeprecatedFileEntry struct {
-	FileName  string `json:"filename"`
-	Repo      string `json:"repo"`
-	Branch    string `json:"branch"`
-	DeletedOn string `json:"deleted_on"`
+	FileName   string `json:"filename"`
+	Repo       string `json:"repo"`
+	Branch     string `json:"branch"`
+	DeletedOn  string `json:"deleted_on"`
+	SourcePath string `json:"source_path,omitempty"` // Original source file path
+	PRNumber   int    `json:"pr_number,omitempty"`   // PR that caused the deletion
 }
 
 // **** UPLOAD TYPES **** //
@@ -103,8 +105,8 @@ type DeprecatedFileEntry struct {
 type UploadKey struct {
 	RepoName       string `json:"repo_name"`
 	BranchPath     string `json:"branch_path"`
-	RuleName       string `json:"rule_name"`        // Include rule name to allow multiple rules targeting same repo/branch
-	CommitStrategy string `json:"commit_strategy"`  // Include strategy to differentiate direct vs PR
+	RuleName       string `json:"rule_name"`       // Include rule name to allow multiple rules targeting same repo/branch
+	CommitStrategy string `json:"commit_strategy"` // Include strategy to differentiate direct vs PR
 }
 
 type UploadFileContent struct {
@@ -114,7 +116,7 @@ type UploadFileContent struct {
 	CommitMessage  string                     `json:"commit_message,omitempty"`
 	PRTitle        string                     `json:"pr_title,omitempty"`
 	PRBody         string                     `json:"pr_body,omitempty"`
-	UsePRTemplate  bool                       `json:"use_pr_template,omitempty"`  // If true, fetch and merge PR template from target repo
+	UsePRTemplate  bool                       `json:"use_pr_template,omitempty"` // If true, fetch and merge PR template from target repo
 	AutoMergePR    bool                       `json:"auto_merge_pr,omitempty"`
 }
 

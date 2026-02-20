@@ -88,8 +88,8 @@ source configs/.env
 
 1. **Check actual file paths:**
    ```bash
-   # Look for "sample file path" in logs
-   grep "sample file path" logs/app.log
+   # Look for "sample file path" in logs (stdout or Cloud Logging)
+   # Locally: check terminal output or redirect stdout to a file
    ```
 
 2. **Test your pattern:**
@@ -206,11 +206,11 @@ pattern: "^examples/(?P<lang>[^/]+)/(?P<file>.+)$"
 
 1. **Check application logs:**
    ```bash
-   # Local
-   tail -f logs/app.log
+   # Local: logs go to stdout (JSON format)
+   LOG_LEVEL=debug ./github-copier
    
-   # GCP
-   gcloud app logs tail -s default
+   # Cloud Run
+   gcloud run services logs read github-copier --limit=50
    ```
 
 2. **Check for common errors:**
@@ -333,10 +333,7 @@ export COPIER_DISABLE_CLOUD_LOGGING=true
    # Should be: true
    ```
 
-4. **Check application logs:**
-   ```bash
-   grep "slack" logs/app.log
-   ```
+4. **Check application logs** (search stdout for "slack" in local output)
 
 ### Slack Notifications in Wrong Channel
 
@@ -469,10 +466,7 @@ db.audit_events.find().sort({timestamp: -1}).limit(10).pretty()
 
 ### Trace a Specific Request
 
-```bash
-# Look for request ID in logs
-grep "request_id=abc123" logs/app.log
-```
+Logs are structured JSON (via `log/slog`) and written to stdout. In production on Cloud Run, use Cloud Logging to search by structured fields.
 
 ## Getting Help
 

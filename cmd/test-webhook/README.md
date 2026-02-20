@@ -31,7 +31,7 @@ Send a pre-made example payload to the webhook endpoint.
 
 **Options:**
 - `-payload` - Path to JSON payload file (required)
-- `-url` - Webhook URL (default: `http://localhost:8080/webhook`)
+- `-url` - Webhook URL (default: `http://localhost:8080/events`)
 
 **Example:**
 
@@ -41,7 +41,7 @@ Send a pre-made example payload to the webhook endpoint.
 
 # Use custom URL
 ./test-webhook -payload testdata/example-pr-merged.json \
-  -url http://localhost:8080/webhook
+  -url http://localhost:8080/events
 ```
 
 **Output:**
@@ -68,7 +68,7 @@ Fetch real PR data from GitHub and send it to the webhook.
 - `-pr` - Pull request number (required)
 - `-owner` - Repository owner (required)
 - `-repo` - Repository name (required)
-- `-url` - Webhook URL (default: `http://localhost:8080/webhook`)
+- `-url` - Webhook URL (default: `http://localhost:8080/events`)
 
 **Environment Variables:**
 - `GITHUB_TOKEN` - GitHub personal access token (required for real PR data)
@@ -84,7 +84,7 @@ export GITHUB_TOKEN=ghp_your_token_here
 
 # Test with custom URL
 ./test-webhook -pr 42 -owner mongodb -repo docs-code-examples \
-  -url http://localhost:8080/webhook
+  -url http://localhost:8080/events
 ```
 
 **Output:**
@@ -108,13 +108,12 @@ Test your configuration locally before deploying:
 
 ```bash
 # 1. Start app in dry-run mode
-DRY_RUN=true make run-local-quick
+./scripts/run-local.sh
 
 # 2. In another terminal, send test webhook
 ./test-webhook -payload testdata/example-pr-merged.json
 
-# 3. Check logs
-tail -f logs/app.log
+# 3. Check logs (JSON format on stdout via slog)
 ```
 
 ### Testing Pattern Matching
@@ -123,7 +122,7 @@ Test if your patterns match real PR files:
 
 ```bash
 # 1. Start app
-make run-local-quick
+./scripts/run-local.sh
 
 # 2. Send webhook with real PR data
 export GITHUB_TOKEN=ghp_...
@@ -145,7 +144,7 @@ DRY_RUN=true ./github-copier &
 ./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Check logs for transformed paths
-grep "transformed path" logs/app.log
+# Check stdout for "transformed path" entries
 ```
 
 ### Testing Slack Notifications
@@ -176,7 +175,7 @@ export LOG_LEVEL=debug
 ./test-webhook -payload testdata/example-pr-merged.json
 
 # 3. Review detailed logs
-grep "DEBUG" logs/app.log
+# Run with LOG_LEVEL=debug for verbose output
 ```
 
 ## Example Payloads
@@ -247,7 +246,7 @@ export GITHUB_TOKEN=ghp_...
 ./test-webhook -pr 42 -owner myorg -repo myrepo
 
 # 5. Review logs
-grep "matched" logs/app.log
+# Check stdout for "matched" entries
 ```
 
 ## Troubleshooting
@@ -286,8 +285,8 @@ Response: 404 Not Found
 
 **Solution:** Check the webhook URL:
 ```bash
-# Default is /webhook
-./test-webhook -payload test.json -url http://localhost:8080/webhook
+# Default is /events
+./test-webhook -payload test.json -url http://localhost:8080/events
 ```
 
 ### GitHub API Rate Limit
@@ -364,37 +363,6 @@ chmod +x run-tests.sh
 ./run-tests.sh
 ```
 
-### Integration with CI/CD
-
-```yaml
-# .github/workflows/test.yml
-name: Test Examples Copier
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      
-      - name: Set up Go
-        uses: actions/setup-go@v2
-        with:
-          go-version: 1.23.4
-      
-      - name: Build
-        run: |
-          go build -o github-copier .
-          go build -o test-webhook ./cmd/test-webhook
-      
-      - name: Test
-        run: |
-          DRY_RUN=true ./github-copier &
-          sleep 2
-          ./test-webhook -payload testdata/example-pr-merged.json
-```
-
 ## Exit Codes
 
 - `0` - Success
@@ -405,5 +373,4 @@ jobs:
 - [Webhook Testing Guide](../../docs/WEBHOOK-TESTING.md) - Comprehensive testing guide
 - [Local Testing](../../docs/LOCAL-TESTING.md) - Local development
 - [Test Payloads](../../testdata/README.md) - Example payloads
-- [Quick Reference](../../QUICK-REFERENCE.md) - All commands
 

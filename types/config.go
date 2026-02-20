@@ -69,17 +69,17 @@ type YAMLConfig struct {
 
 // MainConfig represents the central configuration file that references workflow configs
 type MainConfig struct {
-	Defaults        *Defaults         `yaml:"defaults,omitempty" json:"defaults,omitempty"`
+	Defaults        *Defaults           `yaml:"defaults,omitempty" json:"defaults,omitempty"`
 	WorkflowConfigs []WorkflowConfigRef `yaml:"workflow_configs" json:"workflow_configs"`
 }
 
 // WorkflowConfigRef references a workflow configuration file
 type WorkflowConfigRef struct {
-	Source    string     `yaml:"source" json:"source"` // "local", "repo", or "inline"
-	Path      string     `yaml:"path,omitempty" json:"path,omitempty"` // Path to config file
-	Repo      string     `yaml:"repo,omitempty" json:"repo,omitempty"` // Repository (for source="repo")
-	Branch    string     `yaml:"branch,omitempty" json:"branch,omitempty"` // Branch (for source="repo")
-	Enabled   *bool      `yaml:"enabled,omitempty" json:"enabled,omitempty"` // Whether this workflow config is enabled (default: true)
+	Source    string     `yaml:"source" json:"source"`                           // "local", "repo", or "inline"
+	Path      string     `yaml:"path,omitempty" json:"path,omitempty"`           // Path to config file
+	Repo      string     `yaml:"repo,omitempty" json:"repo,omitempty"`           // Repository (for source="repo")
+	Branch    string     `yaml:"branch,omitempty" json:"branch,omitempty"`       // Branch (for source="repo")
+	Enabled   *bool      `yaml:"enabled,omitempty" json:"enabled,omitempty"`     // Whether this workflow config is enabled (default: true)
 	Workflows []Workflow `yaml:"workflows,omitempty" json:"workflows,omitempty"` // Inline workflows (for source="inline")
 }
 
@@ -121,9 +121,9 @@ func (r *RefOrValue[T]) GetValue() *T {
 
 // TransformationsOrRef can be either inline transformations or a $ref
 type TransformationsOrRef struct {
-	Ref              string           `yaml:"-" json:"-"`
-	Transformations  []Transformation `yaml:"-" json:"-"`
-	isRef            bool
+	Ref             string           `yaml:"-" json:"-"`
+	Transformations []Transformation `yaml:"-" json:"-"`
+	isRef           bool
 }
 
 // UnmarshalYAML implements custom YAML unmarshaling for transformations
@@ -299,14 +299,14 @@ type Workflow struct {
 // Source defines the source repository and branch
 type Source struct {
 	Repo           string `yaml:"repo" json:"repo"`
-	Branch         string `yaml:"branch,omitempty" json:"branch,omitempty"`         // defaults to "main"
+	Branch         string `yaml:"branch,omitempty" json:"branch,omitempty"`                   // defaults to "main"
 	InstallationID string `yaml:"installation_id,omitempty" json:"installation_id,omitempty"` // optional override
 }
 
 // Destination defines the destination repository and branch
 type Destination struct {
 	Repo           string `yaml:"repo" json:"repo"`
-	Branch         string `yaml:"branch,omitempty" json:"branch,omitempty"`         // defaults to "main"
+	Branch         string `yaml:"branch,omitempty" json:"branch,omitempty"`                   // defaults to "main"
 	InstallationID string `yaml:"installation_id,omitempty" json:"installation_id,omitempty"` // optional override
 }
 
@@ -343,14 +343,14 @@ type CopyTransform struct {
 
 // GlobTransform uses glob patterns with path transformation
 type GlobTransform struct {
-	Pattern   string `yaml:"pattern" json:"pattern"`       // Glob pattern (e.g., "mflix/server/**/*.js")
-	Transform string `yaml:"transform" json:"transform"`   // Path transform template (e.g., "server/${relative_path}")
+	Pattern   string `yaml:"pattern" json:"pattern"`     // Glob pattern (e.g., "mflix/server/**/*.js")
+	Transform string `yaml:"transform" json:"transform"` // Path transform template (e.g., "server/${relative_path}")
 }
 
 // RegexTransform uses regex patterns with named capture groups
 type RegexTransform struct {
-	Pattern   string `yaml:"pattern" json:"pattern"`       // Regex pattern with named groups
-	Transform string `yaml:"transform" json:"transform"`   // Path transform template using captured groups
+	Pattern   string `yaml:"pattern" json:"pattern"`     // Regex pattern with named groups
+	Transform string `yaml:"transform" json:"transform"` // Path transform template using captured groups
 }
 
 // Validate validates the YAML configuration
@@ -658,7 +658,7 @@ func NewTransformContext(sourcePath string, variables map[string]string) *Transf
 // AddBuiltInVariables adds built-in variables like ${path}, ${filename}, ${dir}, ${ext}
 func (tc *TransformContext) AddBuiltInVariables() {
 	tc.Variables["path"] = tc.SourcePath
-	
+
 	// Extract filename
 	lastSlash := strings.LastIndex(tc.SourcePath, "/")
 	if lastSlash >= 0 {
@@ -668,7 +668,7 @@ func (tc *TransformContext) AddBuiltInVariables() {
 		tc.Variables["filename"] = tc.SourcePath
 		tc.Variables["dir"] = ""
 	}
-	
+
 	// Extract extension
 	filename := tc.Variables["filename"]
 	lastDot := strings.LastIndex(filename, ".")
@@ -681,15 +681,15 @@ func (tc *TransformContext) AddBuiltInVariables() {
 
 // MessageContext holds context for message template rendering
 type MessageContext struct {
-	RuleName      string            // Name of the copy rule
-	SourceRepo    string            // Source repository
-	TargetRepo    string            // Target repository
-	SourceBranch  string            // Source branch
-	TargetBranch  string            // Target branch
-	FileCount     int               // Number of files being copied
-	PRNumber      int               // PR number that triggered the copy
-	CommitSHA     string            // Commit SHA
-	Variables     map[string]string // Variables from pattern matching
+	RuleName     string            // Name of the copy rule
+	SourceRepo   string            // Source repository
+	TargetRepo   string            // Target repository
+	SourceBranch string            // Source branch
+	TargetBranch string            // Target branch
+	FileCount    int               // Number of files being copied
+	PRNumber     int               // PR number that triggered the copy
+	CommitSHA    string            // Commit SHA
+	Variables    map[string]string // Variables from pattern matching
 }
 
 // NewMessageContext creates a new message context
@@ -707,13 +707,13 @@ func NewMessageContext() *MessageContext {
 func (w *Workflow) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	// Create a temporary struct with the same fields but using OrRef types
 	type workflowAlias struct {
-		Name             string                `yaml:"name"`
-		Source           Source                `yaml:"source"`
-		Destination      Destination           `yaml:"destination"`
-		Transformations  TransformationsOrRef  `yaml:"transformations"`
-		Exclude          ExcludeOrRef          `yaml:"exclude,omitempty"`
-		CommitStrategy   CommitStrategyOrRef   `yaml:"commit_strategy,omitempty"`
-		DeprecationCheck *DeprecationConfig    `yaml:"deprecation_check,omitempty"`
+		Name             string               `yaml:"name"`
+		Source           Source               `yaml:"source"`
+		Destination      Destination          `yaml:"destination"`
+		Transformations  TransformationsOrRef `yaml:"transformations"`
+		Exclude          ExcludeOrRef         `yaml:"exclude,omitempty"`
+		CommitStrategy   CommitStrategyOrRef  `yaml:"commit_strategy,omitempty"`
+		DeprecationCheck *DeprecationConfig   `yaml:"deprecation_check,omitempty"`
 	}
 
 	var alias workflowAlias
@@ -909,4 +909,3 @@ func (t *Transformation) GetType() TransformationType {
 	}
 	return ""
 }
-

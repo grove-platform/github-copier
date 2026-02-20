@@ -2,11 +2,12 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"gopkg.in/yaml.v3"
 
 	"github.com/grove-platform/github-copier/configs"
@@ -14,15 +15,11 @@ import (
 )
 
 // DefaultMainConfigLoader implements the ConfigLoader interface with main config support
-type DefaultMainConfigLoader struct {
-	configLoader ConfigLoader
-}
+type DefaultMainConfigLoader struct{}
 
 // NewMainConfigLoader creates a new main config loader
 func NewMainConfigLoader() ConfigLoader {
-	return &DefaultMainConfigLoader{
-		configLoader: NewConfigLoader(),
-	}
+	return &DefaultMainConfigLoader{}
 }
 
 // LoadConfig implements the ConfigLoader interface
@@ -47,10 +44,7 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 	var err error
 
 	// Determine which config file to load
-	configFile := config.ConfigFile
-	if config.MainConfigFile != "" {
-		configFile = config.MainConfigFile
-	}
+	configFile := config.EffectiveConfigFile()
 
 	// Try to load from local file first (for testing)
 	content, err = loadLocalConfigFile(configFile)
@@ -62,6 +56,10 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 		// Fall back to fetching from repository
 		content, err = retrieveConfigFileContent(ctx, configFile, config)
 		if err != nil {
+			// Check if this is an authentication error and make it more prominent
+			if errors.Is(err, ErrAuthentication) {
+				return nil, fmt.Errorf("%w: unable to retrieve main config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager and redeploy the service. Original error: %v", ErrAuthentication, err)
+			}
 			return nil, fmt.Errorf("failed to retrieve main config file: %w", err)
 		}
 	}
@@ -72,19 +70,19 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfig(ctx context.Context, config *
 // LoadMainConfigFromContent loads main configuration from a string and resolves references
 func (mcl *DefaultMainConfigLoader) LoadMainConfigFromContent(ctx context.Context, content string, config *configs.Config) (*types.YAMLConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("main config file is empty")
+		return nil, fmt.Errorf("%w: main config file is empty", ErrConfigLoad)
 	}
 
 	// Parse as MainConfig
 	var mainConfig types.MainConfig
 	err := yaml.Unmarshal([]byte(content), &mainConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse main config: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse main config: %v", ErrConfigLoad, err)
 	}
 
 	// Validate that workflow_configs is present
 	if len(mainConfig.WorkflowConfigs) == 0 {
-		return nil, fmt.Errorf("main config must have at least one workflow_config entry")
+		return nil, fmt.Errorf("%w: main config must have at least one workflow_config entry", ErrConfigValidation)
 	}
 
 	// Set defaults for main config
@@ -92,7 +90,7 @@ func (mcl *DefaultMainConfigLoader) LoadMainConfigFromContent(ctx context.Contex
 
 	// Validate main config
 	if err := mainConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("main config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: main config: %v", ErrConfigValidation, err)
 	}
 
 	LogInfoCtx(ctx, "loaded main config with workflow references", map[string]interface{}{
@@ -174,14 +172,51 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowReferences(ctx context.Contex
 
 	// Validate merged config
 	if err := mergedConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("merged config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: merged config: %v", ErrConfigValidation, err)
 	}
 
 	LogInfoCtx(ctx, "successfully resolved all workflow references", map[string]interface{}{
 		"total_workflows": len(mergedConfig.Workflows),
 	})
 
+	// Warn when multiple workflows target the same repo/branch with different strategies.
+	warnConflictingStrategies(ctx, mergedConfig.Workflows)
+
 	return mergedConfig, nil
+}
+
+// warnConflictingStrategies logs a warning when workflows share a destination
+// repo and branch but use different commit strategies (e.g., "direct" vs "pull_request").
+// This is informational — the app handles this correctly by creating separate
+// operations per strategy — but it may surprise operators who expect a single PR.
+func warnConflictingStrategies(ctx context.Context, workflows []types.Workflow) {
+	// Group workflow names by (repo, branch, strategy)
+	type destKey struct{ repo, branch string }
+	strategies := make(map[destKey]map[string][]string) // destKey -> strategy -> []workflowName
+
+	for _, wf := range workflows {
+		if wf.Destination.Repo == "" {
+			continue
+		}
+		dk := destKey{repo: wf.Destination.Repo, branch: wf.Destination.Branch}
+		if dk.branch == "" {
+			dk.branch = "main"
+		}
+		strategy := getCommitStrategyType(wf)
+		if strategies[dk] == nil {
+			strategies[dk] = make(map[string][]string)
+		}
+		strategies[dk][strategy] = append(strategies[dk][strategy], wf.Name)
+	}
+
+	for dk, stratMap := range strategies {
+		if len(stratMap) > 1 {
+			LogWarningCtx(ctx, "workflows targeting the same repo use different commit strategies; files will be written separately per strategy", map[string]interface{}{
+				"destination": dk.repo + ":" + dk.branch,
+				"strategies":  stratMap,
+			})
+		}
+	}
 }
 
 // loadWorkflowConfig loads a workflow config based on the reference type
@@ -199,7 +234,7 @@ func (mcl *DefaultMainConfigLoader) loadWorkflowConfig(ctx context.Context, ref 
 
 	case "repo":
 		// Remote file in a different repo
-		return mcl.loadRemoteWorkflowConfig(ctx, ref)
+		return mcl.loadRemoteWorkflowConfig(ctx, config, ref)
 
 	default:
 		return nil, fmt.Errorf("unsupported workflow config source: %s", ref.Source)
@@ -221,7 +256,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 
 		// Resolve $ref references
 		baseRepo := fmt.Sprintf("%s/%s", config.ConfigRepoOwner, config.ConfigRepoName)
-		if err := mcl.resolveWorkflowFieldReferences(ctx, workflowConfig, baseRepo, config.ConfigRepoBranch, ref.Path); err != nil {
+		if err := mcl.resolveWorkflowFieldReferences(ctx, config, workflowConfig, baseRepo, config.ConfigRepoBranch, ref.Path); err != nil {
 			return nil, err
 		}
 
@@ -229,7 +264,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 	}
 
 	// Fall back to fetching from config repo
-	client, err := GetRestClientForOrg(config.ConfigRepoOwner)
+	client, err := GetRestClientForOrg(ctx, config, config.ConfigRepoOwner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", config.ConfigRepoOwner, err)
 	}
@@ -247,7 +282,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 		return nil, fmt.Errorf("failed to get workflow config file: %w", err)
 	}
 	if fileContent == nil {
-		return nil, fmt.Errorf("workflow config file content is nil for path: %s", ref.Path)
+		return nil, fmt.Errorf("%w: workflow config at path: %s", ErrContentNil, ref.Path)
 	}
 
 	content, err = fileContent.GetContent()
@@ -262,7 +297,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 
 	// Resolve $ref references
 	baseRepo := fmt.Sprintf("%s/%s", config.ConfigRepoOwner, config.ConfigRepoName)
-	if err := mcl.resolveWorkflowFieldReferences(ctx, workflowConfig, baseRepo, config.ConfigRepoBranch, ref.Path); err != nil {
+	if err := mcl.resolveWorkflowFieldReferences(ctx, config, workflowConfig, baseRepo, config.ConfigRepoBranch, ref.Path); err != nil {
 		return nil, err
 	}
 
@@ -270,7 +305,7 @@ func (mcl *DefaultMainConfigLoader) loadLocalWorkflowConfig(ctx context.Context,
 }
 
 // loadRemoteWorkflowConfig loads a workflow config from a different repo
-func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context, ref *types.WorkflowConfigRef) (*types.WorkflowConfig, error) {
+func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context, config *configs.Config, ref *types.WorkflowConfigRef) (*types.WorkflowConfig, error) {
 	// Parse repo owner and name
 	parts := strings.Split(ref.Repo, "/")
 	if len(parts) != 2 {
@@ -280,7 +315,7 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 	repo := parts[1]
 
 	// Get GitHub client for the repo's org
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, config, owner)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}
@@ -299,7 +334,7 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 		return nil, fmt.Errorf("failed to get workflow config file from %s: %w", ref.Repo, err)
 	}
 	if fileContent == nil {
-		return nil, fmt.Errorf("workflow config file content is nil for path: %s in repo %s", ref.Path, ref.Repo)
+		return nil, fmt.Errorf("%w: workflow config at path: %s in repo %s", ErrContentNil, ref.Path, ref.Repo)
 	}
 
 	content, err := fileContent.GetContent()
@@ -323,7 +358,7 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 	workflowConfig.SourceBranch = ref.Branch
 
 	// Resolve $ref references
-	if err := mcl.resolveWorkflowFieldReferences(ctx, workflowConfig, ref.Repo, ref.Branch, ref.Path); err != nil {
+	if err := mcl.resolveWorkflowFieldReferences(ctx, config, workflowConfig, ref.Repo, ref.Branch, ref.Path); err != nil {
 		return nil, err
 	}
 
@@ -333,20 +368,20 @@ func (mcl *DefaultMainConfigLoader) loadRemoteWorkflowConfig(ctx context.Context
 // parseWorkflowConfig parses a workflow config from content
 func (mcl *DefaultMainConfigLoader) parseWorkflowConfig(content string, filename string) (*types.WorkflowConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("workflow config file is empty")
+		return nil, fmt.Errorf("%w: workflow config file is empty", ErrConfigLoad)
 	}
 
 	var workflowConfig types.WorkflowConfig
 	err := yaml.Unmarshal([]byte(content), &workflowConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse workflow config file %s: %w", filename, err)
+		return nil, fmt.Errorf("%w: failed to parse workflow config file %s: %v", ErrConfigLoad, filename, err)
 	}
 
 	return &workflowConfig, nil
 }
 
 // resolveWorkflowFieldReferences resolves all $ref references in workflow fields (transformations, exclude, commit_strategy)
-func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.Context, workflowConfig *types.WorkflowConfig, baseRepo string, baseBranch string, basePath string) error {
+func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.Context, config *configs.Config, workflowConfig *types.WorkflowConfig, baseRepo string, baseBranch string, basePath string) error {
 	for i := range workflowConfig.Workflows {
 		workflow := &workflowConfig.Workflows[i]
 
@@ -357,7 +392,7 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.C
 				"ref":      workflow.TransformationsRef,
 			})
 
-			content, err := mcl.resolveReference(ctx, workflow.TransformationsRef, baseRepo, baseBranch, basePath)
+			content, err := mcl.resolveReference(ctx, config, workflow.TransformationsRef, baseRepo, baseBranch, basePath)
 			if err != nil {
 				return fmt.Errorf("failed to resolve transformations $ref for workflow %s: %w", workflow.Name, err)
 			}
@@ -377,7 +412,7 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.C
 				"ref":      workflow.ExcludeRef,
 			})
 
-			content, err := mcl.resolveReference(ctx, workflow.ExcludeRef, baseRepo, baseBranch, basePath)
+			content, err := mcl.resolveReference(ctx, config, workflow.ExcludeRef, baseRepo, baseBranch, basePath)
 			if err != nil {
 				return fmt.Errorf("failed to resolve exclude $ref for workflow %s: %w", workflow.Name, err)
 			}
@@ -397,7 +432,7 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.C
 				"ref":      workflow.CommitStrategyRef,
 			})
 
-			content, err := mcl.resolveReference(ctx, workflow.CommitStrategyRef, baseRepo, baseBranch, basePath)
+			content, err := mcl.resolveReference(ctx, config, workflow.CommitStrategyRef, baseRepo, baseBranch, basePath)
 			if err != nil {
 				return fmt.Errorf("failed to resolve commit_strategy $ref for workflow %s: %w", workflow.Name, err)
 			}
@@ -416,7 +451,7 @@ func (mcl *DefaultMainConfigLoader) resolveWorkflowFieldReferences(ctx context.C
 
 // resolveReference resolves a $ref reference to actual content
 // This supports references in transformations, commit strategies, etc.
-func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref string, baseRepo string, baseBranch string, basePath string) (string, error) {
+func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, config *configs.Config, ref string, baseRepo string, baseBranch string, basePath string) (string, error) {
 	// Parse reference format
 	// Supports:
 	// - Relative paths: "strategies/pr-strategy.yaml"
@@ -424,15 +459,15 @@ func (mcl *DefaultMainConfigLoader) resolveReference(ctx context.Context, ref st
 
 	if strings.HasPrefix(ref, "repo://") {
 		// Remote repo reference
-		return mcl.resolveRemoteReference(ctx, ref)
+		return mcl.resolveRemoteReference(ctx, config, ref)
 	}
 
 	// Relative path reference
-	return mcl.resolveRelativeReference(ctx, ref, baseRepo, baseBranch, basePath)
+	return mcl.resolveRelativeReference(ctx, config, ref, baseRepo, baseBranch, basePath)
 }
 
 // resolveRemoteReference resolves a repo:// reference
-func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, ref string) (string, error) {
+func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, config *configs.Config, ref string) (string, error) {
 	// Parse: repo://owner/repo/path/to/file.yaml@branch
 	ref = strings.TrimPrefix(ref, "repo://")
 
@@ -455,7 +490,7 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 	filePath := pathParts[2]
 
 	// Fetch file content
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, config, owner)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}
@@ -473,14 +508,14 @@ func (mcl *DefaultMainConfigLoader) resolveRemoteReference(ctx context.Context, 
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("referenced file content is nil for path: %s", filePath)
+		return "", fmt.Errorf("%w: referenced file at path: %s", ErrContentNil, filePath)
 	}
 
 	return fileContent.GetContent()
 }
 
 // resolveRelativeReference resolves a relative path reference
-func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context, ref string, baseRepo string, baseBranch string, basePath string) (string, error) {
+func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context, config *configs.Config, ref string, baseRepo string, baseBranch string, basePath string) (string, error) {
 	// Resolve relative to base path
 	baseDir := filepath.Dir(basePath)
 	resolvedPath := filepath.Join(baseDir, ref)
@@ -494,7 +529,7 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 	repo := parts[1]
 
 	// Fetch file content
-	client, err := GetRestClientForOrg(owner)
+	client, err := GetRestClientForOrg(ctx, config, owner)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub client for org %s: %w", owner, err)
 	}
@@ -512,7 +547,7 @@ func (mcl *DefaultMainConfigLoader) resolveRelativeReference(ctx context.Context
 		return "", fmt.Errorf("failed to get referenced file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("referenced file content is nil for path: %s", resolvedPath)
+		return "", fmt.Errorf("%w: referenced file at path: %s", ErrContentNil, resolvedPath)
 	}
 
 	return fileContent.GetContent()

@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"gopkg.in/yaml.v3"
 
 	"github.com/grove-platform/github-copier/configs"
@@ -18,10 +19,13 @@ type ConfigLoader interface {
 	LoadConfigFromContent(content string, filename string) (*types.YAMLConfig, error)
 }
 
-// DefaultConfigLoader implements the ConfigLoader interface
+// DefaultConfigLoader implements the ConfigLoader interface for the legacy
+// single-file config format. Deprecated: migrate to the main config format
+// (USE_MAIN_CONFIG=true) and use DefaultMainConfigLoader instead.
 type DefaultConfigLoader struct{}
 
-// NewConfigLoader creates a new config loader
+// NewConfigLoader creates a new legacy config loader.
+// Deprecated: use NewMainConfigLoader instead.
 func NewConfigLoader() ConfigLoader {
 	return &DefaultConfigLoader{}
 }
@@ -51,14 +55,14 @@ func (cl *DefaultConfigLoader) LoadConfig(ctx context.Context, config *configs.C
 // LoadConfigFromContent loads configuration from a string
 func (cl *DefaultConfigLoader) LoadConfigFromContent(content string, filename string) (*types.YAMLConfig, error) {
 	if content == "" {
-		return nil, fmt.Errorf("config file is empty")
+		return nil, fmt.Errorf("%w: config file is empty", ErrConfigLoad)
 	}
 
 	// Parse as YAML (supports both YAML and JSON since YAML is a superset of JSON)
 	var yamlConfig types.YAMLConfig
 	err := yaml.Unmarshal([]byte(content), &yamlConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("%w: failed to parse config file: %v", ErrConfigLoad, err)
 	}
 
 	// Set defaults
@@ -66,7 +70,7 @@ func (cl *DefaultConfigLoader) LoadConfigFromContent(content string, filename st
 
 	// Validate
 	if err := yamlConfig.Validate(); err != nil {
-		return nil, fmt.Errorf("config validation failed: %w", err)
+		return nil, fmt.Errorf("%w: %v", ErrConfigValidation, err)
 	}
 
 	return &yamlConfig, nil
@@ -75,7 +79,7 @@ func (cl *DefaultConfigLoader) LoadConfigFromContent(content string, filename st
 // retrieveConfigFileContent fetches the config file content from the repository
 func retrieveConfigFileContent(ctx context.Context, filePath string, config *configs.Config) (string, error) {
 	// Get GitHub client for the config repo's org (auto-discovers installation ID)
-	client, err := GetRestClientForOrg(config.ConfigRepoOwner)
+	client, err := GetRestClientForOrg(ctx, config, config.ConfigRepoOwner)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub client for org %s: %w", config.ConfigRepoOwner, err)
 	}
@@ -91,10 +95,15 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 		},
 	)
 	if err != nil {
+		// Check if this is an authentication error
+		errStr := err.Error()
+		if strings.Contains(errStr, "401") || strings.Contains(errStr, "Bad credentials") {
+			return "", fmt.Errorf("%w: unable to fetch config file. The GitHub App private key (PEM) may be invalid or expired. Please check the CODE_COPIER_PEM secret in GCP Secret Manager. Original error: %v", ErrAuthentication, err)
+		}
 		return "", fmt.Errorf("failed to get config file: %w", err)
 	}
 	if fileContent == nil {
-		return "", fmt.Errorf("config file content is nil for path: %s", filePath)
+		return "", fmt.Errorf("%w: config file at path: %s", ErrContentNil, filePath)
 	}
 
 	// Decode content
@@ -106,54 +115,11 @@ func retrieveConfigFileContent(ctx context.Context, filePath string, config *con
 	return content, nil
 }
 
-// ValidateConfig validates a YAML configuration
-func ValidateConfig(config *types.YAMLConfig) error {
-	return config.Validate()
-}
-
-// ConfigValidator provides validation utilities
-type ConfigValidator struct{}
-
-// NewConfigValidator creates a new config validator
-func NewConfigValidator() *ConfigValidator {
-	return &ConfigValidator{}
-}
-
-// ValidatePattern validates a pattern and returns any errors
-func (cv *ConfigValidator) ValidatePattern(patternType types.PatternType, pattern string) error {
-	sp := types.SourcePattern{
-		Type:    patternType,
-		Pattern: pattern,
-	}
-	return sp.Validate()
-}
-
-// TestPattern tests a pattern against a file path
-func (cv *ConfigValidator) TestPattern(patternType types.PatternType, pattern string, filePath string) (types.MatchResult, error) {
-	sp := types.SourcePattern{
-		Type:    patternType,
-		Pattern: pattern,
-	}
-
-	if err := sp.Validate(); err != nil {
-		return types.NewMatchResult(false, nil), err
-	}
-
-	matcher := NewPatternMatcher()
-	return matcher.Match(filePath, sp), nil
-}
-
-// TestTransform tests a path transformation
-func (cv *ConfigValidator) TestTransform(sourcePath string, template string, variables map[string]string) (string, error) {
-	transformer := NewPathTransformer()
-	return transformer.Transform(sourcePath, template, variables)
-}
-
 // loadLocalConfigFile attempts to load config from a local file
 // This is useful for local testing and development
 func loadLocalConfigFile(filename string) (string, error) {
 	// Try to read from current directory
-	data, err := os.ReadFile(filename)
+	data, err := os.ReadFile(filename) // #nosec G304 -- local dev config path from caller
 	if err != nil {
 		return "", err
 	}

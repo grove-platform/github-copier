@@ -1,0 +1,54 @@
+{
+  "action": "synchronize",
+  "number": 25,
+  "before": "old123sha456",
+  "after": "new789sha012",
+  "pull_request": {
+    "number": 25,
+    "state": "open",
+    "merged": false,
+    "merge_commit_sha": null,
+    "title": "Update Go examples with new patterns",
+    "head": {
+      "ref": "feature/update-go-examples",
+      "sha": "new789sha012",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/go/patterns/singleton.go",
+      "status": "modified",
+      "additions": 20,
+      "deletions": 5,
+      "changes": 25
+    },
+    {
+      "filename": "examples/go/patterns/factory.go",
+      "status": "added",
+      "additions": 45,
+      "deletions": 0,
+      "changes": 45
+    }
+  ]
+}

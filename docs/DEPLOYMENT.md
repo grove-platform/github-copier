@@ -18,7 +18,7 @@ Complete guide for deploying the GitHub Code Example Copier to Google Cloud Run 
 
 ### Required Tools
 
-- **Go 1.23+** - For local development and testing
+- **Go 1.26+** - For local development and testing
 - **Google Cloud SDK** - For deployment
 - **GitHub App** - With appropriate permissions
 - **MongoDB Atlas** (optional) - For audit logging
@@ -432,7 +432,7 @@ curl ${SERVICE_URL}/health
    - Go to: `https://github.com/YOUR_ORG/YOUR_REPO/settings/hooks`
 
 2. **Add or edit webhook**
-   - **Payload URL:** `https://examples-copier-XXXXXXXXXX-uc.a.run.app/events` (use your Cloud Run URL)
+   - **Payload URL:** `https://YOUR_SERVICE_URL/events` (use your Cloud Run URL)
    - **Content type:** `application/json`
    - **Secret:** (the webhook secret from Secret Manager)
    - **Events:** Select "Pull requests"
@@ -451,7 +451,7 @@ curl ${SERVICE_URL}/health
 ```bash
 # Create and merge a test PR
 # Watch logs for webhook receipt
-gcloud app logs tail -s default | grep webhook
+gcloud run services logs read github-copier --limit=50
 ```
 
 **Option B: Redeliver from GitHub**
@@ -465,7 +465,7 @@ gcloud app logs tail -s default | grep webhook
 
 ```bash
 # Check logs for successful processing
-gcloud app logs read --limit=50
+gcloud run services logs read github-copier --limit=50
 
 # Look for:
 # ✅ "Starting web server on port :8080"
@@ -485,24 +485,18 @@ gcloud app logs read --limit=50
 ### View Logs
 
 ```bash
-# Real-time logs
-gcloud app logs tail -s default
-
 # Recent logs
-gcloud app logs read --limit=100
+gcloud run services logs read github-copier --limit=100
 
-# Filter for errors
-gcloud app logs read --limit=100 | grep ERROR
-
-# Filter for webhooks
-gcloud app logs read --limit=100 | grep webhook
+# Real-time log streaming
+gcloud beta run services logs tail github-copier
 ```
 
 ### Check Metrics
 
 ```bash
 # Metrics endpoint
-curl https://YOUR_APP.appspot.com/metrics
+curl https://YOUR_SERVICE_URL/metrics
 
 # Response includes:
 # - webhooks_received
@@ -616,7 +610,8 @@ cd github-copier
 
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe $(gcloud config get-value project) --format="value(projectNumber)")
-SERVICE_ACCOUNT="${PROJECT_NUMBER}@appspot.gserviceaccount.com"
+# Use the Cloud Run service account (default compute, or a custom one)
+SERVICE_ACCOUNT="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 
 gcloud secrets add-iam-policy-binding CODE_COPIER_PEM \
   --member="serviceAccount:${SERVICE_ACCOUNT}" \
@@ -633,9 +628,9 @@ gcloud secrets add-iam-policy-binding mongo-uri \
 
 **Verify:**
 ```bash
-gcloud secrets get-iam-policy CODE_COPIER_PEM | grep @appspot
-gcloud secrets get-iam-policy webhook-secret | grep @appspot
-gcloud secrets get-iam-policy mongo-uri | grep @appspot
+gcloud secrets get-iam-policy CODE_COPIER_PEM | grep compute
+gcloud secrets get-iam-policy webhook-secret | grep compute
+gcloud secrets get-iam-policy mongo-uri | grep compute
 ```
 
 ### ☐ 5. Create env.yaml
@@ -673,27 +668,13 @@ grep "env.yaml" .gitignore
 echo "env.yaml" >> .gitignore
 ```
 
-### ☐ 7. Verify app.yaml Configuration
+### ☐ 7. Verify Dockerfile
 
-```bash
-cat app.yaml
-```
-
-**Should contain:**
-```yaml
-runtime: go
-runtime_config:
-  operating_system: "ubuntu22"
-  runtime_version: "1.23"
-env: flex
-```
-
-**Should NOT contain:**
-- ❌ `env_variables:` section (those go in env.yaml)
+Ensure the `Dockerfile` exists and is correctly configured. The app uses a multi-stage build with a non-root user and `HEALTHCHECK`.
 
 ---
 
-## 🚀 Deployment
+## Deployment
 
 ### ☐ 8. Deploy to Cloud Run
 
@@ -704,29 +685,18 @@ cd github-copier
 ./scripts/deploy-cloudrun.sh
 ```
 
-**Expected output:**
-```
-Updating service [default]...done.
-Setting traffic split for service [default]...done.
-Deployed service [default] to [https://YOUR_APP.appspot.com]
-```
-
 ### ☐ 9. Verify Deployment
 
 ```bash
-# Check versions
-gcloud app versions list
-
-# Get app URL
-APP_URL=$(gcloud app describe --format="value(defaultHostname)")
-echo "App URL: https://${APP_URL}"
+# Get service URL
+gcloud run services describe github-copier --format="value(status.url)"
 ```
 
 ### ☐ 10. Check Logs
 
 ```bash
-# View real-time logs
-gcloud app logs tail -s default
+# View recent logs
+gcloud run services logs read github-copier --limit=50
 ```
 
 **Look for:**
@@ -743,11 +713,14 @@ gcloud app logs tail -s default
 ### ☐ 11. Test Health Endpoint
 
 ```bash
-# Get app URL
-APP_URL=$(gcloud app describe --format="value(defaultHostname)")
+# Get service URL
+SERVICE_URL=$(gcloud run services describe github-copier --format="value(status.url)")
 
-# Test health
-curl https://${APP_URL}/health
+# Test health (liveness)
+curl ${SERVICE_URL}/health
+
+# Test readiness
+curl ${SERVICE_URL}/ready
 ```
 
 **Expected response:**
@@ -786,7 +759,7 @@ gcloud secrets versions access latest --secret=webhook-secret
     - URL: `https://github.com/YOUR_ORG/YOUR_REPO/settings/hooks`
 
 2. **Add or edit webhook**
-    - **Payload URL:** `https://YOUR_APP.appspot.com/events`
+    - **Payload URL:** `https://YOUR_SERVICE_URL/events`
     - **Content type:** `application/json`
     - **Secret:** (paste the value from step 12)
     - **SSL verification:** Enable SSL verification
@@ -810,18 +783,18 @@ gcloud secrets versions access latest --secret=webhook-secret
 
 ```bash
 # Watch logs
-gcloud app logs tail -s default | grep webhook
+gcloud run services logs read github-copier --limit=50
 ```
 
 ---
 
-## ✅ Post-Deployment Verification
+## Post-Deployment Verification
 
 ### ☐ 15. Verify Secrets Loaded
 
 ```bash
 # Check logs for secret loading
-gcloud app logs read --limit=100 | grep -i "secret"
+gcloud run services logs read github-copier --limit=100
 ```
 
 **Should NOT see:**
@@ -832,23 +805,23 @@ gcloud app logs read --limit=100 | grep -i "secret"
 
 ```bash
 # Watch logs during webhook delivery
-gcloud app logs tail -s default
+gcloud run services logs read github-copier --limit=50
 ```
 
 **Look for:**
-- ✅ "webhook received"
-- ✅ "signature verified"
-- ✅ "processing webhook"
+- "webhook received"
+- "signature verified"
+- "processing webhook"
 
 **Should NOT see:**
-- ❌ "webhook signature verification failed"
-- ❌ "invalid signature"
+- "webhook signature verification failed"
+- "invalid signature"
 
 ### ☐ 17. Verify File Copying
 
 ```bash
 # Watch logs during PR merge
-gcloud app logs tail -s default
+gcloud run services logs read github-copier --limit=50
 ```
 
 **Look for:**
@@ -870,7 +843,7 @@ db.audit_events.find().sort({timestamp: -1}).limit(5)
 
 ```bash
 # Check metrics endpoint
-curl https://YOUR_APP.appspot.com/metrics
+curl https://YOUR_SERVICE_URL/metrics
 ```
 
 **Expected response:**
@@ -901,9 +874,9 @@ git status | grep env.yaml
 # Should show: nothing to commit (or untracked)
 
 # Verify IAM permissions
-gcloud secrets get-iam-policy CODE_COPIER_PEM | grep @appspot
-gcloud secrets get-iam-policy webhook-secret | grep @appspot
-# Should see the service account
+gcloud secrets get-iam-policy CODE_COPIER_PEM | grep compute
+gcloud secrets get-iam-policy webhook-secret | grep compute
+# Should see the Cloud Run service account
 ```
 
 ---
@@ -939,13 +912,13 @@ gcloud secrets versions access latest --secret=webhook-secret
 **Fix:**
 ```bash
 # Option 1: Disable audit logging
-# In env.yaml: AUDIT_ENABLED: "false"
+# In env-cloudrun.yaml: AUDIT_ENABLED: "false"
 
 # Option 2: Ensure MONGO_URI_SECRET_NAME is set
-# In env.yaml: MONGO_URI_SECRET_NAME: "projects/.../secrets/mongo-uri/versions/latest"
+# In env-cloudrun.yaml: MONGO_URI_SECRET_NAME: "projects/.../secrets/mongo-uri/versions/latest"
 
 # Redeploy
-gcloud app deploy app.yaml
+./scripts/deploy-cloudrun.sh
 ```
 
 ### Error: "Config file not found"
@@ -996,20 +969,23 @@ Your application is deployed with:
 
 ---
 
-## 📚 Quick Reference
+## Quick Reference
 
 ```bash
 # Deploy
-gcloud app deploy app.yaml
+./scripts/deploy-cloudrun.sh
 
 # View logs
-gcloud app logs tail -s default
+gcloud run services logs read github-copier --limit=100
 
 # Check health
-curl https://YOUR_APP.appspot.com/health
+curl https://YOUR_SERVICE_URL/health
+
+# Check readiness
+curl https://YOUR_SERVICE_URL/ready
 
 # Check metrics
-curl https://YOUR_APP.appspot.com/metrics
+curl https://YOUR_SERVICE_URL/metrics
 
 # List secrets
 gcloud secrets list
@@ -1019,10 +995,6 @@ gcloud secrets versions access latest --secret=SECRET_NAME
 
 # Grant access
 ./scripts/grant-secret-access.sh
-
-# Rollback
-gcloud app versions list
-gcloud app services set-traffic default --splits=PREVIOUS_VERSION=1
 ```
 ---
 
@@ -1047,10 +1019,10 @@ gcloud app services set-traffic default --splits=PREVIOUS_VERSION=1
 gcloud secrets versions access latest --secret=webhook-secret
 
 # Disable audit logging
-# In env.yaml: AUDIT_ENABLED: "false"
+# In env-cloudrun.yaml: AUDIT_ENABLED: "false"
 
 # Redeploy
-gcloud app deploy app.yaml
+./scripts/deploy-cloudrun.sh
 ```
 
 ## Next Steps

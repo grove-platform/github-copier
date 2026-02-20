@@ -110,6 +110,10 @@ func TestNewServiceContainer(t *testing.T) {
 					t.Error("SlackNotifier is nil")
 				}
 
+				if container.TokenManager == nil {
+					t.Error("TokenManager is nil")
+				}
+
 				// Check that StartTime is set
 				if container.StartTime.IsZero() {
 					t.Error("StartTime is zero")

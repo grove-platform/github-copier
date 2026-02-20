@@ -11,15 +11,15 @@ import (
 // fields are properly merged from defaults when a workflow has a partial commit_strategy
 func TestYAMLConfig_SetDefaults_CommitStrategyMerging(t *testing.T) {
 	tests := []struct {
-		name                    string
-		defaults                *Defaults
-		workflowCommitStrategy  *CommitStrategyConfig
-		expectedType            string
-		expectedCommitMessage   string
-		expectedPRTitle         string
-		expectedPRBody          string
-		expectedUsePRTemplate   bool
-		expectedAutoMerge       bool
+		name                   string
+		defaults               *Defaults
+		workflowCommitStrategy *CommitStrategyConfig
+		expectedType           string
+		expectedCommitMessage  string
+		expectedPRTitle        string
+		expectedPRBody         string
+		expectedUsePRTemplate  bool
+		expectedAutoMerge      bool
 	}{
 		{
 			name: "workflow with only pr_title should inherit commit_message from defaults",
@@ -269,4 +269,3 @@ func TestWorkflowConfig_SetDefaults_CommitStrategyMerging(t *testing.T) {
 	assert.True(t, workflow2.CommitStrategy.UsePRTemplate)
 	assert.False(t, workflow2.CommitStrategy.AutoMerge)
 }
-

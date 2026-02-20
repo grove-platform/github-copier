@@ -13,6 +13,7 @@ import (
 type ServiceContainer struct {
 	Config           *configs.Config
 	FileStateService FileStateService
+	TokenManager     *TokenManager
 
 	// New services
 	ConfigLoader      ConfigLoader
@@ -24,8 +25,14 @@ type ServiceContainer struct {
 	MetricsCollector  *MetricsCollector
 	SlackNotifier     SlackNotifier
 
+	// Webhook deduplication
+	DeliveryTracker *DeliveryTracker
+
 	// Server state
 	StartTime time.Time
+
+	// Background goroutine tracking (for graceful shutdown and tests)
+	wg sync.WaitGroup
 
 	// Shutdown state
 	closeOnce sync.Once
@@ -37,15 +44,19 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	// Initialize file state service
 	fileStateService := NewFileStateService()
 
-	// Initialize config loader based on configuration
+	// Initialize config loader based on configuration, wrapped with an optional TTL cache
 	var configLoader ConfigLoader
 	if config.UseMainConfig && config.MainConfigFile != "" {
 		// Use main config loader for new format with workflow references (when USE_MAIN_CONFIG=true)
 		configLoader = NewMainConfigLoader()
 	} else {
-		// Use default config loader for singular config file (when USE_MAIN_CONFIG=false)
+		// Deprecated: the legacy single-file config path will be removed in a future release.
+		LogWarning("DEPRECATION: USE_MAIN_CONFIG is not set or MAIN_CONFIG_FILE is empty. "+
+			"The legacy single-file config path will be removed in a future release. "+
+			"Migrate to the main config format. Falling back to: %s", config.EffectiveConfigFile())
 		configLoader = NewConfigLoader()
 	}
+	configLoader = NewCachedConfigLoader(configLoader, time.Duration(config.ConfigCacheTTLSeconds)*time.Second)
 
 	patternMatcher := NewPatternMatcher()
 	pathTransformer := NewPathTransformer()
@@ -54,11 +65,14 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	metricsCollector := NewMetricsCollector()
 
 	// Initialize Slack notifier
-	slackNotifier := NewSlackNotifier(
+	// Use plain text mode for Workflow Builder webhooks (they don't support attachments)
+	slackNotifier := NewSlackNotifierWithOptions(
 		config.SlackWebhookURL,
 		config.SlackChannel,
 		config.SlackUsername,
 		config.SlackIconEmoji,
+		config.SlackPlainText,
+		config.SlackMessageVariable,
 	)
 
 	// Initialize audit logger
@@ -77,6 +91,7 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 	return &ServiceContainer{
 		Config:            config,
 		FileStateService:  fileStateService,
+		TokenManager:      defaultTokenManager,
 		ConfigLoader:      configLoader,
 		PatternMatcher:    patternMatcher,
 		PathTransformer:   pathTransformer,
@@ -85,14 +100,23 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		AuditLogger:       auditLogger,
 		MetricsCollector:  metricsCollector,
 		SlackNotifier:     slackNotifier,
+		DeliveryTracker:   NewDeliveryTracker(1 * time.Hour),
 		StartTime:         time.Now(),
 	}, nil
+}
+
+// Wait blocks until all background goroutines tracked by this container have finished.
+func (sc *ServiceContainer) Wait() {
+	sc.wg.Wait()
 }
 
 // Close cleans up resources. Safe to call multiple times.
 func (sc *ServiceContainer) Close(ctx context.Context) error {
 	var closeErr error
 	sc.closeOnce.Do(func() {
+		if sc.DeliveryTracker != nil {
+			sc.DeliveryTracker.Stop()
+		}
 		if sc.AuditLogger != nil {
 			closeErr = sc.AuditLogger.Close(ctx)
 		}

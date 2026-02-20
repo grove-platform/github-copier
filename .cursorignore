@@ -1,0 +1,50 @@
+# Git
+.git/
+
+# Binaries
+github-copier
+code-copier
+copier
+config-validator
+test-webhook
+test-pem
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+
+# Dependencies
+vendor/
+go.sum
+
+# Build/Coverage output
+*.out
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.test
+
+# Private keys
+*.pem
+*.key
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+tmp/
+temp/
+
+# Large test fixtures (JSON payloads)
+testdata/*.json

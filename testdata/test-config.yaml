@@ -1,6 +1,11 @@
 # Test configuration for local integration testing
+# This file demonstrates the current workflow schema for reference.
+#
 # Source: cbullinger/copier-app-source-test
 # Destinations: cbullinger/copier-app-dest-1, cbullinger/copier-app-dest-2
+#
+# NOTE: This is the inline workflow format. For the main config format
+# (with workflow_configs), see source-repo-files/.copier/main.yaml
 
 workflows:
   # Workflow 1: Copy Go files to dest-1
@@ -9,18 +14,17 @@ workflows:
       repo: "cbullinger/copier-app-source-test"
       branch: "main"
       patterns:
-        - type: glob
-          pattern: "examples/go/**"
+        - "examples/go/**"
     destination:
       repo: "cbullinger/copier-app-dest-1"
       branch: "main"
     transformations:
-      - type: move
-        from: "examples/go/"
-        to: "go-examples/"
-    commit:
-      strategy: pr
-      message: "Sync Go examples from source"
+      - move:
+          from: "examples/go/"
+          to: "go-examples/"
+    commit_strategy:
+      type: "pull_request"
+      commit_message: "Sync Go examples from source"
       pr_title: "[Test] Sync Go examples"
       auto_merge: false
 
@@ -30,37 +34,55 @@ workflows:
       repo: "cbullinger/copier-app-source-test"
       branch: "main"
       patterns:
-        - type: glob
-          pattern: "examples/python/**"
+        - "examples/python/**"
     destination:
       repo: "cbullinger/copier-app-dest-2"
       branch: "main"
     transformations:
-      - type: move
-        from: "examples/python/"
-        to: "python-examples/"
-    commit:
-      strategy: pr
-      message: "Sync Python examples from source"
+      - move:
+          from: "examples/python/"
+          to: "python-examples/"
+    commit_strategy:
+      type: "pull_request"
+      commit_message: "Sync Python examples from source"
       pr_title: "[Test] Sync Python examples"
       auto_merge: false
 
-  # Workflow 3: Copy docs to both destinations
+  # Workflow 3: Copy docs to dest-1 (direct commit)
   - name: "test-docs-to-dest1"
     source:
       repo: "cbullinger/copier-app-source-test"
       branch: "main"
       patterns:
-        - type: glob
-          pattern: "docs/**"
+        - "docs/**"
     destination:
       repo: "cbullinger/copier-app-dest-1"
       branch: "main"
     transformations:
-      - type: move
-        from: "docs/"
-        to: "documentation/"
-    commit:
-      strategy: direct
-      message: "Sync docs from source"
+      - move:
+          from: "docs/"
+          to: "documentation/"
+    commit_strategy:
+      type: "direct"
+      commit_message: "Sync docs from source"
+
+  # Workflow 4: Copy JavaScript files to dest-2 (demonstrates additional language)
+  - name: "test-js-to-dest2"
+    source:
+      repo: "cbullinger/copier-app-source-test"
+      branch: "main"
+      patterns:
+        - "examples/javascript/**"
+    destination:
+      repo: "cbullinger/copier-app-dest-2"
+      branch: "main"
+    transformations:
+      - move:
+          from: "examples/javascript/"
+          to: "js-examples/"
+    commit_strategy:
+      type: "pull_request"
+      commit_message: "Sync JavaScript examples from source"
+      pr_title: "[Test] Sync JavaScript examples"
+      auto_merge: false
 

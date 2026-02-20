@@ -316,6 +316,157 @@ func TestFormatFileList(t *testing.T) {
 	}
 }
 
+func TestSlackNotifier_PlainTextMode(t *testing.T) {
+	event := &PRProcessedEvent{
+		PRNumber:       42,
+		PRTitle:        "Test PR",
+		PRURL:          "https://github.com/test/repo/pull/42",
+		SourceRepo:     "test/repo",
+		FilesMatched:   10,
+		FilesCopied:    8,
+		FilesFailed:    2,
+		ProcessingTime: 5 * time.Second,
+	}
+
+	// Plain text mode sends a simple map with the configured variable name
+	var receivedPayload map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &receivedPayload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Create notifier with plain text mode enabled, using "text" as the variable name
+	notifier := NewSlackNotifierWithOptions(server.URL, "#test", "Test Bot", ":robot:", true, "text")
+	ctx := context.Background()
+
+	err := notifier.NotifyPRProcessed(ctx, event)
+	if err != nil {
+		t.Errorf("NotifyPRProcessed() error = %v", err)
+	}
+
+	if receivedPayload == nil {
+		t.Fatal("No payload received")
+	}
+
+	// In plain text mode, should have the configured variable name with the message
+	textValue, ok := receivedPayload["text"]
+	if !ok || textValue == "" {
+		t.Error("Plain text payload should have 'text' field set")
+	}
+
+	// Should only have the one key
+	if len(receivedPayload) != 1 {
+		t.Errorf("Plain text payload should have exactly 1 key, got %d", len(receivedPayload))
+	}
+
+	// Verify the text contains expected content
+	if !contains(textValue, "PR #42") {
+		t.Error("Plain text should contain PR number")
+	}
+	if !contains(textValue, "test/repo") {
+		t.Error("Plain text should contain repo name")
+	}
+}
+
+func TestSlackNotifier_CustomMessageVariable(t *testing.T) {
+	event := &PRProcessedEvent{
+		PRNumber:       42,
+		PRTitle:        "Test PR",
+		PRURL:          "https://github.com/test/repo/pull/42",
+		SourceRepo:     "test/repo",
+		FilesMatched:   10,
+		FilesCopied:    8,
+		FilesFailed:    0,
+		ProcessingTime: 5 * time.Second,
+	}
+
+	var receivedPayload map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &receivedPayload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Create notifier with custom variable name "data" (like a real Workflow Builder setup)
+	notifier := NewSlackNotifierWithOptions(server.URL, "#test", "Test Bot", ":robot:", true, "data")
+	ctx := context.Background()
+
+	err := notifier.NotifyPRProcessed(ctx, event)
+	if err != nil {
+		t.Errorf("NotifyPRProcessed() error = %v", err)
+	}
+
+	if receivedPayload == nil {
+		t.Fatal("No payload received")
+	}
+
+	// Should use the custom variable name "data"
+	dataValue, ok := receivedPayload["data"]
+	if !ok || dataValue == "" {
+		t.Error("Payload should have 'data' field set (custom variable name)")
+	}
+
+	// Should NOT have the default "text" key
+	if _, hasText := receivedPayload["text"]; hasText {
+		t.Error("Payload should not have 'text' field when using custom variable name")
+	}
+
+	// Verify content
+	if !contains(dataValue, "PR #42") {
+		t.Error("Message should contain PR number")
+	}
+}
+
+func TestSlackNotifier_AutoDetectWorkflowBuilder(t *testing.T) {
+	// Test that /triggers/ URLs auto-enable plain text mode
+	var receivedPayload map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &receivedPayload)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Simulate a Workflow Builder URL (with /triggers/)
+	workflowURL := server.URL + "/triggers/test"
+	notifier := NewSlackNotifierWithOptions(workflowURL, "#test", "Test Bot", ":robot:", false, "text")
+
+	event := &PRProcessedEvent{
+		PRNumber:       42,
+		PRTitle:        "Test PR",
+		PRURL:          "https://github.com/test/repo/pull/42",
+		SourceRepo:     "test/repo",
+		FilesMatched:   10,
+		FilesCopied:    8,
+		FilesFailed:    0,
+		ProcessingTime: 5 * time.Second,
+	}
+
+	ctx := context.Background()
+	err := notifier.NotifyPRProcessed(ctx, event)
+	if err != nil {
+		t.Errorf("NotifyPRProcessed() error = %v", err)
+	}
+
+	if receivedPayload == nil {
+		t.Fatal("No payload received")
+	}
+
+	// Should auto-detect and use plain text format (simple map)
+	textValue, ok := receivedPayload["text"]
+	if !ok || textValue == "" {
+		t.Error("Workflow Builder webhook should send plain text payload with 'text' field")
+	}
+
+	// Should only have the message variable, no attachments or other Slack fields
+	if len(receivedPayload) != 1 {
+		t.Errorf("Workflow Builder payload should have exactly 1 key, got %d keys: %v", len(receivedPayload), receivedPayload)
+	}
+}
+
 // Helper function
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))

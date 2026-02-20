@@ -2,6 +2,9 @@
 github-copier
 code-copier
 copier
+config-validator
+test-webhook
+test-pem
 *.exe
 *.exe~
 *.dll
@@ -60,4 +63,3 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
-RECOMMENDATIONS.md

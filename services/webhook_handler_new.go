@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
 	"github.com/grove-platform/github-copier/configs"
 	"github.com/grove-platform/github-copier/types"
 )
@@ -44,8 +44,12 @@ func simpleVerifySignature(sigHeader string, body, secret []byte) bool {
 }
 
 // RetrieveFileContentsWithConfigAndBranch fetches file contents from a specific branch
-func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
-	client := GetRestClient()
+func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, config *configs.Config, filePath string, branch string, repoOwner string, repoName string) (*github.RepositoryContent, error) {
+	// Use org-specific client to ensure we have the right installation token
+	client, err := GetRestClientForOrg(ctx, config, repoOwner)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get GitHub client for org %s: %w", repoOwner, err)
+	}
 
 	fileContent, _, _, err := client.Repositories.GetContents(
 		ctx,
@@ -65,6 +69,12 @@ func RetrieveFileContentsWithConfigAndBranch(ctx context.Context, filePath strin
 
 // HandleWebhookWithContainer handles incoming GitHub webhook requests using the service container
 func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *configs.Config, container *ServiceContainer) {
+	// GitHub webhooks are always POST
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	startTime := time.Now()
 	ctx := r.Context()
 
@@ -90,9 +100,23 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		return
 	}
 
+	// Check for duplicate delivery using X-GitHub-Delivery header
+	deliveryID := r.Header.Get("X-GitHub-Delivery")
+	if deliveryID != "" && container.DeliveryTracker != nil {
+		if !container.DeliveryTracker.TryRecord(deliveryID) {
+			LogInfoCtx(ctx, "duplicate webhook delivery, skipping", map[string]interface{}{
+				"delivery_id": deliveryID,
+				"event_type":  eventType,
+			})
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+	}
+
 	LogInfoCtx(ctx, "payload read", map[string]interface{}{
-		"elapsed_ms": time.Since(startTime).Milliseconds(),
-		"size_bytes": len(payload),
+		"elapsed_ms":  time.Since(startTime).Milliseconds(),
+		"size_bytes":  len(payload),
+		"delivery_id": deliveryID,
 	})
 
 	// Verify webhook signature
@@ -107,6 +131,8 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		LogInfoCtx(ctx, "signature verified", map[string]interface{}{
 			"elapsed_ms": time.Since(startTime).Milliseconds(),
 		})
+	} else {
+		LogWarningCtx(ctx, "webhook signature verification DISABLED - no webhook secret configured; set WEBHOOK_SECRET for production use", nil)
 	}
 
 	// Parse webhook event
@@ -142,7 +168,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		"merged": merged,
 	})
 
-	if !(action == "closed" && merged) {
+	if action != "closed" || !merged {
 		LogInfoCtx(ctx, "skipping non-merged PR", map[string]interface{}{
 			"action": action,
 			"merged": merged,
@@ -174,6 +200,7 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		"sha":         sourceCommitSHA,
 		"repo":        fmt.Sprintf("%s/%s", repoOwner, repoName),
 		"base_branch": baseBranch,
+		"delivery_id": deliveryID,
 		"elapsed_ms":  time.Since(startTime).Milliseconds(),
 	})
 
@@ -184,7 +211,9 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	_, _ = w.Write([]byte(`{"status":"accepted"}`))
+	if _, err := w.Write([]byte(`{"status":"accepted"}`)); err != nil {
+		LogWarningCtx(ctx, "failed to write webhook response body", map[string]interface{}{"error": err.Error()})
+	}
 
 	LogInfoCtx(ctx, "response sent", map[string]interface{}{
 		"elapsed_ms": time.Since(startTime).Milliseconds(),
@@ -198,125 +227,279 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		})
 	}
 
-	// Process asynchronously in background with a new context
-	// Don't use the request context as it will be cancelled when the request completes
+	// Process asynchronously in background with a new context.
+	// Don't use the request context as it will be cancelled when the request completes.
 	bgCtx := context.Background()
-	go handleMergedPRWithContainer(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+
+	// Apply a timeout to prevent stuck API calls from running indefinitely (#9).
+	if config.WebhookProcessingTimeoutSeconds > 0 {
+		var cancel context.CancelFunc
+		bgCtx, cancel = context.WithTimeout(bgCtx, time.Duration(config.WebhookProcessingTimeoutSeconds)*time.Second)
+		// cancel is called after processing completes (in the goroutine below)
+		_ = cancel // used in defer below
+		container.wg.Add(1)
+		go func() {
+			defer container.wg.Done()
+			defer cancel()
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, deliveryID, config, container)
+		}()
+	} else {
+		container.wg.Add(1)
+		go func() {
+			defer container.wg.Done()
+			processWebhookWithRetry(bgCtx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, deliveryID, config, container)
+		}()
+	}
 }
 
-// handleMergedPRWithContainer processes a merged PR using the new pattern matching system
-func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) {
-	startTime := time.Now()
+// processWebhookWithRetry wraps handleMergedPRWithContainer with panic recovery
+// and exponential-backoff retries for transient failures (#7).
+func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, deliveryID string, config *configs.Config, container *ServiceContainer) {
+	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
+	maxAttempts := config.WebhookMaxRetries + 1 // retries + initial attempt
+	delay := time.Duration(config.WebhookRetryInitialDelay) * time.Second
 
-	// Configure GitHub permissions
-	if InstallationAccessToken == "" {
-		if err := ConfigurePermissions(); err != nil {
-			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
-			container.MetricsCollector.RecordWebhookFailed()
-			return
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		lastErr = runWithRecovery(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+		if lastErr == nil {
+			return // success
+		}
+
+		// Don't retry if context is done (timeout or cancellation)
+		if ctx.Err() != nil {
+			LogErrorCtx(ctx, "webhook processing failed — context expired, skipping retry", lastErr, map[string]interface{}{
+				"pr_number": prNumber,
+				"repo":      webhookRepo,
+				"attempt":   attempt,
+			})
+			break
+		}
+
+		// Don't retry permanent errors — they won't resolve by retrying (#8)
+		if IsPermanentError(lastErr) {
+			LogErrorCtx(ctx, "webhook processing failed with permanent error, skipping retry", lastErr, map[string]interface{}{
+				"pr_number": prNumber,
+				"repo":      webhookRepo,
+				"attempt":   attempt,
+			})
+			break
+		}
+
+		if attempt < maxAttempts {
+			LogWarningCtx(ctx, "webhook processing failed (transient), retrying", map[string]interface{}{
+				"pr_number":    prNumber,
+				"repo":         webhookRepo,
+				"attempt":      attempt,
+				"max_attempts": maxAttempts,
+				"retry_delay":  delay.String(),
+				"error":        lastErr.Error(),
+			})
+
+			select {
+			case <-time.After(delay):
+				delay *= 2 // exponential backoff
+			case <-ctx.Done():
+				LogWarningCtx(ctx, "retry wait interrupted by context cancellation", map[string]interface{}{
+					"pr_number": prNumber,
+				})
+				break
+			}
 		}
 	}
 
-	// Load configuration using new loader
-	// Note: config.ConfigRepoOwner and config.ConfigRepoName are already set from env.yaml
-	// The webhook repoOwner/repoName are used for matching workflows, not for loading config
+	// Processing failed — alert via Slack
+	operation := "webhook_processing_exhausted"
+	if IsPermanentError(lastErr) {
+		operation = "webhook_processing_permanent_error"
+	}
+	LogCritical("webhook processing failed",
+		"pr_number", prNumber,
+		"repo", webhookRepo,
+		"delivery_id", deliveryID,
+		"attempts", maxAttempts,
+		"permanent", IsPermanentError(lastErr),
+		"error", lastErr,
+	)
+	container.MetricsCollector.RecordWebhookFailed()
+	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		Operation:  operation,
+		Error:      fmt.Errorf("failed after %d attempt(s): %w", maxAttempts, lastErr),
+		PRNumber:   prNumber,
+		SourceRepo: webhookRepo,
+		DeliveryID: deliveryID,
+		Attempts:   maxAttempts,
+	}); notifyErr != nil {
+		LogWarning("failed to send Slack error notification", "error", notifyErr)
+	}
+}
+
+// runWithRecovery calls handleMergedPRWithContainer in a panic-safe wrapper,
+// converting panics into errors.
+func runWithRecovery(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) (retErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = fmt.Errorf("panic: %v", r)
+			LogCritical("panic in webhook handler", "pr_number", prNumber, "repo_owner", repoOwner, "repo_name", repoName, "recovered", r)
+		}
+	}()
+	return handleMergedPRWithContainer(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+}
+
+// handleMergedPRWithContainer orchestrates processing of a merged PR:
+// auth → config → match workflows → fetch changed files → process → upload → notify.
+// Returns an error if a retryable failure occurred (#6 — per-workflow error tracking).
+func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) error {
+	startTime := time.Now()
+	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
+
+	// 1. Ensure GitHub auth
+	if defaultTokenManager.GetInstallationAccessToken() == "" {
+		if err := ConfigurePermissions(ctx, config); err != nil {
+			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
+			container.MetricsCollector.RecordWebhookFailed()
+			notifySlackError(ctx, container, "auth", err, prNumber, webhookRepo)
+			return fmt.Errorf("auth: %w", err)
+		}
+	}
+
+	// 2. Load config and find matching workflows
+	yamlConfig, err := loadAndMatchWorkflows(ctx, config, container, webhookRepo, baseBranch, prNumber)
+	if err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
+
+	// 3. Fetch changed files from the source PR
+	changedFiles, err := fetchChangedFiles(ctx, config, container, repoOwner, repoName, prNumber, webhookRepo)
+	if err != nil {
+		return fmt.Errorf("fetch_files: %w", err)
+	}
+
+	// 4. Snapshot metrics before processing
+	filesMatchedBefore := container.MetricsCollector.GetFilesMatched()
+	filesUploadedBefore := container.MetricsCollector.GetFilesUploaded()
+	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
+
+	// 5. Process workflows independently, collecting per-workflow errors (#6)
+	workflowErrors := processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, config, container)
+	uploadAndDeprecateFiles(ctx, config, container, repoOwner, repoName, baseBranch, prNumber)
+
+	// 6. Collect unique target repos for notification
+	targetRepos := collectTargetRepos(yamlConfig)
+
+	// 7. Report completion
+	reportCompletion(ctx, container, webhookRepo, prNumber, sourceCommitSHA, startTime,
+		filesMatchedBefore, filesUploadedBefore, filesFailedBefore, targetRepos)
+
+	// Return an aggregate error if any workflows failed (enables retry for partial failures)
+	if len(workflowErrors) > 0 {
+		errMsgs := make([]string, 0, len(workflowErrors))
+		for wfName, wfErr := range workflowErrors {
+			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", wfName, wfErr))
+		}
+		return fmt.Errorf("%d workflow(s) failed: %s", len(workflowErrors), strings.Join(errMsgs, "; "))
+	}
+
+	return nil
+}
+
+// loadAndMatchWorkflows loads the YAML config and filters to workflows matching
+// the webhook's source repo and branch. Returns nil and logs/notifies on error.
+func loadAndMatchWorkflows(ctx context.Context, config *configs.Config, container *ServiceContainer, webhookRepo string, baseBranch string, prNumber int) (*types.YAMLConfig, error) {
 	yamlConfig, err := container.ConfigLoader.LoadConfig(ctx, config)
 	if err != nil {
 		LogAndReturnError(ctx, "config_load", "failed to load config", err)
 		container.MetricsCollector.RecordWebhookFailed()
-
-		// Send error notification to Slack
-		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
-			Operation:  "config_load",
-			Error:      err,
-			PRNumber:   prNumber,
-			SourceRepo: fmt.Sprintf("%s/%s", repoOwner, repoName),
-		})
-		return
+		notifySlackError(ctx, container, "config_load", err, prNumber, webhookRepo)
+		return nil, err
 	}
 
-	// Find workflows matching this source repo and branch
-	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
-	var matchingWorkflows []types.Workflow
-	for _, workflow := range yamlConfig.Workflows {
-		// Match both repository and branch
-		if workflow.Source.Repo == webhookRepo && workflow.Source.Branch == baseBranch {
-			matchingWorkflows = append(matchingWorkflows, workflow)
+	var matching []types.Workflow
+	for _, wf := range yamlConfig.Workflows {
+		if wf.Source.Repo == webhookRepo && wf.Source.Branch == baseBranch {
+			matching = append(matching, wf)
 		}
 	}
 
-	if len(matchingWorkflows) == 0 {
+	if len(matching) == 0 {
 		LogWarningCtx(ctx, "no workflows configured for source repository and branch", map[string]interface{}{
 			"webhook_repo":   webhookRepo,
 			"base_branch":    baseBranch,
 			"workflow_count": len(yamlConfig.Workflows),
 		})
 		container.MetricsCollector.RecordWebhookFailed()
-		return
+		return nil, fmt.Errorf("no matching workflows")
 	}
 
 	LogInfoCtx(ctx, "found matching workflows", map[string]interface{}{
 		"webhook_repo":   webhookRepo,
 		"base_branch":    baseBranch,
-		"matching_count": len(matchingWorkflows),
+		"matching_count": len(matching),
 	})
 
-	// Store matching workflows for processing
-	yamlConfig.Workflows = matchingWorkflows
+	yamlConfig.Workflows = matching
+	return yamlConfig, nil
+}
 
-	// Get changed files from PR (from the source repository that triggered the webhook)
-	changedFiles, err := GetFilesChangedInPr(repoOwner, repoName, prNumber)
+// fetchChangedFiles retrieves the files changed in a PR, logging and notifying on error.
+func fetchChangedFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, repoOwner string, repoName string, prNumber int, webhookRepo string) ([]types.ChangedFile, error) {
+	changedFiles, err := GetFilesChangedInPr(ctx, config, repoOwner, repoName, prNumber)
 	if err != nil {
 		LogAndReturnError(ctx, "get_files", "failed to get changed files", err)
 		container.MetricsCollector.RecordWebhookFailed()
-
-		// Send error notification to Slack
-		_ = container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
-			Operation:  "get_files",
-			Error:      err,
-			PRNumber:   prNumber,
-			SourceRepo: webhookRepo,
-		})
-		return
+		notifySlackError(ctx, container, "get_files", err, prNumber, webhookRepo)
+		return nil, err
 	}
 
 	LogInfoCtx(ctx, "retrieved changed files", map[string]interface{}{
 		"count": len(changedFiles),
 	})
+	return changedFiles, nil
+}
 
-	// Track metrics before processing
-	filesMatchedBefore := container.MetricsCollector.GetFilesMatched()
-	filesUploadedBefore := container.MetricsCollector.GetFilesUploaded()
-	filesFailedBefore := container.MetricsCollector.GetFilesUploadFailed()
-
-	// Process files with workflow processor
-	processFilesWithWorkflows(ctx, prNumber, sourceCommitSHA, changedFiles, yamlConfig, container)
-
+// uploadAndDeprecateFiles drains the file-state queues, uploading files to target
+// repos and updating the deprecation file in the source repo.
+func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, sourceRepoOwner, sourceRepoName, sourceBranch string, prNumber int) {
 	// Upload queued files
-	FilesToUpload = container.FileStateService.GetFilesToUpload()
-	AddFilesToTargetRepoBranchWithFetcher(container.PRTemplateFetcher, container.MetricsCollector)
+	filesToUpload := container.FileStateService.GetFilesToUpload()
+	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
 	container.FileStateService.ClearFilesToUpload()
 
-	// Update deprecation file - copy from FileStateService to global map for legacy function
-	// The deprecationMap is keyed by deprecation file name, with a slice of entries per file
+	// Build deprecation map and update file in the source repo
 	deprecationMap := container.FileStateService.GetFilesToDeprecate()
-	FilesToDeprecate = make(map[string]types.Configs)
+	filesToDeprecate := make(map[string]types.Configs)
+	var deprecatedFiles []string
 	for _, entries := range deprecationMap {
-		// Iterate over all entries for each deprecation file
 		for _, entry := range entries {
-			FilesToDeprecate[entry.FileName] = types.Configs{
+			filesToDeprecate[entry.FileName] = types.Configs{
 				TargetRepo:   entry.Repo,
 				TargetBranch: entry.Branch,
 			}
+			deprecatedFiles = append(deprecatedFiles, entry.FileName)
 		}
 	}
-	UpdateDeprecationFile()
+	UpdateDeprecationFile(ctx, config, filesToDeprecate, sourceRepoOwner, sourceRepoName, sourceBranch)
 	container.FileStateService.ClearFilesToDeprecate()
 
-	// Calculate metrics after processing
-	filesMatched := container.MetricsCollector.GetFilesMatched() - filesMatchedBefore
-	filesUploaded := container.MetricsCollector.GetFilesUploaded() - filesUploadedBefore
-	filesFailed := container.MetricsCollector.GetFilesUploadFailed() - filesFailedBefore
+	// Send Slack notification if files were deprecated
+	if len(deprecatedFiles) > 0 {
+		sourceRepo := fmt.Sprintf("%s/%s", sourceRepoOwner, sourceRepoName)
+		if notifyErr := container.SlackNotifier.NotifyDeprecation(ctx, &DeprecationEvent{
+			PRNumber:   prNumber,
+			SourceRepo: sourceRepo,
+			FileCount:  len(deprecatedFiles),
+			Files:      deprecatedFiles,
+		}); notifyErr != nil {
+			LogWarningCtx(ctx, "failed to send Slack deprecation notification", map[string]interface{}{"error": notifyErr.Error()})
+		}
+	}
+}
+
+// reportCompletion calculates processing metrics and sends a Slack notification.
+func reportCompletion(ctx context.Context, container *ServiceContainer, webhookRepo string, prNumber int, sourceCommitSHA string, startTime time.Time, matchedBefore int, uploadedBefore int, failedBefore int, targetRepos []string) {
+	filesMatched := container.MetricsCollector.GetFilesMatched() - matchedBefore
+	filesUploaded := container.MetricsCollector.GetFilesUploaded() - uploadedBefore
+	filesFailed := container.MetricsCollector.GetFilesUploadFailed() - failedBefore
 	processingTime := time.Since(startTime)
 
 	LogInfoCtx(ctx, "--Done--", map[string]interface{}{
@@ -324,22 +507,56 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 		"sha":       sourceCommitSHA,
 	})
 
-	// Send success notification to Slack
-	_ = container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
+	if notifyErr := container.SlackNotifier.NotifyPRProcessed(ctx, &PRProcessedEvent{
 		PRNumber:       prNumber,
-		PRTitle:        fmt.Sprintf("PR #%d", prNumber), // TODO: Get actual PR title from GitHub
+		PRTitle:        fmt.Sprintf("PR #%d", prNumber),
 		PRURL:          fmt.Sprintf("https://github.com/%s/pull/%d", webhookRepo, prNumber),
 		SourceRepo:     webhookRepo,
+		TargetRepos:    targetRepos,
 		FilesMatched:   filesMatched,
 		FilesCopied:    filesUploaded,
 		FilesFailed:    filesFailed,
 		ProcessingTime: processingTime,
-	})
+	}); notifyErr != nil {
+		LogWarningCtx(ctx, "failed to send Slack PR processed notification", map[string]interface{}{"error": notifyErr.Error()})
+	}
 }
 
-// processFilesWithWorkflows processes changed files using the workflow system
+// collectTargetRepos extracts unique target repository names from workflows.
+func collectTargetRepos(yamlConfig *types.YAMLConfig) []string {
+	if yamlConfig == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var repos []string
+	for _, wf := range yamlConfig.Workflows {
+		repo := wf.Destination.Repo
+		if repo != "" && !seen[repo] {
+			seen[repo] = true
+			repos = append(repos, repo)
+		}
+	}
+	return repos
+}
+
+// notifySlackError is a helper to send a Slack error notification, logging any failure.
+func notifySlackError(ctx context.Context, container *ServiceContainer, operation string, err error, prNumber int, sourceRepo string) {
+	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
+		Operation:  operation,
+		Error:      err,
+		PRNumber:   prNumber,
+		SourceRepo: sourceRepo,
+	}); notifyErr != nil {
+		LogWarningCtx(ctx, "failed to send Slack error notification", map[string]interface{}{"error": notifyErr.Error()})
+	}
+}
+
+// processFilesWithWorkflows processes changed files using the workflow system.
+// Each workflow is processed independently (#6 — graceful partial failure).
+// Returns a map of workflow name → error for any that failed; nil if all succeeded.
 func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSHA string,
-	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, container *ServiceContainer) {
+	changedFiles []types.ChangedFile, yamlConfig *types.YAMLConfig, config *configs.Config, container *ServiceContainer) map[string]error {
 
 	LogInfoCtx(ctx, "processing files with workflows", map[string]interface{}{
 		"file_count":     len(changedFiles),
@@ -353,13 +570,18 @@ func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSH
 		container.FileStateService,
 		container.MetricsCollector,
 		container.MessageTemplater,
+		config,
 	)
 
-	// Process each workflow
+	workflowErrors := make(map[string]error)
+
+	// Process each workflow independently
 	for _, workflow := range yamlConfig.Workflows {
 		if err := ctx.Err(); err != nil {
 			LogWebhookOperation(ctx, "workflow_processing", "workflow processing cancelled", err)
-			return
+			// Mark remaining workflows as cancelled
+			workflowErrors[workflow.Name] = fmt.Errorf("cancelled: %w", err)
+			continue
 		}
 
 		err := workflowProcessor.ProcessWorkflow(ctx, workflow, changedFiles, prNumber, sourceCommitSHA)
@@ -367,12 +589,19 @@ func processFilesWithWorkflows(ctx context.Context, prNumber int, sourceCommitSH
 			LogErrorCtx(ctx, "failed to process workflow", err, map[string]interface{}{
 				"workflow_name": workflow.Name,
 			})
-			// Continue processing other workflows
+			workflowErrors[workflow.Name] = err
+			// Continue processing other workflows — don't let one failure block the rest
 			continue
 		}
 	}
 
 	LogInfoCtx(ctx, "workflow processing complete", map[string]interface{}{
 		"workflow_count": len(yamlConfig.Workflows),
+		"failed_count":   len(workflowErrors),
 	})
+
+	if len(workflowErrors) == 0 {
+		return nil
+	}
+	return workflowErrors
 }

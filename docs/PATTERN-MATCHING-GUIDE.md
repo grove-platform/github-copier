@@ -846,6 +846,6 @@ ${name}      # Name without ext: main
 ## See Also
 
 - [Local Testing](LOCAL-TESTING.md) - How to test locally
-- [Quick Reference](QUICK-REFERENCE.md) - Quick command reference
+- [FAQ](FAQ.md) - Frequently asked questions
 - [Webhook Testing](WEBHOOK-TESTING.md) - Testing with webhooks
 

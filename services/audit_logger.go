@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/bson"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 // AuditEventType represents the type of audit event
@@ -21,21 +21,21 @@ const (
 
 // AuditEvent represents an audit log entry
 type AuditEvent struct {
-	ID               string         `bson:"_id,omitempty"`
-	Timestamp        time.Time      `bson:"timestamp"`
-	EventType        AuditEventType `bson:"event_type"`
-	RuleName         string         `bson:"rule_name,omitempty"`
-	SourceRepo       string         `bson:"source_repo"`
-	SourcePath       string         `bson:"source_path"`
-	TargetRepo       string         `bson:"target_repo,omitempty"`
-	TargetPath       string         `bson:"target_path,omitempty"`
-	CommitSHA        string         `bson:"commit_sha,omitempty"`
-	PRNumber         int            `bson:"pr_number,omitempty"`
-	Success          bool           `bson:"success"`
-	ErrorMessage     string         `bson:"error_message,omitempty"`
-	DurationMs       int64          `bson:"duration_ms,omitempty"`
-	FileSize         int64          `bson:"file_size,omitempty"`
-	AdditionalData   map[string]any `bson:"additional_data,omitempty"`
+	ID             string         `bson:"_id,omitempty"`
+	Timestamp      time.Time      `bson:"timestamp"`
+	EventType      AuditEventType `bson:"event_type"`
+	RuleName       string         `bson:"rule_name,omitempty"`
+	SourceRepo     string         `bson:"source_repo"`
+	SourcePath     string         `bson:"source_path"`
+	TargetRepo     string         `bson:"target_repo,omitempty"`
+	TargetPath     string         `bson:"target_path,omitempty"`
+	CommitSHA      string         `bson:"commit_sha,omitempty"`
+	PRNumber       int            `bson:"pr_number,omitempty"`
+	Success        bool           `bson:"success"`
+	ErrorMessage   string         `bson:"error_message,omitempty"`
+	DurationMs     int64          `bson:"duration_ms,omitempty"`
+	FileSize       int64          `bson:"file_size,omitempty"`
+	AdditionalData map[string]any `bson:"additional_data,omitempty"`
 }
 
 // AuditLogger handles audit logging to MongoDB
@@ -48,24 +48,25 @@ type AuditLogger interface {
 	GetEventsByRule(ctx context.Context, ruleName string, limit int) ([]AuditEvent, error)
 	GetStatsByRule(ctx context.Context) (map[string]RuleStats, error)
 	GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error)
+	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
 // RuleStats represents statistics for a specific rule
 type RuleStats struct {
-	RuleName     string `bson:"_id"`
-	TotalCopies  int    `bson:"total_copies"`
-	SuccessCount int    `bson:"success_count"`
-	FailureCount int    `bson:"failure_count"`
+	RuleName     string  `bson:"_id"`
+	TotalCopies  int     `bson:"total_copies"`
+	SuccessCount int     `bson:"success_count"`
+	FailureCount int     `bson:"failure_count"`
 	AvgDuration  float64 `bson:"avg_duration"`
 }
 
 // DailyStats represents daily copy volume statistics
 type DailyStats struct {
-	Date       string `bson:"_id"`
-	TotalCopies int   `bson:"total_copies"`
-	SuccessCount int  `bson:"success_count"`
-	FailureCount int  `bson:"failure_count"`
+	Date         string `bson:"_id"`
+	TotalCopies  int    `bson:"total_copies"`
+	SuccessCount int    `bson:"success_count"`
+	FailureCount int    `bson:"failure_count"`
 }
 
 // MongoAuditLogger implements AuditLogger using MongoDB
@@ -85,8 +86,14 @@ func NewMongoAuditLogger(ctx context.Context, mongoURI, database, collection str
 		return nil, fmt.Errorf("MONGO_URI is required when audit logging is enabled")
 	}
 
-	clientOptions := options.Client().ApplyURI(mongoURI)
-	client, err := mongo.Connect(ctx, clientOptions)
+	clientOptions := options.Client().
+		ApplyURI(mongoURI).
+		SetServerSelectionTimeout(5 * time.Second).
+		SetConnectTimeout(5 * time.Second).
+		SetTimeout(10 * time.Second).
+		SetMaxPoolSize(10).
+		SetRetryWrites(true)
+	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
 	}
@@ -168,7 +175,7 @@ func (mal *MongoAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -185,7 +192,7 @@ func (mal *MongoAuditLogger) GetFailedEvents(ctx context.Context, limit int) ([]
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -202,7 +209,7 @@ func (mal *MongoAuditLogger) GetEventsByRule(ctx context.Context, ruleName strin
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var events []AuditEvent
 	if err := cursor.All(ctx, &events); err != nil {
@@ -228,7 +235,7 @@ func (mal *MongoAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rul
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var stats []RuleStats
 	if err := cursor.All(ctx, &stats); err != nil {
@@ -245,7 +252,7 @@ func (mal *MongoAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rul
 // GetDailyVolume retrieves daily copy volume statistics
 func (mal *MongoAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error) {
 	startDate := time.Now().AddDate(0, 0, -days)
-	
+
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
 			"event_type": AuditEventCopy,
@@ -269,7 +276,7 @@ func (mal *MongoAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]Da
 	if err != nil {
 		return nil, err
 	}
-	defer cursor.Close(ctx)
+	defer func() { _ = cursor.Close(ctx) }()
 
 	var stats []DailyStats
 	if err := cursor.All(ctx, &stats); err != nil {
@@ -278,7 +285,12 @@ func (mal *MongoAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]Da
 	return stats, nil
 }
 
-// Close closes the MongoDB connection
+// Ping checks MongoDB connectivity.
+func (mal *MongoAuditLogger) Ping(ctx context.Context) error {
+	return mal.client.Ping(ctx, nil)
+}
+
+// Close closes the MongoDB connection.
 func (mal *MongoAuditLogger) Close(ctx context.Context) error {
 	return mal.client.Disconnect(ctx)
 }
@@ -286,9 +298,11 @@ func (mal *MongoAuditLogger) Close(ctx context.Context) error {
 // NoOpAuditLogger is a no-op implementation when audit logging is disabled
 type NoOpAuditLogger struct{}
 
-func (nal *NoOpAuditLogger) LogCopyEvent(ctx context.Context, event *AuditEvent) error        { return nil }
-func (nal *NoOpAuditLogger) LogDeprecationEvent(ctx context.Context, event *AuditEvent) error { return nil }
-func (nal *NoOpAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEvent) error       { return nil }
+func (nal *NoOpAuditLogger) LogCopyEvent(ctx context.Context, event *AuditEvent) error { return nil }
+func (nal *NoOpAuditLogger) LogDeprecationEvent(ctx context.Context, event *AuditEvent) error {
+	return nil
+}
+func (nal *NoOpAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEvent) error { return nil }
 func (nal *NoOpAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
 	return []AuditEvent{}, nil
 }
@@ -304,5 +318,5 @@ func (nal *NoOpAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rule
 func (nal *NoOpAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error) {
 	return []DailyStats{}, nil
 }
+func (nal *NoOpAuditLogger) Ping(ctx context.Context) error  { return nil }
 func (nal *NoOpAuditLogger) Close(ctx context.Context) error { return nil }
-

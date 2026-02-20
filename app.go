@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +14,13 @@ import (
 	"github.com/grove-platform/github-copier/services"
 )
 
+// version is set at build time via -ldflags:
+//
+//	go build -ldflags "-X main.version=v1.0.0"
+//
+// When not set (local dev builds), it defaults to "dev".
+var version = "dev"
+
 func main() {
 	// Parse command line flags
 	var envFile string
@@ -24,8 +30,14 @@ func main() {
 	flag.StringVar(&envFile, "env", "./configs/.env", "Path to environment file")
 	flag.BoolVar(&dryRun, "dry-run", false, "Enable dry-run mode (no actual changes)")
 	flag.BoolVar(&validateOnly, "validate", false, "Validate configuration and exit")
+	showVersion := flag.Bool("version", false, "Print version and exit")
 	help := flag.Bool("help", false, "Show help")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 
 	if *help {
 		printHelp()
@@ -40,12 +52,13 @@ func main() {
 	}
 
 	// Load secrets from Secret Manager if not directly provided
-	if err := services.LoadWebhookSecret(config); err != nil {
+	ctx := context.Background()
+	if err := services.LoadWebhookSecret(ctx, config); err != nil {
 		fmt.Printf("❌ Error loading webhook secret: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := services.LoadMongoURI(config); err != nil {
+	if err := services.LoadMongoURI(ctx, config); err != nil {
 		fmt.Printf("❌ Error loading MongoDB URI: %v\n", err)
 		os.Exit(1)
 	}
@@ -61,7 +74,7 @@ func main() {
 		fmt.Printf("❌ Failed to initialize services: %v\n", err)
 		os.Exit(1)
 	}
-	defer container.Close(context.Background())
+	defer func() { _ = container.Close(context.Background()) }()
 
 	// If validate-only mode, validate config and exit
 	if validateOnly {
@@ -74,13 +87,18 @@ func main() {
 	}
 
 	// Initialize Google Cloud logging
-	services.InitializeGoogleLogger()
+	services.InitializeLogger(config)
 	defer services.CloseGoogleLogger()
 
 	// Configure GitHub permissions
-	if err := services.ConfigurePermissions(); err != nil {
-		fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
-		os.Exit(1)
+	if err := services.ConfigurePermissions(ctx, config); err != nil {
+		if config.DryRun {
+			services.LogWarning("GitHub authentication failed (non-fatal in dry-run mode)", "error", err)
+			fmt.Printf("⚠️  GitHub auth skipped (dry-run): %v\n", err)
+		} else {
+			fmt.Printf("❌ Failed to configure GitHub permissions: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	// Print startup banner
@@ -115,12 +133,14 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Println("╔════════════════════════════════════════════════════════════════╗")
 	fmt.Println("║  GitHub Code Example Copier                                    ║")
 	fmt.Println("╠════════════════════════════════════════════════════════════════╣")
+	fmt.Printf("║  Version:      %-48s║\n", version)
 	fmt.Printf("║  Port:         %-48s║\n", config.Port)
 	fmt.Printf("║  Webhook Path: %-48s║\n", config.WebserverPath)
-	fmt.Printf("║  Config File:  %-48s║\n", config.ConfigFile)
+	fmt.Printf("║  Config File:  %-48s║\n", config.EffectiveConfigFile())
 	fmt.Printf("║  Dry Run:      %-48v║\n", config.DryRun)
 	fmt.Printf("║  Audit Log:    %-48v║\n", config.AuditEnabled)
 	fmt.Printf("║  Metrics:      %-48v║\n", config.MetricsEnabled)
+	fmt.Printf("║  Slack:        %-48v║\n", config.SlackEnabled)
 	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 }
@@ -140,13 +160,19 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		handleWebhook(w, r, config, container)
 	})
 
-	// Health endpoint
-	mux.HandleFunc("/health", services.HealthHandler(container.FileStateService, container.StartTime))
+	// Liveness probe — lightweight, always 200 if process is running
+	mux.HandleFunc("/health", services.HealthHandler(container.StartTime, version))
+
+	// Readiness probe — checks GitHub auth, MongoDB connectivity
+	mux.HandleFunc("/ready", services.ReadinessHandler(container))
 
 	// Metrics endpoint (if enabled)
 	if config.MetricsEnabled {
 		mux.HandleFunc("/metrics", services.MetricsHandler(container.MetricsCollector, container.FileStateService))
 	}
+
+	// Config diagnostic endpoint — shows resolved config with secrets redacted
+	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container, version))
 
 	// Info endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -155,11 +181,13 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
-		fmt.Fprintf(w, "GitHub Code Example Copier\n")
-		fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
-		fmt.Fprintf(w, "Health check: /health\n")
+		_, _ = fmt.Fprintf(w, "GitHub Code Example Copier %s\n", version)
+		_, _ = fmt.Fprintf(w, "Webhook endpoint: %s\n", config.WebserverPath)
+		_, _ = fmt.Fprintf(w, "Health check: /health\n")
+		_, _ = fmt.Fprintf(w, "Readiness check: /ready\n")
+		_, _ = fmt.Fprintf(w, "Config diagnostic: /config\n")
 		if config.MetricsEnabled {
-			fmt.Fprintf(w, "Metrics: /metrics\n")
+			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
 		}
 	})
 
@@ -178,7 +206,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 
 	// Start server in goroutine
 	go func() {
-		services.LogInfo(fmt.Sprintf("Starting web server on port %s", port))
+		services.LogInfo("Starting web server", "port", port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			serverErr <- fmt.Errorf("server error: %w", err)
 		}
@@ -196,27 +224,27 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			return err
 		}
 	case sig := <-sigChan:
-		log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+		services.LogInfo("Received signal, initiating graceful shutdown", "signal", sig)
 	}
 
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	log.Println("Waiting for in-flight requests to complete...")
+	services.LogInfo("Waiting for in-flight requests to complete")
 	if err := server.Shutdown(shutdownCtx); err != nil {
-		log.Printf("Server shutdown error: %v", err)
+		services.LogError("Server shutdown error", "error", err)
 	} else {
-		log.Println("Server stopped accepting new connections")
+		services.LogInfo("Server stopped accepting new connections")
 	}
 
 	// Cleanup resources (flush audit logs, close connections)
-	log.Println("Cleaning up resources...")
+	services.LogInfo("Cleaning up resources")
 	if err := container.Close(shutdownCtx); err != nil {
-		log.Printf("Cleanup error: %v", err)
+		services.LogError("Cleanup error", "error", err)
 	}
 
-	log.Println("Shutdown complete")
+	services.LogInfo("Shutdown complete")
 	return nil
 }
 

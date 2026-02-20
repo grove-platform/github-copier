@@ -4,17 +4,21 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/google/go-github/v48/github"
-	. "github.com/grove-platform/github-copier/types"
+	"github.com/google/go-github/v82/github"
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
+	"golang.org/x/sync/errgroup"
 )
 
 // WorkflowProcessor processes workflows and applies transformations
 type WorkflowProcessor interface {
-	ProcessWorkflow(ctx context.Context, workflow Workflow, changedFiles []ChangedFile, prNumber int, sourceCommitSHA string) error
+	ProcessWorkflow(ctx context.Context, workflow types.Workflow, changedFiles []types.ChangedFile, prNumber int, sourceCommitSHA string) error
 }
 
 // workflowProcessor implements WorkflowProcessor
@@ -24,6 +28,7 @@ type workflowProcessor struct {
 	fileStateService FileStateService
 	metricsCollector *MetricsCollector
 	messageTemplater MessageTemplater
+	config           *configs.Config
 }
 
 // NewWorkflowProcessor creates a new workflow processor
@@ -33,6 +38,7 @@ func NewWorkflowProcessor(
 	fileStateService FileStateService,
 	metricsCollector *MetricsCollector,
 	messageTemplater MessageTemplater,
+	config *configs.Config,
 ) WorkflowProcessor {
 	return &workflowProcessor{
 		patternMatcher:   patternMatcher,
@@ -40,14 +46,33 @@ func NewWorkflowProcessor(
 		fileStateService: fileStateService,
 		metricsCollector: metricsCollector,
 		messageTemplater: messageTemplater,
+		config:           config,
 	}
 }
 
-// ProcessWorkflow processes a single workflow
+// matchResult holds the outcome of the match phase for a single file.
+type matchResult struct {
+	workflow        types.Workflow
+	file            types.ChangedFile
+	targetPath      string
+	isDelete        bool
+	prNumber        int
+	sourceCommitSHA string
+	fileContent     *github.RepositoryContent // populated by fetch phase
+}
+
+// maxConcurrentFetches limits parallel GitHub API calls per workflow to avoid
+// hitting secondary rate limits.
+const maxConcurrentFetches = 5
+
+// ProcessWorkflow processes a single workflow in three phases:
+//  1. Match — identify files that match transformations (fast, no I/O)
+//  2. Fetch — retrieve file contents from GitHub in parallel
+//  3. Queue — add fetched files to the upload queue (sequential, mutates shared state)
 func (wp *workflowProcessor) ProcessWorkflow(
 	ctx context.Context,
-	workflow Workflow,
-	changedFiles []ChangedFile,
+	workflow types.Workflow,
+	changedFiles []types.ChangedFile,
 	prNumber int,
 	sourceCommitSHA string,
 ) error {
@@ -58,26 +83,75 @@ func (wp *workflowProcessor) ProcessWorkflow(
 		"file_count":       len(changedFiles),
 	})
 
-	// Track files matched and skipped
-	filesMatched := 0
+	// ── Phase 1: Match ───────────────────────────────────────────────────
+	var matches []matchResult
 	filesSkipped := 0
 
-	// Process each changed file
 	for _, file := range changedFiles {
-		matched, err := wp.processFileForWorkflow(ctx, workflow, file, prNumber, sourceCommitSHA)
-		if err != nil {
-			LogErrorCtx(ctx, "Failed to process file for workflow", err, map[string]interface{}{
-				"workflow_name": workflow.Name,
-				"file_path":     file.Path,
-			})
+		mr, matched := wp.matchFile(ctx, workflow, file, prNumber, sourceCommitSHA)
+		if !matched {
+			filesSkipped++
 			continue
 		}
+		matches = append(matches, mr)
+	}
 
-		if matched {
-			filesMatched++
-		} else {
-			filesSkipped++
+	if len(matches) == 0 {
+		LogInfoCtx(ctx, "Workflow processing complete", map[string]interface{}{
+			"workflow_name": workflow.Name,
+			"files_matched": 0,
+			"files_skipped": filesSkipped,
+		})
+		return nil
+	}
+
+	// ── Phase 2: Fetch (parallel) ────────────────────────────────────────
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(maxConcurrentFetches)
+
+	var fetchErrMu sync.Mutex
+	var fetchErrors []error
+
+	for i := range matches {
+		if matches[i].isDelete {
+			continue
 		}
+		mr := &matches[i]
+		g.Go(func() error {
+			fc, err := wp.fetchFileContent(gctx, workflow, mr.file, mr.sourceCommitSHA)
+			if err != nil {
+				fetchErrMu.Lock()
+				fetchErrors = append(fetchErrors, fmt.Errorf("fetch %s: %w", mr.file.Path, err))
+				fetchErrMu.Unlock()
+				return nil // don't abort sibling fetches
+			}
+			mr.fileContent = fc
+			return nil
+		})
+	}
+	_ = g.Wait()
+
+	for _, fe := range fetchErrors {
+		LogErrorCtx(ctx, "Failed to fetch file content", fe, map[string]interface{}{
+			"workflow_name": workflow.Name,
+		})
+	}
+
+	// ── Phase 3: Queue (sequential) ──────────────────────────────────────
+	filesMatched := 0
+	for i := range matches {
+		mr := &matches[i]
+		if mr.isDelete {
+			wp.addToDeprecationMap(mr.workflow, mr.targetPath, mr.file.Path, mr.prNumber)
+			filesMatched++
+			continue
+		}
+		if mr.fileContent == nil {
+			continue // fetch failed — already logged
+		}
+		mr.fileContent.Name = github.Ptr(mr.targetPath)
+		wp.queueUpload(ctx, mr.workflow, mr.fileContent, mr.targetPath, mr.prNumber, mr.sourceCommitSHA)
+		filesMatched++
 	}
 
 	LogInfoCtx(ctx, "Workflow processing complete", map[string]interface{}{
@@ -89,35 +163,38 @@ func (wp *workflowProcessor) ProcessWorkflow(
 	return nil
 }
 
-// processFileForWorkflow processes a single file for a workflow
-func (wp *workflowProcessor) processFileForWorkflow(
+// matchFile checks exclusions and transformations for a single file.
+// Returns a matchResult and true if the file matched a transformation.
+func (wp *workflowProcessor) matchFile(
 	ctx context.Context,
-	workflow Workflow,
-	file ChangedFile,
+	workflow types.Workflow,
+	file types.ChangedFile,
 	prNumber int,
 	sourceCommitSHA string,
-) (bool, error) {
-	// Check if file is excluded
+) (matchResult, bool) {
 	if wp.isExcluded(file.Path, workflow.Exclude) {
 		LogInfoCtx(ctx, "File excluded by workflow exclude patterns", map[string]interface{}{
 			"workflow_name": workflow.Name,
 			"file_path":     file.Path,
 		})
-		return false, nil
+		return matchResult{}, false
 	}
 
-	// Try each transformation until one matches
 	for i, transformation := range workflow.Transformations {
 		matched, targetPath, err := wp.applyTransformation(ctx, workflow, transformation, file.Path)
 		if err != nil {
-			return false, fmt.Errorf("transformation[%d]: %w", i, err)
+			LogErrorCtx(ctx, "Failed to apply transformation", err, map[string]interface{}{
+				"workflow_name":      workflow.Name,
+				"transformation_idx": i,
+				"file_path":          file.Path,
+			})
+			return matchResult{}, false
 		}
 
 		if !matched {
 			continue
 		}
 
-		// File matched this transformation
 		LogInfoCtx(ctx, "File matched transformation", map[string]interface{}{
 			"workflow_name":       workflow.Name,
 			"transformation_idx":  i,
@@ -126,46 +203,53 @@ func (wp *workflowProcessor) processFileForWorkflow(
 			"target_path":         targetPath,
 		})
 
-		// Handle file based on status
-		// GitHub GraphQL API returns uppercase status: "DELETED", "ADDED", "MODIFIED", etc.
-		if file.Status == "DELETED" || file.Status == "removed" {
-			// Add to deprecation map
-			wp.addToDeprecationMap(workflow, targetPath)
-		} else {
-			// Add to upload queue
-			err := wp.addToUploadQueue(ctx, workflow, file, targetPath, prNumber, sourceCommitSHA)
-			if err != nil {
-				return false, fmt.Errorf("failed to queue file for upload: %w", err)
-			}
-		}
-
-		return true, nil
+		isDelete := file.Status == "DELETED" || file.Status == "removed"
+		return matchResult{
+			workflow:        workflow,
+			file:            file,
+			targetPath:      targetPath,
+			isDelete:        isDelete,
+			prNumber:        prNumber,
+			sourceCommitSHA: sourceCommitSHA,
+		}, true
 	}
 
-	// No transformation matched
 	LogInfoCtx(ctx, "File did not match any transformation", map[string]interface{}{
 		"workflow_name": workflow.Name,
 		"file_path":     file.Path,
 	})
+	return matchResult{}, false
+}
 
-	return false, nil
+// fetchFileContent retrieves a single file's content from the source repository.
+func (wp *workflowProcessor) fetchFileContent(
+	ctx context.Context,
+	workflow types.Workflow,
+	file types.ChangedFile,
+	sourceCommitSHA string,
+) (*github.RepositoryContent, error) {
+	parts := strings.Split(workflow.Source.Repo, "/")
+	if len(parts) != 2 {
+		return nil, fmt.Errorf("invalid source repo format: expected owner/repo, got: %s", workflow.Source.Repo)
+	}
+	return RetrieveFileContentsWithConfigAndBranch(ctx, wp.config, file.Path, sourceCommitSHA, parts[0], parts[1])
 }
 
 // applyTransformation applies a transformation to a file path
 func (wp *workflowProcessor) applyTransformation(
 	ctx context.Context,
-	workflow Workflow,
-	transformation Transformation,
+	workflow types.Workflow,
+	transformation types.Transformation,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	switch transformation.GetType() {
-	case TransformationTypeMove:
+	case types.TransformationTypeMove:
 		return wp.applyMoveTransformation(transformation.Move, sourcePath)
-	case TransformationTypeCopy:
+	case types.TransformationTypeCopy:
 		return wp.applyCopyTransformation(transformation.Copy, sourcePath)
-	case TransformationTypeGlob:
+	case types.TransformationTypeGlob:
 		return wp.applyGlobTransformation(transformation.Glob, sourcePath)
-	case TransformationTypeRegex:
+	case types.TransformationTypeRegex:
 		return wp.applyRegexTransformation(transformation.Regex, sourcePath)
 	default:
 		return false, "", fmt.Errorf("unknown transformation type: %s", transformation.GetType())
@@ -174,7 +258,7 @@ func (wp *workflowProcessor) applyTransformation(
 
 // applyMoveTransformation applies a move transformation
 func (wp *workflowProcessor) applyMoveTransformation(
-	move *MoveTransform,
+	move *types.MoveTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Check if source path starts with the "from" prefix
@@ -197,7 +281,7 @@ func (wp *workflowProcessor) applyMoveTransformation(
 
 // applyCopyTransformation applies a copy transformation
 func (wp *workflowProcessor) applyCopyTransformation(
-	copy *CopyTransform,
+	copy *types.CopyTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Copy only matches exact file path
@@ -209,7 +293,7 @@ func (wp *workflowProcessor) applyCopyTransformation(
 
 // applyGlobTransformation applies a glob transformation
 func (wp *workflowProcessor) applyGlobTransformation(
-	glob *GlobTransform,
+	glob *types.GlobTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Use doublestar for glob matching
@@ -235,12 +319,12 @@ func (wp *workflowProcessor) applyGlobTransformation(
 
 // applyRegexTransformation applies a regex transformation
 func (wp *workflowProcessor) applyRegexTransformation(
-	regex *RegexTransform,
+	regex *types.RegexTransform,
 	sourcePath string,
 ) (matched bool, targetPath string, err error) {
 	// Use existing pattern matcher for regex
-	sourcePattern := SourcePattern{
-		Type:    PatternTypeRegex,
+	sourcePattern := types.SourcePattern{
+		Type:    types.PatternTypeRegex,
 		Pattern: regex.Pattern,
 	}
 
@@ -280,78 +364,91 @@ func (wp *workflowProcessor) extractGlobVariables(pattern, path string) map[stri
 	return variables
 }
 
-// isExcluded checks if a file path matches any exclude pattern
+// isExcluded checks if a file path matches any exclude pattern (using regex)
 func (wp *workflowProcessor) isExcluded(path string, excludePatterns []string) bool {
 	for _, pattern := range excludePatterns {
-		matched, err := doublestar.Match(pattern, path)
+		re, err := regexp.Compile(pattern)
 		if err != nil {
-			LogWarning(fmt.Sprintf("Invalid exclude pattern: %s: %v", pattern, err))
+			LogWarning("Invalid exclude regex pattern", "pattern", pattern, "error", err)
 			continue
 		}
-		if matched {
+		if re.MatchString(path) {
 			return true
 		}
 	}
 	return false
 }
 
-// addToDeprecationMap adds a file to the deprecation map
-func (wp *workflowProcessor) addToDeprecationMap(workflow Workflow, targetPath string) {
+// addToDeprecationMap adds a file to the deprecation map if deprecation tracking is enabled
+func (wp *workflowProcessor) addToDeprecationMap(workflow types.Workflow, targetPath string, sourcePath string, prNumber int) {
+	// Only track deprecations if explicitly enabled
+	if workflow.DeprecationCheck == nil || !workflow.DeprecationCheck.Enabled {
+		return
+	}
+
 	deprecationFile := "deprecated_examples.json"
-	if workflow.DeprecationCheck != nil && workflow.DeprecationCheck.File != "" {
+	if workflow.DeprecationCheck.File != "" {
 		deprecationFile = workflow.DeprecationCheck.File
 	}
 
-	entry := DeprecatedFileEntry{
-		FileName: targetPath,
-		Repo:     workflow.Destination.Repo,
-		Branch:   workflow.Destination.Branch,
+	entry := types.DeprecatedFileEntry{
+		FileName:   targetPath,
+		Repo:       workflow.Destination.Repo,
+		Branch:     workflow.Destination.Branch,
+		SourcePath: sourcePath,
+		PRNumber:   prNumber,
 	}
 
 	wp.fileStateService.AddFileToDeprecate(deprecationFile, entry)
 }
 
-// addToUploadQueue adds a file to the upload queue
-func (wp *workflowProcessor) addToUploadQueue(
+// queueUpload adds a pre-fetched file to the upload queue. The fileContent must
+// already have its Name set to the target path.
+func (wp *workflowProcessor) queueUpload(
 	ctx context.Context,
-	workflow Workflow,
-	file ChangedFile,
+	workflow types.Workflow,
+	fileContent *github.RepositoryContent,
 	targetPath string,
 	prNumber int,
 	sourceCommitSHA string,
-) error {
-	// Parse source repo owner/name
-	parts := strings.Split(workflow.Source.Repo, "/")
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid source repo format: expected owner/repo, got: %s", workflow.Source.Repo)
-	}
-	sourceRepoOwner := parts[0]
-	sourceRepoName := parts[1]
+) {
 
-	// Fetch file content from source repository
-	fileContent, err := RetrieveFileContentsWithConfigAndBranch(ctx, file.Path, sourceCommitSHA, sourceRepoOwner, sourceRepoName)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve file content: %w", err)
-	}
-
-	// Update file name to target path
-	fileContent.Name = github.String(targetPath)
-
-	// Create upload key
-	key := UploadKey{
-		RepoName:   workflow.Destination.Repo,
-		BranchPath: workflow.Destination.Branch,
+	// Create upload key — includes CommitStrategy so that workflows with
+	// different strategies targeting the same repo produce separate operations.
+	key := types.UploadKey{
+		RepoName:       workflow.Destination.Repo,
+		BranchPath:     workflow.Destination.Branch,
+		CommitStrategy: getCommitStrategyType(workflow),
 	}
 
 	// Get existing entries from FileStateService
 	filesToUpload := wp.fileStateService.GetFilesToUpload()
 	content, exists := filesToUpload[key]
 	if !exists {
-		content = UploadFileContent{
+		content = types.UploadFileContent{
 			Content:        []github.RepositoryContent{},
-			CommitStrategy: CommitStrategy(getCommitStrategyType(workflow)),
+			CommitStrategy: types.CommitStrategy(getCommitStrategyType(workflow)),
 			UsePRTemplate:  getUsePRTemplate(workflow),
 			AutoMergePR:    getAutoMerge(workflow),
+		}
+	} else {
+		// When batching multiple workflows, use AND logic for auto-merge (conservative):
+		// auto-merge is only enabled if ALL workflows in the batch want it.
+		// Log a warning when workflows have conflicting auto-merge settings.
+		workflowAutoMerge := getAutoMerge(workflow)
+		if workflowAutoMerge != content.AutoMergePR {
+			LogWarning("Workflows in batch have conflicting auto_merge settings; using AND logic (auto-merge disabled)",
+				"workflow", workflow.Name,
+				"target", key.RepoName,
+				"workflow_auto_merge", workflowAutoMerge,
+				"batch_auto_merge", content.AutoMergePR,
+			)
+			// AND logic: if either is false, result is false
+			content.AutoMergePR = false
+		}
+		// For PR template, use OR logic - if any workflow wants it, use it
+		if getUsePRTemplate(workflow) && !content.UsePRTemplate {
+			content.UsePRTemplate = true
 		}
 	}
 
@@ -359,7 +456,7 @@ func (wp *workflowProcessor) addToUploadQueue(
 	content.Content = append(content.Content, *fileContent)
 
 	// Render templates with message context
-	msgCtx := NewMessageContext()
+	msgCtx := types.NewMessageContext()
 	msgCtx.SourceRepo = workflow.Source.Repo
 	msgCtx.SourceBranch = workflow.Source.Branch
 	msgCtx.TargetRepo = workflow.Destination.Repo
@@ -367,6 +464,10 @@ func (wp *workflowProcessor) addToUploadQueue(
 	msgCtx.PRNumber = prNumber
 	msgCtx.CommitSHA = sourceCommitSHA
 	msgCtx.FileCount = len(content.Content)
+
+	// Track previous metadata so we can log when a later workflow overwrites it.
+	prevCommitMsg := content.CommitMessage
+	prevPRTitle := content.PRTitle
 
 	// Render commit message
 	if workflow.CommitStrategy != nil && workflow.CommitStrategy.CommitMessage != "" {
@@ -387,6 +488,24 @@ func (wp *workflowProcessor) addToUploadQueue(
 		content.PRBody = wp.messageTemplater.RenderPRBody(workflow.CommitStrategy.PRBody, msgCtx)
 	}
 
+	// Log when a subsequent workflow in the same batch overwrites PR metadata.
+	if exists && prevCommitMsg != "" && prevCommitMsg != content.CommitMessage {
+		LogInfo("Workflow overwrites batched commit message (last wins)",
+			"workflow", workflow.Name,
+			"target", workflow.Destination.Repo,
+			"prev_commit_message", prevCommitMsg,
+			"new_commit_message", content.CommitMessage,
+		)
+	}
+	if exists && prevPRTitle != "" && prevPRTitle != content.PRTitle {
+		LogInfo("Workflow overwrites batched PR title (last wins)",
+			"workflow", workflow.Name,
+			"target", workflow.Destination.Repo,
+			"prev_pr_title", prevPRTitle,
+			"new_pr_title", content.PRTitle,
+		)
+	}
+
 	// Add back to FileStateService
 	wp.fileStateService.AddFileToUpload(key, content)
 
@@ -394,27 +513,25 @@ func (wp *workflowProcessor) addToUploadQueue(
 	if wp.metricsCollector != nil {
 		wp.metricsCollector.RecordFileUploaded(0 * time.Second)
 	}
-
-	return nil
 }
 
 // Helper functions to extract config values
 
-func getCommitStrategyType(workflow Workflow) string {
+func getCommitStrategyType(workflow types.Workflow) string {
 	if workflow.CommitStrategy != nil && workflow.CommitStrategy.Type != "" {
 		return workflow.CommitStrategy.Type
 	}
 	return "pull_request" // default
 }
 
-func getUsePRTemplate(workflow Workflow) bool {
+func getUsePRTemplate(workflow types.Workflow) bool {
 	if workflow.CommitStrategy != nil {
 		return workflow.CommitStrategy.UsePRTemplate
 	}
 	return false
 }
 
-func getAutoMerge(workflow Workflow) bool {
+func getAutoMerge(workflow types.Workflow) bool {
 	if workflow.CommitStrategy != nil {
 		return workflow.CommitStrategy.AutoMerge
 	}

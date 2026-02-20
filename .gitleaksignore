@@ -1,0 +1,5 @@
+# Example placeholder string in .env.local.example (not a real key)
+configs/.env.local.example:private-key:77
+
+# Purpose-generated test-only PEM key in .env.test (never associated with a real GitHub App)
+.env.test:private-key:30

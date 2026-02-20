@@ -42,9 +42,6 @@ Validate a configuration file.
 
 # Validate with verbose output
 ./config-validator validate -config .copier/workflows/config.yaml -v
-
-# Validate legacy JSON config
-./config-validator validate -config config.json
 ```
 
 **Output:**
@@ -185,7 +182,7 @@ When files aren't matching your pattern:
 
 1. **Get actual file paths from logs:**
    ```bash
-   grep "sample file path" logs/app.log
+   # Check stdout for "sample file path" entries
    ```
 
 2. **Test your pattern:**
@@ -233,19 +230,6 @@ Before deploying a new configuration:
   -source "examples/go/main.go" \
   -template "docs/${lang}/${file}" \
   -vars "lang=go,file=main.go"
-```
-
-### Migrating from JSON to YAML
-
-```bash
-# Validate
-./config-validator validate -config workflow-config.yaml -v
-
-# Test patterns
-./config-validator test-pattern \
-  -type prefix \
-  -pattern "examples/" \
-  -file "examples/go/main.go"
 ```
 
 ## Exit Codes
