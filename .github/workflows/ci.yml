@@ -124,7 +124,7 @@ jobs:
             --project $PROJECT_ID \
             --allow-unauthenticated \
             --env-vars-file=env-cloudrun.yaml \
-            --set-env-vars="GITHUB_APP_ID=${{ secrets.GITHUB_APP_ID }},INSTALLATION_ID=${{ secrets.INSTALLATION_ID }}" \
+            --update-env-vars="GITHUB_APP_ID=${{ secrets.GITHUB_APP_ID }},INSTALLATION_ID=${{ secrets.INSTALLATION_ID }}" \
             --set-build-env-vars="VERSION=${{ steps.version.outputs.tag }}" \
             --tag="${{ steps.version.outputs.tag }}" \
             --max-instances=10 \
