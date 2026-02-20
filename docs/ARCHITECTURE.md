@@ -481,11 +481,80 @@ if file.Status == "DELETED" {
 - Deprecation queue: `{repo}:{targetPath}`
 - Thread-safe operations with mutex locks
 
-#### 5. Batch Operations
-- All files for same target are batched together
-- Single commit per target repository
-- Single PR per target (if using PR strategy)
-- Deprecation file updated once with all entries
+#### 5. Target Repo Batching
+
+When a webhook is processed, matched files from multiple workflows are grouped by a composite key of **(destination repo, branch, commit strategy)**. Workflows that share all three values are batched into a single write operation; workflows that differ on any dimension produce separate operations.
+
+**How it works:**
+
+1. All workflows are processed in order; each matched file is queued by `(repo, branch, strategy)`
+2. After all workflows finish, files sharing the same key are combined
+3. One commit or PR is created per unique key (not per workflow)
+
+**Implications:**
+
+| Scenario | Behavior |
+|----------|----------|
+| 2 workflows → same repo, both `direct` | One direct commit with all files |
+| 2 workflows → same repo, both `pull_request` | One PR with all files |
+| 1 `direct` + 1 `pull_request` → same repo | **Two separate operations** — one direct commit and one PR |
+| 2 workflows → different repos | Separate commit/PR per repo (independent) |
+
+**What gets merged when workflows share a key:**
+
+- **Files**: All matched files from all workflows with the same key are combined into one commit tree
+- **Commit message**: Uses the last workflow's `commit_message`
+- **PR title/body**: Uses the last workflow's `pr_title` and `pr_body`
+- **Auto-merge**: Uses the last workflow's `auto_merge` setting
+- **PR template**: Fetched once if any workflow sets `use_pr_template: true`
+
+> **Note:** At config load time the app logs a warning when workflows target the same `(repo, branch)` with different commit strategies, so operators are aware that multiple operations will be created.
+
+**Example — same strategy (batched):**
+
+```yaml
+# These two workflows share repo, branch, AND strategy → batched into one PR:
+workflows:
+  - name: "go-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Go examples"
+
+  - name: "python-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Python examples"
+```
+
+Result: **One PR** with files from both workflows. The PR title will be "Update Python examples" (last workflow wins for metadata).
+
+**Example — different strategies (separate operations):**
+
+```yaml
+# These two workflows share repo and branch but differ on strategy → two operations:
+workflows:
+  - name: "go-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "direct"
+
+  - name: "python-examples"
+    destination: { repo: "org/docs", branch: "main" }
+    commit_strategy:
+      type: "pull_request"
+      pr_title: "Update Python examples"
+```
+
+Result: **One direct commit** (Go files) and **one PR** (Python files).
+
+**Design rationale:**
+
+- Avoids multiple PRs or commits to the same branch from a single source event *when strategies match*
+- Respects each workflow's intended commit strategy when they differ
+- Reduces noise in target repos while remaining predictable
+- A config-time warning alerts operators to mixed-strategy destinations
 
 ## Configuration Examples
 
@@ -581,18 +650,36 @@ auto_merge: false
 
 The application is designed for concurrent operations:
 
+- **TokenManager**: Thread-safe token state via `sync.RWMutex`
 - **FileStateService**: Thread-safe with `sync.RWMutex`
+- **DeliveryTracker**: Thread-safe webhook deduplication via `sync.Mutex`
 - **MetricsCollector**: Thread-safe counters
 - **AuditLogger**: Thread-safe MongoDB operations
 - **ServiceContainer**: Immutable after initialization
 
 ## Error Handling
 
+- Sentinel errors in `services/errors.go` (`ErrRateLimited`, `ErrNotFound`, etc.)
+- All errors wrapped with `%w` for `errors.Is()`/`errors.As()` compatibility
 - Context-aware cancellation support
 - Graceful degradation (audit logging optional)
-- Detailed error logging with full context
+- Structured error logging with full context via `log/slog`
 - Metrics tracking for failed operations
 - No-op implementations for optional features
+
+## Rate Limit Handling
+
+The `RateLimitTransport` (`services/rate_limit.go`) wraps the HTTP transport to automatically:
+- Detect 403/429 responses with `X-RateLimit-Remaining: 0` or `Retry-After` headers
+- Wait and retry with appropriate backoff
+- Log rate limit events with structured context
+
+## Webhook Idempotency
+
+The `DeliveryTracker` (`services/delivery_tracker.go`) prevents duplicate processing:
+- Tracks `X-GitHub-Delivery` header from each webhook
+- TTL-based cleanup to prevent unbounded memory growth
+- Returns 200 OK for already-processed deliveries
 
 ## Performance Considerations
 
@@ -639,8 +726,9 @@ METRICS_ENABLED: "true"
 
 **Health Monitoring:**
 - `/health` endpoint for liveness checks
+- `/ready` endpoint for readiness probes (checks GitHub auth, rate limits, MongoDB)
 - `/metrics` endpoint for monitoring
-- Structured logs for analysis
+- Structured JSON logs via `log/slog` for analysis
 
 ## Future Enhancements
 
@@ -649,6 +737,4 @@ Potential improvements:
 1. **Automatic Cleanup PRs** - Create PRs to remove deprecated files from targets
 2. **Expiration Dates** - Auto-remove deprecation entries after X days
 3. **Config Validation CLI** - Enhanced validation tool
-4. **Retry Logic** - Automatic retry for failed GitHub API calls
-5. **Rate Limiting** - Respect GitHub API rate limits
 

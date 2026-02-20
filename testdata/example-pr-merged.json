@@ -11,23 +11,23 @@
       "ref": "add-go-examples",
       "sha": "abc123def456",
       "repo": {
-        "name": "source-repo",
-        "full_name": "myorg/source-repo"
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
       }
     },
     "base": {
       "ref": "main",
       "repo": {
-        "name": "source-repo",
-        "full_name": "myorg/source-repo"
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
       }
     }
   },
   "repository": {
-    "name": "source-repo",
-    "full_name": "myorg/source-repo",
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
     "owner": {
-      "login": "myorg"
+      "login": "cbullinger"
     }
   },
   "files": [

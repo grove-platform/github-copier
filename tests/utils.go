@@ -30,20 +30,38 @@ func EnvOwnerRepo(t testing.TB) (string, string) {
 	return owner, repo
 }
 
+// TestConfig returns a *configs.Config populated from the current environment variables.
+// This mirrors the values set in TestMain for test suites.
+func TestConfig() *configs.Config {
+	cfg := configs.NewConfig()
+	cfg.ConfigRepoOwner = os.Getenv(configs.ConfigRepoOwner)
+	cfg.ConfigRepoName = os.Getenv(configs.ConfigRepoName)
+	cfg.InstallationId = os.Getenv(configs.InstallationId)
+	cfg.AppId = os.Getenv(configs.AppId)
+	cfg.AppClientId = os.Getenv(configs.AppClientId)
+	cfg.ConfigRepoBranch = os.Getenv(configs.ConfigRepoBranch)
+	if cfg.ConfigRepoBranch == "" {
+		cfg.ConfigRepoBranch = "main"
+	}
+	return cfg
+}
+
 //
 // HTTP/test wiring helpers
 //
 
-// WithHTTPMock wraps a test in `httpmock` activation on a dedicated http.Client and routes services.HTTPClient through it.
-// Used in any test that needs multiple mock endpoints. Wrap t.Run blocks to avoid leftover mocks affecting other tests.
+// WithHTTPMock wraps a test in `httpmock` activation on a dedicated http.Client
+// and routes the TokenManager's HTTP client through it.
 func WithHTTPMock(t testing.TB) *http.Client {
 	t.Helper()
 	c := &http.Client{}
 	httpmock.ActivateNonDefault(c)
 	t.Cleanup(func() { httpmock.DeactivateAndReset() })
-	prev := services.HTTPClient
-	services.HTTPClient = c
-	t.Cleanup(func() { services.HTTPClient = prev })
+
+	tm := services.DefaultTokenManager()
+	prev := tm.GetHTTPClient()
+	tm.SetHTTPClient(c)
+	t.Cleanup(func() { tm.SetHTTPClient(prev) })
 	return c
 }
 
@@ -60,7 +78,6 @@ func DumpHttpmockCalls(t testing.TB) {
 //
 
 // MockGitHubAppTokenEndpoint mocks the GitHub App installation token endpoint with a fixed fake token.
-// Used in to simulate any auth-triggered flow without needing a real installation ID.
 func MockGitHubAppTokenEndpoint(installationID string) {
 	httpmock.RegisterResponder("POST",
 		"https://api.github.com/app/installations/"+installationID+"/access_tokens",
@@ -69,7 +86,6 @@ func MockGitHubAppTokenEndpoint(installationID string) {
 }
 
 // MockGitHubAppInstallations mocks the GitHub App installations list endpoint.
-// Used to simulate fetching installation IDs for organizations.
 func MockGitHubAppInstallations(orgToInstallationID map[string]string) {
 	installations := []map[string]any{}
 	for org, installID := range orgToInstallationID {
@@ -93,9 +109,10 @@ func SetupOrgToken(org, token string) {
 	services.SetInstallationTokenForOrg(org, token)
 }
 
-// MockGitHubWriteEndpoints mocks the full direct-commit flow endpoints for a single branch: GET base ref, POST trees, POST commits, PATCH ref.
-// Used to simulate writing to a GitHub repo without creating a PR.
+// MockGitHubWriteEndpoints mocks the full direct-commit flow endpoints for a single branch.
 // Returns the URLs for the base ref, commits, and update ref endpoints.
+// The base commit's tree SHA is "oldTreeSha" (different from the new tree "newTreeSha"),
+// so commits will proceed normally. Use MockGitHubWriteEndpointsNoOp to simulate no changes.
 func MockGitHubWriteEndpoints(owner, repo, branch string) (baseRefURL, commitsURL, updateRefURL string) {
 	baseRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/ref/heads/" + branch
 	httpmock.RegisterResponder("GET", baseRefURL,
@@ -104,6 +121,16 @@ func MockGitHubWriteEndpoints(owner, repo, branch string) (baseRefURL, commitsUR
 			"object": map[string]any{
 				"sha": "baseSha",
 			},
+		}),
+	)
+
+	// Mock GET commit to return the base commit's tree SHA
+	getCommitRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/baseSha$`)
+	httpmock.RegisterRegexpResponder("GET", getCommitRe,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  "baseSha",
+			"tree": map[string]any{"sha": "oldTreeSha"},
 		}),
 	)
 
@@ -130,8 +157,50 @@ func MockGitHubWriteEndpoints(owner, repo, branch string) (baseRefURL, commitsUR
 	return
 }
 
+// MockGitHubWriteEndpointsNoOp is like MockGitHubWriteEndpoints but the new tree SHA
+// equals the base commit's tree SHA, simulating a no-op (duplicate) commit.
+func MockGitHubWriteEndpointsNoOp(owner, repo, branch string) (baseRefURL, commitsURL, updateRefURL string) {
+	baseRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/ref/heads/" + branch
+	httpmock.RegisterResponder("GET", baseRefURL,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"ref":    "refs/heads/" + branch,
+			"object": map[string]any{"sha": "baseSha"},
+		}),
+	)
+
+	getCommitRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/baseSha$`)
+	httpmock.RegisterRegexpResponder("GET", getCommitRe,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  "baseSha",
+			"tree": map[string]any{"sha": "sameTreeSha"},
+		}),
+	)
+
+	treesRe := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/trees(\?.*)?$`)
+	httpmock.RegisterRegexpResponder("POST", treesRe,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{
+			"sha": "sameTreeSha", // same as base — no real changes
+		}),
+	)
+
+	commitsURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/commits"
+	httpmock.RegisterResponder("POST", commitsURL,
+		httpmock.NewJsonResponderOrPanic(201, map[string]any{
+			"sha": "newCommitSha",
+		}),
+	)
+
+	updateRefURL = "https://api.github.com/repos/" + owner + "/" + repo + "/git/refs/heads/" + branch
+	httpmock.RegisterResponder("PATCH", updateRefURL,
+		httpmock.NewStringResponder(200, `{}`),
+	)
+
+	return
+}
+
 // MockContentsEndpoint mocks GET file contents for a given path/ref.
-// Used to simulate reading a file from a GitHub repo.
 func MockContentsEndpoint(owner, repo, path, contentB64 string) {
 	re := regexp.MustCompile(
 		`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
@@ -149,7 +218,6 @@ func MockContentsEndpoint(owner, repo, path, contentB64 string) {
 }
 
 // MockCreateRef mocks POST to create a new temp branch ref. Returns the exact URL for call-count asserts.
-// Used to simulate creating a new branch for writing files without actually pushing to GitHub.
 func MockCreateRef(owner, repo string) string {
 	url := "https://api.github.com/repos/" + owner + "/" + repo + "/git/refs"
 	httpmock.RegisterResponder("POST", url,
@@ -161,8 +229,33 @@ func MockCreateRef(owner, repo string) string {
 	return url
 }
 
+// MockGetCommit mocks GET /repos/{owner}/{repo}/git/commits/{sha} for tree comparison.
+// baseTreeSHA is the tree SHA of the base commit; use a value different from the new tree
+// to allow commits, or the same value to simulate a no-op.
+func MockGetCommit(owner, repo, commitSHA, baseTreeSHA string) {
+	re := regexp.MustCompile(`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
+		regexp.QuoteMeta(repo) + `/git/commits/` + regexp.QuoteMeta(commitSHA) + `$`)
+	httpmock.RegisterRegexpResponder("GET", re,
+		httpmock.NewJsonResponderOrPanic(200, map[string]any{
+			"sha":  commitSHA,
+			"tree": map[string]any{"sha": baseTreeSHA},
+		}),
+	)
+}
+
+// MockListOpenPRs mocks the "list open PRs" endpoint, returning the supplied PRs.
+// Pass nil or empty to simulate no existing open PRs.
+func MockListOpenPRs(owner, repo string, prs []map[string]any) {
+	if prs == nil {
+		prs = []map[string]any{}
+	}
+	httpmock.RegisterRegexpResponder("GET",
+		regexp.MustCompile(`^https://api\.github\.com/repos/`+regexp.QuoteMeta(owner)+`/`+regexp.QuoteMeta(repo)+`/pulls\?`),
+		httpmock.NewJsonResponderOrPanic(200, prs),
+	)
+}
+
 // MockPullsAndMerge mocks creating and merging a PR.
-// Used to simulate the full PR flow for functions that create a PR and then merge it
 func MockPullsAndMerge(owner, repo string, number int) {
 	httpmock.RegisterResponder("POST",
 		"https://api.github.com/repos/"+owner+"/"+repo+"/pulls",
@@ -175,7 +268,6 @@ func MockPullsAndMerge(owner, repo string, number int) {
 }
 
 // MockDeleteTempRef mocks DELETE to remove a temporary branch ref.
-// Used to simulate cleaning up after writing files without actually deleting a branch on GitHub.
 func MockDeleteTempRef(owner, repo string) {
 	re := regexp.MustCompile(
 		`^https://api\.github\.com/repos/` + regexp.QuoteMeta(owner) + `/` +
@@ -188,7 +280,7 @@ func MockDeleteTempRef(owner, repo string) {
 // Staging/assertion helpers
 //
 
-// NormalizeUpload flattens FilesToUpload to UploadKey -> []names for simpler comparisons.
+// NormalizeUpload flattens a FilesToUpload map to UploadKey -> []names for simpler comparisons.
 func NormalizeUpload(in map[types.UploadKey]types.UploadFileContent) map[types.UploadKey][]string {
 	out := make(map[types.UploadKey][]string, len(in))
 	for k, v := range in {
@@ -206,103 +298,12 @@ func MakeChanged(status, path string) types.ChangedFile {
 	return types.ChangedFile{Status: status, Path: path}
 }
 
-// ResetGlobals clears FilesToUpload and FilesToDeprecate.
-func ResetGlobals() {
-	services.FilesToUpload = nil
-	services.FilesToDeprecate = nil
-}
-
-// AssertUploadedPaths asserts that the staged filenames match the want for the given repo/branch (order-insensitive).
-func AssertUploadedPaths(t *testing.T, repo, branch string, want []string) {
-	t.Helper()
-	key := types.UploadKey{RepoName: repo, BranchPath: "refs/heads/" + branch}
-	got, ok := services.FilesToUpload[key]
-	if !ok {
-		t.Fatalf("expected FilesToUpload to contain key for %s/%s", repo, branch)
-	}
-
-	var names []string
-	for _, c := range got.Content {
-		n := c.GetName()
-		if n == "" {
-			n = c.GetPath() // fallback: some code paths populate only Path
-		}
-		names = append(names, n)
-	}
-
-	// exact, order-insensitive comparison
-	if len(want) == 0 && len(names) == 0 {
-		return
-	}
-	if len(want) != len(names) {
-		t.Fatalf("staged names length mismatch: got=%v want=%v", names, want)
-	}
-	wantSet := map[string]struct{}{}
-	for _, w := range want {
-		wantSet[w] = struct{}{}
-	}
-	for _, n := range names {
-		if _, ok := wantSet[n]; !ok {
-			t.Fatalf("unexpected staged path %q; got=%v want=%v", n, names, want)
-		}
-	}
-}
-
-// AssertUploadedPathsFromConfig converts staged source paths to target paths using cfg,
-// then compares against want - i.e. target paths (order-insensitive).
-// Used when the staged files are from a config that specifies source/target directories.
-func AssertUploadedPathsFromConfig(t *testing.T, cfg types.Configs, want []string) {
-	t.Helper()
-	key := types.UploadKey{RepoName: cfg.TargetRepo, BranchPath: "refs/heads/" + cfg.TargetBranch}
-	got, ok := services.FilesToUpload[key]
-	if !ok {
-		t.Fatalf("expected FilesToUpload to contain key for %s/%s", cfg.TargetRepo, cfg.TargetBranch)
-	}
-	var names []string
-	for _, c := range got.Content {
-		// Prefer Name if present
-		n := c.GetName()
-		if n == "" {
-			n = c.GetPath() // usually the *source* path (e.g. examples/…)
-		}
-		// If the staged name looks like a source path, rewrite to target
-		if cfg.SourceDirectory != "" && strings.HasPrefix(n, cfg.SourceDirectory) {
-			rel := strings.TrimPrefix(n, cfg.SourceDirectory)
-			rel = strings.TrimPrefix(rel, "/")
-			n = cfg.TargetDirectory
-			if rel != "" {
-				n = cfg.TargetDirectory + "/" + rel
-			}
-		}
-		names = append(names, n)
-	}
-
-	// order-insensitive compare
-	if len(want) == 0 && len(names) == 0 {
-		return
-	}
-	if len(want) != len(names) {
-		t.Fatalf("staged names length mismatch: got=%v want=%v", names, want)
-	}
-	wantSet := map[string]struct{}{}
-	for _, w := range want {
-		wantSet[w] = struct{}{}
-	}
-	for _, n := range names {
-		if _, ok = wantSet[n]; !ok {
-			t.Fatalf("unexpected staged path %q; got=%v want=%v", n, names, want)
-		}
-	}
-}
-
 // CountByMethodAndURLRegexp adds up call counts for a given METHOD whose stored httpmock key's URL matches urlRE.
-// Works for both exact and regex-registered responders.
-// Used to assert that a specific endpoint was called a certain number of times.
 func CountByMethodAndURLRegexp(method string, urlRE *regexp.Regexp) int {
 	info := httpmock.GetCallCountInfo()
 	total := 0
 	for k, v := range info {
-		if !(strings.HasPrefix(k, method+" ") || strings.HasPrefix(k, method+"=~")) {
+		if !strings.HasPrefix(k, method+" ") && !strings.HasPrefix(k, method+"=~") {
 			continue
 		}
 		var urlish string
@@ -324,7 +325,7 @@ func CountByMethodAndURLRegexp(method string, urlRE *regexp.Regexp) int {
 }
 
 // GetRefGetCount counts GET calls to /git/ref/(refs/)?heads/<branch>
-// for the given owner/repo/branch. Used to assert that a ref was fetched.
+// for the given owner/repo/branch.
 func GetRefGetCount(owner, repo, branch string) int {
 	re := regexp.MustCompile(`/repos/` + regexp.QuoteMeta(owner) + `/` + regexp.QuoteMeta(repo) +
 		`/git/ref/(?:refs/)?heads/` + regexp.QuoteMeta(branch) + `$`)

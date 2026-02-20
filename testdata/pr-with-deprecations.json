@@ -1,0 +1,80 @@
+{
+  "action": "closed",
+  "number": 50,
+  "pull_request": {
+    "number": 50,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "deprecate123files456",
+    "title": "Remove deprecated examples and add replacements",
+    "head": {
+      "ref": "chore/cleanup-deprecated",
+      "sha": "deprecate789sha",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {
+      "filename": "examples/go/legacy/old_auth.go",
+      "status": "removed",
+      "additions": 0,
+      "deletions": 75,
+      "changes": 75
+    },
+    {
+      "filename": "examples/go/legacy/old_database.go",
+      "status": "removed",
+      "additions": 0,
+      "deletions": 120,
+      "changes": 120
+    },
+    {
+      "filename": "examples/python/deprecated/old_api.py",
+      "status": "removed",
+      "additions": 0,
+      "deletions": 90,
+      "changes": 90
+    },
+    {
+      "filename": "examples/go/auth/modern_auth.go",
+      "status": "added",
+      "additions": 85,
+      "deletions": 0,
+      "changes": 85
+    },
+    {
+      "filename": "examples/go/database/modern_db.go",
+      "status": "added",
+      "additions": 130,
+      "deletions": 0,
+      "changes": 130
+    },
+    {
+      "filename": "examples/python/api/modern_api.py",
+      "status": "added",
+      "additions": 100,
+      "deletions": 0,
+      "changes": 100
+    }
+  ]
+}

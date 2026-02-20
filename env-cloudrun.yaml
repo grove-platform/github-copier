@@ -2,19 +2,19 @@
 # Format: KEY: "VALUE" (no env_variables wrapper needed)
 # Note: PORT is automatically set by Cloud Run, don't override it
 
-# GitHub Configuration
-GITHUB_APP_ID: "1166559"
-INSTALLATION_ID: "95537167" # grove-platform
+# Org-specific values (GITHUB_APP_ID, INSTALLATION_ID) are passed via
+# --set-env-vars in the deploy step using GitHub Actions secrets.
+# Do NOT commit org-specific values here.
 
 # Config Repository (where main config file is stored)
 CONFIG_REPO_OWNER: "grove-platform"
 CONFIG_REPO_NAME: "github-copier"
 CONFIG_REPO_BRANCH: "main"
 
-# Secret Manager References
-GITHUB_APP_PRIVATE_KEY_SECRET_NAME: "projects/1054147886816/secrets/CODE_COPIER_PEM/versions/latest"
-WEBHOOK_SECRET_NAME: "projects/1054147886816/secrets/webhook-secret/versions/latest"
-MONGO_URI_SECRET_NAME: "projects/1054147886816/secrets/mongo-uri/versions/latest"
+# Secret Manager References (short names — resolved at runtime via SecretPath())
+PEM_NAME: "CODE_COPIER_PEM"
+WEBHOOK_SECRET_NAME: "webhook-secret"
+MONGO_URI_SECRET_NAME: "mongo-uri"
 
 # Application Settings
 WEBSERVER_PATH: "/events"
@@ -33,4 +33,3 @@ COPIER_LOG_NAME: "code-copier-log"
 # Feature Flags
 AUDIT_ENABLED: "false"
 METRICS_ENABLED: "true"
-

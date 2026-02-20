@@ -24,7 +24,7 @@ This directory contains workflow configurations for automatically copying code e
 
 **Where are the logs?**
 ```bash
-gcloud app logs read --limit=100 | grep "your-repo-name"
+gcloud run services logs read github-copier --limit=100
 ```
 
 ## Quick Start
@@ -455,14 +455,8 @@ workflows:
 ### How do I view the logs?
 
 ```bash
-# View recent logs
-gcloud app logs read --limit=100
-
-# Search for your PR
-gcloud app logs read --limit=200 | grep "PR #123"
-
-# Search for your repo
-gcloud app logs read --limit=200 | grep "your-repo-name"
+# View recent logs (Cloud Run)
+gcloud run services logs read github-copier --limit=100
 ```
 
 ### How do I test my configuration?

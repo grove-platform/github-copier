@@ -1,0 +1,73 @@
+{
+  "action": "closed",
+  "number": 40,
+  "pull_request": {
+    "number": 40,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "large123changeset456",
+    "title": "Major refactor: reorganize all examples",
+    "head": {
+      "ref": "refactor/reorganize-examples",
+      "sha": "refactor789sha",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    },
+    "base": {
+      "ref": "main",
+      "repo": {
+        "name": "copier-app-source-test",
+        "full_name": "cbullinger/copier-app-source-test"
+      }
+    }
+  },
+  "repository": {
+    "name": "copier-app-source-test",
+    "full_name": "cbullinger/copier-app-source-test",
+    "owner": {
+      "login": "cbullinger"
+    }
+  },
+  "installation": {
+    "id": 12345678
+  },
+  "files": [
+    {"filename": "examples/go/basics/hello.go", "status": "added", "additions": 15, "deletions": 0, "changes": 15},
+    {"filename": "examples/go/basics/variables.go", "status": "added", "additions": 25, "deletions": 0, "changes": 25},
+    {"filename": "examples/go/basics/functions.go", "status": "added", "additions": 35, "deletions": 0, "changes": 35},
+    {"filename": "examples/go/basics/structs.go", "status": "added", "additions": 40, "deletions": 0, "changes": 40},
+    {"filename": "examples/go/basics/interfaces.go", "status": "added", "additions": 45, "deletions": 0, "changes": 45},
+    {"filename": "examples/go/concurrency/goroutines.go", "status": "added", "additions": 30, "deletions": 0, "changes": 30},
+    {"filename": "examples/go/concurrency/channels.go", "status": "added", "additions": 50, "deletions": 0, "changes": 50},
+    {"filename": "examples/go/concurrency/select.go", "status": "added", "additions": 35, "deletions": 0, "changes": 35},
+    {"filename": "examples/go/concurrency/mutex.go", "status": "added", "additions": 40, "deletions": 0, "changes": 40},
+    {"filename": "examples/go/concurrency/waitgroup.go", "status": "added", "additions": 25, "deletions": 0, "changes": 25},
+    {"filename": "examples/go/database/connect.go", "status": "modified", "additions": 20, "deletions": 10, "changes": 30},
+    {"filename": "examples/go/database/query.go", "status": "modified", "additions": 25, "deletions": 15, "changes": 40},
+    {"filename": "examples/go/database/transactions.go", "status": "added", "additions": 60, "deletions": 0, "changes": 60},
+    {"filename": "examples/go/database/migrations.go", "status": "added", "additions": 80, "deletions": 0, "changes": 80},
+    {"filename": "examples/go/http/server.go", "status": "added", "additions": 55, "deletions": 0, "changes": 55},
+    {"filename": "examples/go/http/client.go", "status": "added", "additions": 45, "deletions": 0, "changes": 45},
+    {"filename": "examples/go/http/middleware.go", "status": "added", "additions": 70, "deletions": 0, "changes": 70},
+    {"filename": "examples/go/http/handlers.go", "status": "added", "additions": 90, "deletions": 0, "changes": 90},
+    {"filename": "examples/go/testing/unit_test.go", "status": "added", "additions": 50, "deletions": 0, "changes": 50},
+    {"filename": "examples/go/testing/integration_test.go", "status": "added", "additions": 75, "deletions": 0, "changes": 75},
+    {"filename": "examples/python/basics/hello.py", "status": "added", "additions": 10, "deletions": 0, "changes": 10},
+    {"filename": "examples/python/basics/variables.py", "status": "added", "additions": 20, "deletions": 0, "changes": 20},
+    {"filename": "examples/python/basics/functions.py", "status": "added", "additions": 30, "deletions": 0, "changes": 30},
+    {"filename": "examples/python/basics/classes.py", "status": "added", "additions": 45, "deletions": 0, "changes": 45},
+    {"filename": "examples/python/async/coroutines.py", "status": "added", "additions": 40, "deletions": 0, "changes": 40},
+    {"filename": "examples/python/async/asyncio.py", "status": "added", "additions": 55, "deletions": 0, "changes": 55},
+    {"filename": "examples/python/database/sqlalchemy.py", "status": "added", "additions": 70, "deletions": 0, "changes": 70},
+    {"filename": "examples/python/database/pymongo.py", "status": "added", "additions": 60, "deletions": 0, "changes": 60},
+    {"filename": "examples/python/http/flask_app.py", "status": "added", "additions": 80, "deletions": 0, "changes": 80},
+    {"filename": "examples/python/http/fastapi_app.py", "status": "added", "additions": 90, "deletions": 0, "changes": 90},
+    {"filename": "examples/old/legacy_example.go", "status": "removed", "additions": 0, "deletions": 100, "changes": 100},
+    {"filename": "examples/old/deprecated.py", "status": "removed", "additions": 0, "deletions": 50, "changes": 50},
+    {"filename": "docs/go-examples.md", "status": "added", "additions": 150, "deletions": 0, "changes": 150},
+    {"filename": "docs/python-examples.md", "status": "added", "additions": 120, "deletions": 0, "changes": 120},
+    {"filename": "docs/getting-started.md", "status": "modified", "additions": 30, "deletions": 20, "changes": 50}
+  ]
+}

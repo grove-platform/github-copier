@@ -22,7 +22,10 @@ A GitHub app that automatically copies code examples and files from source repos
 - **PR Template Integration** - Fetch and merge PR templates from target repos
 - **File Exclusion** - Exclude patterns to filter out unwanted files
 - **Audit Logging** - MongoDB-based event tracking for all operations
-- **Health & Metrics** - `/health` and `/metrics` endpoints for monitoring
+- **Health & Metrics** - `/health`, `/ready`, and `/metrics` endpoints for monitoring
+- **Rate Limit Handling** - Automatic GitHub API rate limit detection, backoff, and retry
+- **Webhook Idempotency** - Deduplication via `X-GitHub-Delivery` header tracking
+- **Structured Logging** - JSON structured logging via `log/slog` (Cloud Logging compatible)
 - **Development Tools** - Dry-run mode, CLI validation, enhanced logging
 - **Thread-Safe** - Concurrent webhook processing with proper state management
 
@@ -30,7 +33,7 @@ A GitHub app that automatically copies code examples and files from source repos
 
 ### Prerequisites
 
-- Go 1.23.4+
+- Go 1.26+
 - GitHub App credentials
 - Google Cloud project (for Secret Manager and logging)
 - MongoDB Atlas (optional, for audit logging)
@@ -358,29 +361,20 @@ Validate and test configurations before deployment:
 
 ## Monitoring
 
-### Health Endpoint
+### Health Endpoint (Liveness)
 
-Check application health:
+Basic liveness check:
 
 ```bash
 curl http://localhost:8080/health
 ```
 
-Response:
-```json
-{
-  "status": "healthy",
-  "started": true,
-  "github": {
-    "status": "healthy",
-    "authenticated": true
-  },
-  "queues": {
-    "upload_count": 0,
-    "deprecation_count": 0
-  },
-  "uptime": "1h23m45s"
-}
+### Readiness Endpoint
+
+Deep readiness probe (checks GitHub auth, rate limits, MongoDB):
+
+```bash
+curl http://localhost:8080/ready
 ```
 
 ### Metrics Endpoint
@@ -389,31 +383,6 @@ Get performance metrics:
 
 ```bash
 curl http://localhost:8080/metrics
-```
-
-Response:
-```json
-{
-  "webhooks": {
-    "received": 42,
-    "processed": 40,
-    "failed": 2,
-    "success_rate": 95.24,
-    "processing_time": {
-      "avg_ms": 234.5,
-      "p50_ms": 200,
-      "p95_ms": 450,
-      "p99_ms": 890
-    }
-  },
-  "files": {
-    "matched": 150,
-    "uploaded": 145,
-    "upload_failed": 5,
-    "deprecated": 3,
-    "upload_success_rate": 96.67
-  }
-}
 ```
 
 ## Audit Logging
@@ -445,18 +414,18 @@ db.audit_events.aggregate([
 
 ## Testing
 
-### Run Unit Tests
+### Run Tests
 
 ```bash
-# Run all tests
-go test ./services -v
+# Run all tests with race detector
+go test -race ./...
 
 # Run specific test suite
 go test ./services -v -run TestPatternMatcher
 
 # Run with coverage
-go test ./services -cover
-go test ./services -coverprofile=coverage.out
+go test -race ./services -cover
+go test -race ./services -coverprofile=coverage.out
 go tool cover -html=coverage.out
 ```
 
@@ -467,18 +436,18 @@ go tool cover -html=coverage.out
 Test without making actual changes:
 
 ```bash
-DRY_RUN=true ./github-copier
+./github-copier -env .env.test -dry-run
 ```
 
 In dry-run mode:
-- Webhooks are processed
-- Files are matched and transformed
-- Audit events are logged
-- **NO actual commits or PRs are created**
+- Webhooks are received and processed through the full pipeline
+- Files are matched and path transformations are applied
+- GitHub auth failures are tolerated (logged as warnings)
+- **No commits, PRs, or file uploads are created**
 
-### Enhanced Logging
+### Structured Logging
 
-Enable detailed logging:
+The app uses `log/slog` with JSON output. Enable debug logging:
 
 ```bash
 LOG_LEVEL=debug ./github-copier
@@ -493,35 +462,50 @@ COPIER_DEBUG=true ./github-copier
 ```
 github-copier/
 ├── app.go                    # Main application entry point
+├── github-app-manifest.yml   # GitHub App permissions documentation
 ├── cmd/
 │   ├── config-validator/     # CLI validation tool
+│   ├── test-pem/             # PEM key validation tool
 │   └── test-webhook/         # Webhook testing tool
 ├── configs/
 │   ├── environment.go        # Environment configuration
 │   ├── .env.local.example    # Local environment template
-│   ├── env.yaml.example      # YAML environment template
 │   └── copier-config.example.yaml # Config template
+├── scripts/
+│   ├── release.sh            # Create versioned releases
+│   ├── deploy-cloudrun.sh    # Cloud Run deployment
+│   ├── ci-local.sh           # Run CI checks locally
+│   ├── integration-test.sh   # End-to-end integration tests
+│   └── ...                   # Additional helper scripts
 ├── services/
-│   ├── pattern_matcher.go    # Pattern matching engine
-│   ├── config_loader.go      # Config loading & validation
-│   ├── audit_logger.go       # MongoDB audit logging
-│   ├── health_metrics.go     # Health & metrics endpoints
-│   ├── file_state_service.go # Thread-safe state management
-│   ├── service_container.go  # Dependency injection
-│   ├── webhook_handler_new.go # Webhook handler
-│   ├── github_auth.go        # GitHub authentication
-│   ├── github_read.go        # GitHub read operations
+│   ├── webhook_handler_new.go # Webhook handler (orchestrator)
+│   ├── workflow_processor.go  # ProcessWorkflow() - core logic
+│   ├── pattern_matcher.go     # Pattern matching engine
+│   ├── config_loader.go       # Config loading & validation
+│   ├── main_config_loader.go  # Main config with $ref support
+│   ├── github_auth.go         # GitHub App authentication
+│   ├── github_read.go         # GitHub read operations (REST + GraphQL)
 │   ├── github_write_to_target.go # GitHub write operations
-│   └── slack_notifier.go     # Slack notifications
+│   ├── github_write_to_source.go # Deprecation file updates
+│   ├── token_manager.go       # Thread-safe token state management
+│   ├── rate_limit.go          # GitHub API rate limit handling
+│   ├── delivery_tracker.go    # Webhook idempotency (deduplication)
+│   ├── errors.go              # Sentinel errors & classification
+│   ├── logger.go              # Structured logging (slog)
+│   ├── service_container.go   # Dependency injection container
+│   ├── file_state_service.go  # Thread-safe upload/deprecation queues
+│   ├── health_metrics.go      # Health, readiness, metrics & config endpoints
+│   ├── slack_notifier.go      # Slack notifications
+│   └── pr_template_fetcher.go # PR template resolution
 ├── types/
-│   ├── config.go             # Configuration types
-│   └── types.go              # Core types
+│   ├── config.go              # Configuration types
+│   └── types.go               # Core types
 └── docs/
-    ├── ARCHITECTURE.md       # Architecture overview
-    ├── CONFIGURATION-GUIDE.md # Complete config reference
-    ├── DEPLOYMENT.md         # Deployment guide
-    ├── FAQ.md                # Frequently asked questions
-    └── ...                   # Additional documentation
+    ├── DEPLOYMENT.md          # Deployment & rollback guide
+    ├── CONFIG-REFERENCE.md    # Environment variables & YAML schema
+    ├── WEBHOOK-TESTING.md     # Webhook testing guide
+    ├── SLACK-NOTIFICATIONS.md # Slack integration guide
+    └── ...                    # Additional documentation
 ```
 
 ### Service Container
@@ -533,53 +517,85 @@ container := NewServiceContainer(config)
 // All services initialized and wired together
 ```
 
+## Releasing
+
+The project uses semantic versioning (`vMAJOR.MINOR.PATCH`) with GitHub Releases. Pushing a version tag triggers CI to build, test, and deploy to Cloud Run.
+
+### Release Workflow
+
+1. Merge your changes to `main`.
+2. Run the release script:
+
+```bash
+# Preview what will happen (no changes made)
+./scripts/release.sh v1.2.0 --dry-run
+
+# Create the release
+./scripts/release.sh v1.2.0
+```
+
+The script:
+1. Validates the version format and that the working tree is clean on `main`
+2. Renames the `[Unreleased]` section in `CHANGELOG.md` to `[v1.2.0] - YYYY-MM-DD`
+3. Commits the changelog update and creates an annotated git tag
+4. Pushes the tag to origin — this triggers the CI `deploy` job
+5. Creates a GitHub Release with the changelog excerpt
+
+### CI Deploy Pipeline
+
+The `deploy` job in `.github/workflows/ci.yml` runs only on version tag pushes:
+
+- Authenticates to Google Cloud via Workload Identity Federation
+- Deploys to Cloud Run with the version stamped as a build arg (`VERSION`)
+- Tags the Cloud Run revision with the version for easy rollback
+
+### Version Stamping
+
+The version tag is injected at build time via `-ldflags`:
+
+```bash
+go build -ldflags "-X main.Version=v1.2.0" -o github-copier .
+```
+
+The version appears in the startup banner and the `/health` endpoint response.
+
 ## Deployment
 
-See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for complete deployment guide.
-
-### Google Cloud Run
-
-```bash
-cd github-copier
-./scripts/deploy-cloudrun.sh
-```
-
-### Docker
-
-```bash
-docker build -t github-copier .
-docker run -p 8080:8080 --env-file env.yaml github-copier
-```
+See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the complete deployment and rollback guide.
 
 ## Security
 
 - **Webhook Signature Verification** - HMAC-SHA256 validation
+- **Webhook Idempotency** - Duplicate delivery detection via `X-GitHub-Delivery`
 - **Secret Management** - Google Cloud Secret Manager
-- **Least Privilege** - Minimal GitHub App permissions
-- **Audit Trail** - Complete operation logging
+- **Least Privilege** - Minimal GitHub App permissions (see `github-app-manifest.yml`)
 
 ## Documentation
 
 ### Getting Started
 
-- **[Main Config README](configs/copier-config-examples/MAIN-CONFIG-README.md)** - Complete main config documentation
-- **[Quick Start Guide](configs/copier-config-examples/QUICK-START-MAIN-CONFIG.md)** - Get started in 5 minutes
+- **[Main Config README](configs/copier-config-examples/MAIN-CONFIG-README.md)** - Main config architecture
+- **[Source Repo README](configs/copier-config-examples/SOURCE-REPO-README.md)** - Workflow config guide for source repos
 - **[Pattern Matching Guide](docs/PATTERN-MATCHING-GUIDE.md)** - Pattern matching with examples
 - **[Local Testing](docs/LOCAL-TESTING.md)** - Test locally before deploying
-- **[Deployment Guide](docs/DEPLOYMENT.md)** - Deploy to production
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Deploy to Cloud Run
 
 ### Reference
 
+- **[Config Reference](docs/CONFIG-REFERENCE.md)** - Environment variables and YAML schema
 - **[Architecture](docs/ARCHITECTURE.md)** - System design and components
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and solutions
 - **[FAQ](docs/FAQ.md)** - Frequently asked questions
-- **[Deprecation Tracking](docs/DEPRECATION-TRACKING-EXPLAINED.md)** - How deprecation tracking works
+- **[Changelog](CHANGELOG.md)** - Release history
 
 ### Features
 
 - **[Slack Notifications](docs/SLACK-NOTIFICATIONS.md)** - Slack integration guide
-- **[Webhook Testing](docs/WEBHOOK-TESTING.md)** - Test with real PR data
+- **[Webhook Testing](docs/WEBHOOK-TESTING.md)** - Webhook testing guide
+- **[GitHub App Manifest](github-app-manifest.yml)** - Required permissions and events
 
 ### Tools
 
-- **[Scripts](scripts/README.md)** - Helper scripts for deployment and testing
+- **[Config Validator](cmd/config-validator/README.md)** - CLI tool for validating configs
+- **[Test Webhook](cmd/test-webhook/README.md)** - CLI tool for testing webhooks
+- **[Scripts](scripts/README.md)** - Helper scripts for deployment, testing, and releases

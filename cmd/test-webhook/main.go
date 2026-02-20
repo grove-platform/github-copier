@@ -12,7 +12,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/google/go-github/v48/github"
+	"github.com/google/go-github/v82/github"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 
 	// Option 1: Use custom payload file
 	if *payloadFile != "" {
-		payload, err = os.ReadFile(*payloadFile)
+		payload, err = os.ReadFile(*payloadFile) // #nosec G304 -- CLI tool, path from user flag
 		if err != nil {
 			fmt.Printf("Error reading payload file: %v\n", err)
 			os.Exit(1)
@@ -117,7 +118,7 @@ Examples:
 
   # Send to production with secret
   test-webhook -pr 123 -owner myorg -repo myrepo \
-    -url https://myapp.appspot.com/events \
+    -url https://your-service.run.app/events \
     -secret "my-webhook-secret"
 
 Environment Variables:
@@ -143,11 +144,11 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- URL is hardcoded to api.github.com
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
@@ -169,11 +170,11 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 	filesReq.Header.Set("Authorization", "Bearer "+token)
 	filesReq.Header.Set("Accept", "application/vnd.github.v3+json")
 
-	filesResp, err := client.Do(filesReq)
+	filesResp, err := client.Do(filesReq) // #nosec G704 -- URL is hardcoded to api.github.com
 	if err != nil {
 		return nil, err
 	}
-	defer filesResp.Body.Close()
+	defer func() { _ = filesResp.Body.Close() }()
 
 	var files []map[string]interface{}
 	if err := json.NewDecoder(filesResp.Body).Decode(&files); err != nil {
@@ -185,9 +186,9 @@ func fetchPRPayload(owner, repo string, prNumber int) ([]byte, error) {
 		"action": "closed",
 		"number": prNumber,
 		"pull_request": map[string]interface{}{
-			"number":       pr.GetNumber(),
-			"state":        pr.GetState(),
-			"merged":       pr.GetMerged(),
+			"number":           pr.GetNumber(),
+			"state":            pr.GetState(),
+			"merged":           pr.GetMerged(),
 			"merge_commit_sha": pr.GetMergeCommitSHA(),
 			"head": map[string]interface{}{
 				"ref": pr.GetHead().GetRef(),
@@ -223,9 +224,9 @@ func createExamplePayload() []byte {
 		"action": "closed",
 		"number": 42,
 		"pull_request": map[string]interface{}{
-			"number": 42,
-			"state":  "closed",
-			"merged": true,
+			"number":           42,
+			"state":            "closed",
+			"merged":           true,
 			"merge_commit_sha": "abc123def456",
 			"head": map[string]interface{}{
 				"ref": "feature-branch",
@@ -265,6 +266,11 @@ func sendWebhook(url string, payload []byte, secret string) error {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-GitHub-Event", "pull_request")
 
+	// Add unique delivery ID for idempotency tracking
+	deliveryID := uuid.New().String()
+	req.Header.Set("X-GitHub-Delivery", deliveryID)
+	fmt.Printf("✓ Delivery ID: %s\n", deliveryID)
+
 	// Add signature if secret provided
 	if secret != "" {
 		signature := generateSignature(payload, secret)
@@ -273,11 +279,11 @@ func sendWebhook(url string, payload []byte, secret string) error {
 	}
 
 	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- URL is user-provided target for local webhook testing
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, _ := io.ReadAll(resp.Body)
 
@@ -298,4 +304,3 @@ func generateSignature(payload []byte, secret string) string {
 	mac.Write(payload)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }
-

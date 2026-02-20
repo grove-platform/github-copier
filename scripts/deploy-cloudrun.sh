@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy examples-copier to Google Cloud Run
+# Deploy github-copier to Google Cloud Run
 # Usage: ./scripts/deploy-cloudrun.sh [region]
 
 set -e

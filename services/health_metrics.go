@@ -1,10 +1,15 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 // HealthStatus represents the health status of the application
@@ -217,21 +222,21 @@ func (mc *MetricsCollector) RecordGitHubAPIError() {
 func (mc *MetricsCollector) GetFilesMatched() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesMatched)
+	return int(mc.filesMatched) // #nosec G115 -- counter fits in int
 }
 
 // GetFilesUploaded returns the current files uploaded count
 func (mc *MetricsCollector) GetFilesUploaded() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesUploaded)
+	return int(mc.filesUploaded) // #nosec G115 -- counter fits in int
 }
 
 // GetFilesUploadFailed returns the current files upload failed count
 func (mc *MetricsCollector) GetFilesUploadFailed() int {
 	mc.mu.RLock()
 	defer mc.mu.RUnlock()
-	return int(mc.filesUploadFailed)
+	return int(mc.filesUploadFailed) // #nosec G115 -- counter fits in int
 }
 
 // GetMetrics returns current metrics
@@ -287,10 +292,7 @@ func (mc *MetricsCollector) GetMetrics(fileStateService FileStateService) Metric
 			Calls:     mc.githubAPICalls,
 			Errors:    mc.githubAPIErrors,
 			ErrorRate: githubErrorRate,
-			RateLimit: RateLimitInfo{
-				Remaining: 5000, // TODO: Get from GitHub API
-				ResetAt:   time.Now().Add(1 * time.Hour),
-			},
+			RateLimit: currentRateLimitInfo(),
 		},
 		Queues: QueueMetrics{
 			UploadQueueSize:      len(uploadQueue),
@@ -341,29 +343,100 @@ func calculateStats(durations []time.Duration) ProcessingTimeStats {
 	}
 }
 
-// HealthHandler handles /health endpoint
-func HealthHandler(fileStateService FileStateService, startTime time.Time) http.HandlerFunc {
+// HealthHandler handles /health (liveness) endpoint.
+// Returns 200 if the process is running. This is a lightweight check
+// suitable for Cloud Run / Kubernetes liveness probes.
+func HealthHandler(startTime time.Time, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		uploadQueue := fileStateService.GetFilesToUpload()
-		deprecationQueue := fileStateService.GetFilesToDeprecate()
+		health := map[string]interface{}{
+			"status":  "healthy",
+			"version": version,
+			"started": true,
+			"uptime":  time.Since(startTime).String(),
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(health)
+	}
+}
+
+// ReadinessHandler handles /ready endpoint.
+// Checks actual dependency connectivity (GitHub API auth, MongoDB).
+// Returns 200 if all dependencies are reachable, 503 otherwise.
+// Suitable for Cloud Run / Kubernetes readiness probes.
+func ReadinessHandler(container *ServiceContainer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+
+		status := "ready"
+		httpStatus := http.StatusOK
+
+		// Check GitHub API: verify we have a valid authentication token
+		githubStatus := "healthy"
+		githubAuth := defaultTokenManager.GetInstallationAccessToken() != ""
+		if !githubAuth {
+			githubStatus = "not_authenticated"
+		}
+		// Check rate limit state
+		remaining, resetAt := GlobalRateLimitState.Get()
+		if remaining == 0 && time.Now().Before(resetAt) {
+			githubStatus = "rate_limited"
+		}
+
+		// Check MongoDB (if audit logging is enabled)
+		auditStatus := "disabled"
+		auditConnected := false
+		if container.AuditLogger != nil {
+			if err := container.AuditLogger.Ping(ctx); err != nil {
+				auditStatus = "unavailable"
+				status = "degraded"
+			} else {
+				auditStatus = "connected"
+				auditConnected = true
+			}
+		}
+
+		// If GitHub is not authenticated, we're not ready
+		if !githubAuth {
+			status = "not_ready"
+			httpStatus = http.StatusServiceUnavailable
+		}
+
+		uploadQueue := container.FileStateService.GetFilesToUpload()
+		deprecationQueue := container.FileStateService.GetFilesToDeprecate()
 
 		health := HealthStatus{
-			Status:  "healthy",
+			Status:  status,
 			Started: true,
 			GitHub: GitHubHealthStatus{
-				Status:        "healthy",
-				Authenticated: true,
+				Status:        githubStatus,
+				Authenticated: githubAuth,
 			},
 			Queues: QueueHealthStatus{
 				UploadCount:      len(uploadQueue),
 				DeprecationCount: len(deprecationQueue),
 			},
-			Uptime: time.Since(startTime).String(),
+			AuditLogger: AuditLoggerHealthStatus{
+				Status:    auditStatus,
+				Connected: auditConnected,
+			},
+			Uptime: time.Since(container.StartTime).String(),
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
 		_ = json.NewEncoder(w).Encode(health)
 	}
+}
+
+// currentRateLimitInfo returns the most recently observed GitHub API rate limit info.
+func currentRateLimitInfo() RateLimitInfo {
+	remaining, resetAt := GlobalRateLimitState.Get()
+	if remaining < 0 {
+		// No API calls made yet; return safe defaults
+		return RateLimitInfo{Remaining: -1, ResetAt: time.Time{}}
+	}
+	return RateLimitInfo{Remaining: remaining, ResetAt: resetAt}
 }
 
 // MetricsHandler handles /metrics endpoint
@@ -373,4 +446,144 @@ func MetricsHandler(metricsCollector *MetricsCollector, fileStateService FileSta
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(metrics)
 	}
+}
+
+// ConfigDiagnosticResponse is the JSON structure returned by the /config endpoint.
+type ConfigDiagnosticResponse struct {
+	// Version is the build version (set via -ldflags at build time).
+	Version string `json:"version"`
+
+	// Environment summarizes non-secret runtime configuration.
+	Environment ConfigEnvironment `json:"environment"`
+
+	// Workflows contains the resolved workflow definitions (if loadable).
+	// Nil when the config could not be loaded (see LoadError).
+	Workflows []ConfigDiagnosticWorkflow `json:"workflows,omitempty"`
+
+	// LoadError is set when the effective config file cannot be loaded or parsed.
+	LoadError string `json:"load_error,omitempty"`
+}
+
+// ConfigEnvironment is a sanitised view of configs.Config.
+// Secret fields are replaced with a presence indicator (e.g. "[SET]" / "[NOT SET]").
+type ConfigEnvironment struct {
+	Port             string `json:"port"`
+	DryRun           bool   `json:"dry_run"`
+	UseMainConfig    bool   `json:"use_main_config"`
+	EffectiveConfig  string `json:"effective_config_file"`
+	ConfigRepoOwner  string `json:"config_repo_owner"`
+	ConfigRepoName   string `json:"config_repo_name"`
+	ConfigRepoBranch string `json:"config_repo_branch"`
+	WebserverPath    string `json:"webserver_path"`
+
+	// Feature flags
+	AuditEnabled   bool `json:"audit_enabled"`
+	MetricsEnabled bool `json:"metrics_enabled"`
+	SlackEnabled   bool `json:"slack_enabled"`
+
+	// Tuning
+	ConfigCacheTTLSeconds           int `json:"config_cache_ttl_seconds"`
+	WebhookProcessingTimeoutSeconds int `json:"webhook_processing_timeout_seconds"`
+	WebhookMaxRetries               int `json:"webhook_max_retries"`
+	GitHubAPIMaxRetries             int `json:"github_api_max_retries"`
+
+	// Secrets (presence only)
+	PEMKey        string `json:"pem_key"`
+	WebhookSecret string `json:"webhook_secret"`
+	MongoURI      string `json:"mongo_uri"`
+	SlackWebhook  string `json:"slack_webhook_url"`
+}
+
+// ConfigDiagnosticWorkflow is a compact summary of a resolved workflow.
+type ConfigDiagnosticWorkflow struct {
+	Name           string   `json:"name"`
+	SourceRepo     string   `json:"source_repo"`
+	SourceBranch   string   `json:"source_branch"`
+	DestRepo       string   `json:"dest_repo"`
+	DestBranch     string   `json:"dest_branch"`
+	CommitStrategy string   `json:"commit_strategy"`
+	Transforms     int      `json:"transforms"`
+	Exclude        []string `json:"exclude,omitempty"`
+}
+
+// ConfigDiagnosticHandler handles the GET /config endpoint.
+// It returns a read-only view of the resolved runtime configuration with
+// all secrets redacted, useful for debugging workflow-matching issues.
+func ConfigDiagnosticHandler(container *ServiceContainer, version string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp := ConfigDiagnosticResponse{
+			Version:     version,
+			Environment: buildConfigEnvironment(container.Config),
+		}
+
+		// Attempt to load and resolve the effective configuration.
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+
+		yamlCfg, err := container.ConfigLoader.LoadConfig(ctx, container.Config)
+		if err != nil {
+			resp.LoadError = err.Error()
+		} else if yamlCfg != nil {
+			resp.Workflows = summariseWorkflows(yamlCfg)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// secretPresence returns "[SET]" if s is non-empty, "[NOT SET]" otherwise.
+func secretPresence(s string) string {
+	if s != "" {
+		return "[SET]"
+	}
+	return "[NOT SET]"
+}
+
+func buildConfigEnvironment(cfg *configs.Config) ConfigEnvironment {
+	return ConfigEnvironment{
+		Port:             cfg.Port,
+		DryRun:           cfg.DryRun,
+		UseMainConfig:    cfg.UseMainConfig,
+		EffectiveConfig:  cfg.EffectiveConfigFile(),
+		ConfigRepoOwner:  cfg.ConfigRepoOwner,
+		ConfigRepoName:   cfg.ConfigRepoName,
+		ConfigRepoBranch: cfg.ConfigRepoBranch,
+		WebserverPath:    cfg.WebserverPath,
+
+		AuditEnabled:   cfg.AuditEnabled,
+		MetricsEnabled: cfg.MetricsEnabled,
+		SlackEnabled:   cfg.SlackEnabled,
+
+		ConfigCacheTTLSeconds:           cfg.ConfigCacheTTLSeconds,
+		WebhookProcessingTimeoutSeconds: cfg.WebhookProcessingTimeoutSeconds,
+		WebhookMaxRetries:               cfg.WebhookMaxRetries,
+		GitHubAPIMaxRetries:             cfg.GitHubAPIMaxRetries,
+
+		PEMKey:        secretPresence(os.Getenv("GITHUB_APP_PRIVATE_KEY_B64")),
+		WebhookSecret: secretPresence(cfg.WebhookSecret),
+		MongoURI:      secretPresence(cfg.MongoURI),
+		SlackWebhook:  secretPresence(cfg.SlackWebhookURL),
+	}
+}
+
+func summariseWorkflows(cfg *types.YAMLConfig) []ConfigDiagnosticWorkflow {
+	out := make([]ConfigDiagnosticWorkflow, 0, len(cfg.Workflows))
+	for _, wf := range cfg.Workflows {
+		strategy := "direct"
+		if wf.CommitStrategy != nil {
+			strategy = string(wf.CommitStrategy.Type)
+		}
+		out = append(out, ConfigDiagnosticWorkflow{
+			Name:           wf.Name,
+			SourceRepo:     wf.Source.Repo,
+			SourceBranch:   wf.Source.Branch,
+			DestRepo:       wf.Destination.Repo,
+			DestBranch:     wf.Destination.Branch,
+			CommitStrategy: strategy,
+			Transforms:     len(wf.Transformations),
+			Exclude:        wf.Exclude,
+		})
+	}
+	return out
 }

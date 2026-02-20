@@ -10,6 +10,10 @@ import (
 	"github.com/grove-platform/github-copier/types"
 )
 
+// unreplacedVarRe matches ${var} placeholders that were not substituted.
+// Compiled once at package level to avoid repeated compilation.
+var unreplacedVarRe = regexp.MustCompile(`\$\{([^}]+)\}`)
+
 // PatternMatcher handles pattern matching for file paths
 type PatternMatcher interface {
 	Match(filePath string, pattern types.SourcePattern) types.MatchResult
@@ -99,7 +103,7 @@ func (pm *DefaultPatternMatcher) matchGlob(filePath, pattern string) types.Match
 func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.MatchResult {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		LogInfo(fmt.Sprintf("REGEX COMPILE ERROR: pattern=%s, error=%v", pattern, err))
+		LogInfo("REGEX COMPILE ERROR", "pattern", pattern, "error", err)
 		return types.NewMatchResult(false, nil)
 	}
 
@@ -107,7 +111,7 @@ func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.Matc
 	if match == nil {
 		// Log server file pattern attempts for debugging
 		if strings.Contains(pattern, "server/") && strings.Contains(filePath, "server/") {
-			LogInfo(fmt.Sprintf("REGEX NO MATCH: file=%s, pattern=%s", filePath, pattern))
+			LogInfo("REGEX NO MATCH", "file", filePath, "pattern", pattern)
 		}
 		return types.NewMatchResult(false, nil)
 	}
@@ -122,7 +126,7 @@ func (pm *DefaultPatternMatcher) matchRegex(filePath, pattern string) types.Matc
 
 	// Log server file matches for debugging
 	if strings.Contains(pattern, "server/") {
-		LogInfo(fmt.Sprintf("REGEX MATCH SUCCESS: file=%s, pattern=%s, variables=%v", filePath, pattern, variables))
+		LogInfo("REGEX MATCH SUCCESS", "file", filePath, "pattern", pattern, "variables", variables)
 	}
 
 	return types.NewMatchResult(true, variables)
@@ -169,8 +173,7 @@ func (pt *DefaultPathTransformer) Transform(sourcePath string, template string, 
 // extractUnreplacedVars extracts variable names that weren't replaced
 func extractUnreplacedVars(s string) []string {
 	var unreplaced []string
-	re := regexp.MustCompile(`\$\{([^}]+)\}`)
-	matches := re.FindAllStringSubmatch(s, -1)
+	matches := unreplacedVarRe.FindAllStringSubmatch(s, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
 			unreplaced = append(unreplaced, match[1])

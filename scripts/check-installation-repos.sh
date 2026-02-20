@@ -16,11 +16,20 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-# Get the installation ID from env.yaml
-INSTALLATION_ID=$(grep "INSTALLATION_ID:" env.yaml | grep -v "#" | awk '{print $2}' | tr -d '"')
+# Get the installation ID from env-cloudrun.yaml (or env.yaml fallback)
+ENV_FILE="env-cloudrun.yaml"
+if [ ! -f "$ENV_FILE" ]; then
+    ENV_FILE="env.yaml"
+fi
+if [ ! -f "$ENV_FILE" ]; then
+    echo "❌ Neither env-cloudrun.yaml nor env.yaml found"
+    exit 1
+fi
+
+INSTALLATION_ID=$(grep "INSTALLATION_ID:" "$ENV_FILE" | grep -v "#" | awk '{print $2}' | tr -d '"')
 
 if [ -z "$INSTALLATION_ID" ]; then
-    echo "❌ INSTALLATION_ID not found in env.yaml"
+    echo "❌ INSTALLATION_ID not found in $ENV_FILE"
     exit 1
 fi
 
@@ -39,11 +48,11 @@ fi
 echo "✅ Private key retrieved"
 echo ""
 
-# Get the GitHub App ID from env.yaml
-APP_ID=$(grep "GITHUB_APP_ID:" env.yaml | awk '{print $2}' | tr -d '"')
+# Get the GitHub App ID
+APP_ID=$(grep "GITHUB_APP_ID:" "$ENV_FILE" | awk '{print $2}' | tr -d '"')
 
 if [ -z "$APP_ID" ]; then
-    echo "❌ GITHUB_APP_ID not found in env.yaml"
+    echo "❌ GITHUB_APP_ID not found in $ENV_FILE"
     exit 1
 fi
 

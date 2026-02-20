@@ -8,7 +8,7 @@ import (
 
 func TestNewMongoAuditLogger_Disabled(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// When enabled=false, should return NoOpAuditLogger
 	logger, err := NewMongoAuditLogger(ctx, "", "testdb", "testcoll", false)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestNewMongoAuditLogger_Disabled(t *testing.T) {
 
 func TestNewMongoAuditLogger_EnabledWithoutURI(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// When enabled=true but no URI, should return error
 	_, err := NewMongoAuditLogger(ctx, "", "testdb", "testcoll", true)
 	if err == nil {
@@ -46,17 +46,17 @@ func TestNoOpAuditLogger_LogCopyEvent(t *testing.T) {
 	ctx := context.Background()
 
 	event := &AuditEvent{
-		EventType:    AuditEventCopy,
-		RuleName:     "test-rule",
-		SourceRepo:   "test/source",
-		SourcePath:   "test.go",
-		TargetRepo:   "test/target",
-		TargetPath:   "copied/test.go",
-		CommitSHA:    "abc123",
-		PRNumber:     123,
-		Success:      true,
-		DurationMs:   100,
-		FileSize:     1024,
+		EventType:  AuditEventCopy,
+		RuleName:   "test-rule",
+		SourceRepo: "test/source",
+		SourcePath: "test.go",
+		TargetRepo: "test/target",
+		TargetPath: "copied/test.go",
+		CommitSHA:  "abc123",
+		PRNumber:   123,
+		Success:    true,
+		DurationMs: 100,
+		FileSize:   1024,
 	}
 
 	err := logger.LogCopyEvent(ctx, event)
@@ -301,4 +301,3 @@ func TestDailyStats_Structure(t *testing.T) {
 		t.Errorf("TotalCopies = %d, want 50", stats.TotalCopies)
 	}
 }
-
