@@ -105,7 +105,12 @@ jobs:
 
       - name: Extract version from tag
         id: version
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          RAW_TAG="${GITHUB_REF#refs/tags/}"
+          # Cloud Run traffic tags: lowercase, a-z0-9-, max 63 chars, no leading/trailing -
+          TRAFFIC_TAG=$(echo "$RAW_TAG" | tr '.' '-' | tr '[:upper:]' '[:lower:]')
+          echo "tag=$RAW_TAG" >> $GITHUB_OUTPUT
+          echo "traffic_tag=$TRAFFIC_TAG" >> $GITHUB_OUTPUT
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -125,7 +130,7 @@ jobs:
             --allow-unauthenticated \
             --set-env-vars="^|^CONFIG_REPO_OWNER=grove-platform|CONFIG_REPO_NAME=github-copier|CONFIG_REPO_BRANCH=main|PEM_NAME=CODE_COPIER_PEM|WEBHOOK_SECRET_NAME=webhook-secret|MONGO_URI_SECRET_NAME=mongo-uri|WEBSERVER_PATH=/events|MAIN_CONFIG_FILE=.copier/main.yaml|USE_MAIN_CONFIG=true|DEPRECATION_FILE=deprecated_examples.json|COMMITTER_NAME=GitHub Copier App|COMMITTER_EMAIL=bot@mongodb.com|GOOGLE_CLOUD_PROJECT_ID=github-copy-code-examples|COPIER_LOG_NAME=code-copier-log|AUDIT_ENABLED=false|METRICS_ENABLED=true|GITHUB_APP_ID=${{ secrets.GITHUB_APP_ID }}|INSTALLATION_ID=${{ secrets.INSTALLATION_ID }}" \
             --set-build-env-vars="VERSION=${{ steps.version.outputs.tag }}" \
-            --tag="${{ steps.version.outputs.tag }}" \
+            --tag="${{ steps.version.outputs.traffic_tag }}" \
             --max-instances=10 \
             --cpu=1 \
             --memory=512Mi \
