@@ -1,7 +1,9 @@
 # Build stage
 FROM golang:1.26.0-alpine AS builder
 
-# Version is set at build time (e.g. docker build --build-arg VERSION=v1.0.0)
+# Version is set at build time via:
+# - Docker: docker build --build-arg VERSION=v1.0.0
+# - Cloud Run: gcloud run deploy --set-build-env-vars VERSION=v1.0.0
 ARG VERSION=dev
 
 # Install build dependencies
