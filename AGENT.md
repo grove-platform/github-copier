@@ -24,13 +24,14 @@ services/
   config_loader.go                  # Config loading & validation
   config_cache.go                   # CachedConfigLoader (TTL-based config caching)
   service_container.go              # DI container
-  health_metrics.go                 # /health (liveness), /ready (readiness), /metrics
+  health_metrics.go                 # /health (liveness), /ready (readiness), /metrics, /config
   audit_logger.go                   # MongoDB audit logging
   slack_notifier.go                 # Slack notifications
   pr_template_fetcher.go            # PR template resolution from target repos
+  integration_test.go               # End-to-end integration tests
 types/
-  config.go                         # Workflow, Transformation, SourcePattern structs
-  types.go                          # ChangedFile, UploadKey, UploadFileContent
+  config.go                         # Workflow, Transformation, SourcePattern, MainConfig structs
+  types.go                          # ChangedFile, UploadKey, UploadFileContent, CommitStrategy
 configs/environment.go              # Config struct, LoadEnvironment()
 tests/utils.go                      # Test helpers, httpmock setup
 cmd/
@@ -41,23 +42,26 @@ scripts/
   ci-local.sh                       # Run full CI pipeline locally (build, test, lint, vet)
   run-local.sh                      # Run app locally with dev settings
   deploy-cloudrun.sh                # Deploy to Google Cloud Run
-  integration-test.sh               # End-to-end integration test
+  integration-test.sh               # End-to-end integration test runner
   release.sh                        # Create versioned release (tag, changelog, GitHub Release)
   test-slack.sh                     # Test Slack notification integration
+  test-with-pr.sh                   # Test webhook with a real PR
+  test-github-access.sh             # Verify GitHub API access
   diagnose-github-auth.sh           # Debug GitHub App authentication issues
   check-installation-repos.sh       # List repos accessible to GitHub App installation
+  grant-secret-access.sh            # Grant service account access to GCP secrets
 ```
 
 ## Key Types
 
 ```go
 // types/config.go
-type PatternType string    // "prefix" | "glob" | "regex"
+type PatternType string         // "prefix" | "glob" | "regex"
 type TransformationType string  // "move" | "copy" | "glob" | "regex"
 
 type Workflow struct {
     Name             string
-    Source           Source              // Repo, Branch, InstallationID
+    Source           Source              // Repo, Branch, Patterns, InstallationID
     Destination      Destination         // Repo, Branch
     Transformations  []Transformation    // Type, From, To, Pattern, Replacement
     Exclude          []string
@@ -65,9 +69,20 @@ type Workflow struct {
     DeprecationCheck *DeprecationConfig
 }
 
+type MainConfig struct {
+    Defaults        *Defaults           // Global defaults for all workflows
+    WorkflowConfigs []WorkflowConfigRef // References to workflow config files
+}
+
 // types/types.go
 type ChangedFile struct { Path, Status string }  // Status: "ADDED"|"MODIFIED"|"DELETED"
-type UploadKey struct { RepoName, BranchPath string }
+type UploadKey struct {
+    RepoName       string
+    BranchPath     string
+    RuleName       string   // Allows multiple rules targeting same repo/branch
+    CommitStrategy string   // Differentiates direct vs PR for batching
+}
+type CommitStrategy string  // "direct" | "pull_request"
 ```
 
 ## State Management
@@ -166,10 +181,11 @@ Releases use semantic versioning (`vMAJOR.MINOR.PATCH`) and are automated via `s
 - Wrap errors: `fmt.Errorf("context: %w", err)`
 - Use sentinel errors from `errors.go` where appropriate
 - Nil-check GitHub API responses before dereference
+- Use `github.Ptr()` (not deprecated `github.String`/`github.Int`/`github.Bool`)
 - Use `log/slog` for all logging (never `log` or `fmt.Print` for operational output)
 - Tests use `httpmock`; see `tests/utils.go`
 - Always run tests with `-race` flag
-- **Changelog**: Update `CHANGELOG.md` for all notable changes (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/))
+- **Changelog**: Update `CHANGELOG.md` under `[Unreleased]` for all notable changes (follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/))
 
 ## Key Documentation
 
@@ -177,7 +193,25 @@ Releases use semantic versioning (`vMAJOR.MINOR.PATCH`) and are automated via `s
 |-----|---------|
 | `docs/ARCHITECTURE.md` | System design, data flow, batching behavior |
 | `docs/CONFIG-REFERENCE.md` | Full config schema and field reference |
-| `docs/DEPLOYMENT.md` | Cloud Run deployment, secrets setup |
+| `docs/DEPLOYMENT.md` | Cloud Run deployment, secrets setup, rollback |
 | `docs/TROUBLESHOOTING.md` | Common issues and debugging |
 | `docs/LOCAL-TESTING.md` | Running and testing locally |
+| `docs/PATTERN-MATCHING-GUIDE.md` | Pattern syntax with examples |
+| `docs/SLACK-NOTIFICATIONS.md` | Slack integration setup |
+| `docs/WEBHOOK-TESTING.md` | Testing webhooks locally and in prod |
 | `testdata/README.md` | Test fixtures and webhook payload examples |
+| `scripts/README.md` | Script usage documentation |
+
+## Cursor Rules & Skills
+
+Project-specific AI assistance is configured in `.cursor/`:
+
+```
+.cursor/
+  rules/
+    go-conventions.mdc      # Go coding standards (error handling, logging, testing)
+    edit-patterns.mdc       # Task → file mapping reference
+  skills/
+    test-workflow-config/   # Validate configs, test patterns/transforms
+    check-webhook-delivery/ # Verify webhook success, check logs
+```
