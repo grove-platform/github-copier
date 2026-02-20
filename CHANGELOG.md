@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.2.0] - 2026-02-20
+
 ### Added
 
 - **`.golangci.yml` config** — Pinned linter and formatter configuration (v2 format) for consistent CI and local behavior. Enabled linters: `errcheck`, `govet`, `ineffassign`, `staticcheck`, `unused`, `misspell`, `revive`.
