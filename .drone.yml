@@ -1,0 +1,119 @@
+---
+kind: pipeline
+type: kubernetes
+name: default
+
+platform:
+  os: linux
+  arch: amd64
+
+steps:
+  # Run tests
+  - name: test
+    image: golang:1.26.0
+    commands:
+      - go test -v -race ./services ./types
+
+  # Build and push Docker image to Artifactory
+  - name: build-and-push
+    image: plugins/docker
+    settings:
+      registry: artifactory.corp.mongodb.com
+      repo: artifactory.corp.mongodb.com/docs-docker-local/github-copier
+      tags:
+        - latest
+        - ${DRONE_COMMIT_SHA:0:8}
+        - ${DRONE_TAG}
+      username:
+        from_secret: artifactory_username
+      password:
+        from_secret: artifactory_password
+      build_args:
+        - VERSION=${DRONE_TAG:-${DRONE_COMMIT_SHA:0:8}}
+    when:
+      event:
+        - push
+        - tag
+      branch:
+        - main
+        - kanopy-deployment
+
+  # Deploy to Kanopy staging
+  - name: deploy-staging
+    image: mongodb/kanopy-deploy:latest
+    environment:
+      KUBECONFIG: /tmp/kubeconfig
+    commands:
+      # Authenticate to Kanopy
+      - kanopy-oidc kube login --non-interactive
+      
+      # Add helm repo
+      - helm repo add mongodb https://10gen.github.io/helm-charts
+      - helm repo update
+      
+      # Deploy using helm
+      - |
+        helm upgrade --install github-copier mongodb/web-app \
+          --namespace docs \
+          --values kanopy/staging/values.yaml \
+          --set image.tag=${DRONE_COMMIT_SHA:0:8} \
+          --wait \
+          --timeout 5m
+      
+      # Verify deployment
+      - kubectl get pods -n docs -l app=github-copier
+      - kubectl rollout status deployment/github-copier -n docs
+    when:
+      event:
+        - push
+      branch:
+        - main
+        - kanopy-deployment
+
+  # Deploy to Kanopy production (manual approval required)
+  - name: deploy-production
+    image: mongodb/kanopy-deploy:latest
+    environment:
+      KUBECONFIG: /tmp/kubeconfig
+    commands:
+      # Authenticate to Kanopy
+      - kanopy-oidc kube login --non-interactive
+      
+      # Add helm repo
+      - helm repo add mongodb https://10gen.github.io/helm-charts
+      - helm repo update
+      
+      # Deploy using helm
+      - |
+        helm upgrade --install github-copier mongodb/web-app \
+          --namespace docs \
+          --values kanopy/production/values.yaml \
+          --set image.tag=${DRONE_TAG} \
+          --wait \
+          --timeout 5m
+      
+      # Verify deployment
+      - kubectl get pods -n docs -l app=github-copier
+      - kubectl rollout status deployment/github-copier -n docs
+    when:
+      event:
+        - tag
+      ref:
+        - refs/tags/v*
+
+trigger:
+  branch:
+    - main
+    - kanopy-deployment
+  event:
+    - push
+    - tag
+
+---
+# Secrets required for this pipeline:
+# - artifactory_username: Your Artifactory username
+# - artifactory_password: Your Artifactory password or API token
+# 
+# Create secrets in Drone:
+# https://drone.corp.mongodb.com/grove-platform/github-copier/settings
+

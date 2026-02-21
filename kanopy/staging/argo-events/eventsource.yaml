@@ -1,0 +1,42 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventSource
+metadata:
+  name: github-copier-eventsource
+  namespace: docs
+  annotations:
+    # This annotation enables the well-known GitHub source
+    # which creates a public webhook URL without CORPSEC approval
+    v1alpha1.argoslower.kanopy-platform/known-source: "github"
+spec:
+  eventBusName: default
+  service:
+    ports:
+      - port: 12000
+        targetPort: 12000
+  github:
+    copier-webhook:
+      # For testing, we'll use a single repository
+      # In production, this would list all source repos
+      owner: "mongodb"
+      repositories:
+        - name: "docs-realm"
+      webhook:
+        endpoint: /events
+        port: "12000"
+        method: POST
+      # Webhook secret for signature validation
+      webhookSecret:
+        name: github-webhook-secret
+        key: secret
+      # Events to listen for
+      events:
+        - "pull_request"
+        - "push"
+      # Uncomment if using GitHub App authentication
+      # githubApp:
+      #   appID: "your-app-id"
+      #   installationID: "your-installation-id"
+      #   privateKey:
+      #     name: github-app-secret
+      #     key: pem
+

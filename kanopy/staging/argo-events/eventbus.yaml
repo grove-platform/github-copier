@@ -1,0 +1,12 @@
+apiVersion: argoproj.io/v1alpha1
+kind: EventBus
+metadata:
+  name: default
+  namespace: docs
+spec:
+  nats:
+    native:
+      # Basic 3-replica NATS setup without the problematic reloader
+      replicas: 3
+      auth: token
+

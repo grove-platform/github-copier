@@ -49,3 +49,7 @@ Thumbs.db
 tmp/
 temp/
 
+# Kanopy deployment configs (not needed in container)
+kanopy/
+.drone.yml
+

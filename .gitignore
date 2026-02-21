@@ -63,3 +63,7 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+
+# Kanopy secrets (DO NOT COMMIT!)
+kanopy/**/secrets.yaml
+!kanopy/**/secrets.yaml.template

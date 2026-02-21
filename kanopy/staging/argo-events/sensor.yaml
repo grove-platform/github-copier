@@ -1,0 +1,54 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Sensor
+metadata:
+  name: github-copier-sensor
+  namespace: docs
+spec:
+  template:
+    serviceAccountName: tiller
+  dependencies:
+    - name: github-webhook
+      eventSourceName: github-copier-eventsource
+      eventName: copier-webhook
+      # Optional: Filter for specific events
+      # filters:
+      #   data:
+      #     - path: headers.X-Github-Event
+      #       type: string
+      #       value:
+      #         - pull_request
+      #     - path: body.action
+      #       type: string
+      #       value:
+      #         - closed
+      #     - path: body.pull_request.merged
+      #       type: bool
+      #       value:
+      #         - "true"
+  triggers:
+    - template:
+        name: http-trigger
+        http:
+          # Internal Kubernetes service URL
+          url: http://echo-server.docs.svc.cluster.local:8080/events
+          method: POST
+          headers:
+            Content-Type: application/json
+          # This is the critical part - pass raw payload unmodified
+          payload:
+            - src:
+                dependencyName: github-webhook
+                dataKey: body
+              # useRawData: true means pass the body as-is without JSON encoding
+              useRawData: true
+              # dest is the JSON path in the payload - using just the body
+              dest: body
+        retryStrategy:
+          steps: 3
+          duration: 5s
+        policy:
+          status:
+            allow:
+              - 200
+              - 202
+

@@ -1,0 +1,7 @@
+# EventBus configuration for Argo Events
+# See https://github.com/10gen/helm-charts/tree/master/charts/argo-eventbus
+
+jetstreams:
+  default:
+    version: 2.9.16
+

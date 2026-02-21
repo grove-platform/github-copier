@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: echo-server-script
+  namespace: docs
+data:
+  server.py: |
+    #!/usr/bin/env python3
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    import json
+    import sys
+    
+    class EchoHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            
+            print("=" * 80, file=sys.stderr)
+            print("INCOMING REQUEST", file=sys.stderr)
+            print("=" * 80, file=sys.stderr)
+            print(f"Method: {self.command}", file=sys.stderr)
+            print(f"Path: {self.path}", file=sys.stderr)
+            print("Headers:", file=sys.stderr)
+            for header, value in self.headers.items():
+                print(f"  {header}: {value}", file=sys.stderr)
+            print("\nBody:", file=sys.stderr)
+            try:
+                body_str = body.decode('utf-8')
+                print(body_str, file=sys.stderr)
+                # Try to pretty-print if JSON
+                try:
+                    parsed = json.loads(body_str)
+                    print("\nParsed JSON:", file=sys.stderr)
+                    print(json.dumps(parsed, indent=2), file=sys.stderr)
+                except:
+                    pass
+            except:
+                print(f"<binary data, {len(body)} bytes>", file=sys.stderr)
+            print("=" * 80, file=sys.stderr)
+            
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"status": "received"}')
+        
+        def log_message(self, format, *args):
+            # Suppress default logging
+            pass
+    
+    if __name__ == '__main__':
+        server = HTTPServer(('0.0.0.0', 8080), EchoHandler)
+        print('Echo server listening on port 8080...', file=sys.stderr)
+        server.serve_forever()
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echo-server
+  namespace: docs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echo-server
+  template:
+    metadata:
+      labels:
+        app: echo-server
+    spec:
+      containers:
+      - name: echo
+        image: python:3.11-slim
+        command: ["python3", "/app/server.py"]
+        ports:
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - name: script
+          mountPath: /app
+      volumes:
+      - name: script
+        configMap:
+          name: echo-server-script
+          defaultMode: 0755
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echo-server
+  namespace: docs
+spec:
+  selector:
+    app: echo-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: http
+
