@@ -21,7 +21,6 @@ steps:
     settings:
       registry: public.ecr.aws/kanopy
       repo: github-copier
-      create_repository: true
       tags:
         - latest
         - git-${DRONE_COMMIT_SHA:0:8}
