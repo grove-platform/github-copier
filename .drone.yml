@@ -40,29 +40,17 @@ steps:
 
   # Deploy to Kanopy staging
   - name: deploy-staging
-    image: mongodb/kanopy-deploy:latest
-    environment:
-      KUBECONFIG: /tmp/kubeconfig
-    commands:
-      # Authenticate to Kanopy
-      - kanopy-oidc kube login --non-interactive
-      
-      # Add helm repo
-      - helm repo add mongodb https://10gen.github.io/helm-charts
-      - helm repo update
-      
-      # Deploy using helm
-      - |
-        helm upgrade --install github-copier mongodb/web-app \
-          --namespace docs \
-          --values kanopy/staging/values.yaml \
-          --set image.tag=${DRONE_COMMIT_SHA:0:8} \
-          --wait \
-          --timeout 5m
-      
-      # Verify deployment
-      - kubectl get pods -n docs -l app=github-copier
-      - kubectl rollout status deployment/github-copier -n docs
+    image: public.ecr.aws/kanopy/drone-helm:v3
+    settings:
+      chart: mongodb/web-app
+      add_repos: [mongodb=https://10gen.github.io/helm-charts]
+      namespace: docs
+      release: github-copier
+      values: image.tag=git-${DRONE_COMMIT_SHA:0:8},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+      values_files: ["kanopy/staging/values.yaml"]
+      api_server: https://api.staging.corp.mongodb.com
+      kubernetes_token:
+        from_secret: staging_kubernetes_token
     when:
       event:
         - push
@@ -72,29 +60,17 @@ steps:
 
   # Deploy to Kanopy production (manual approval required)
   - name: deploy-production
-    image: mongodb/kanopy-deploy:latest
-    environment:
-      KUBECONFIG: /tmp/kubeconfig
-    commands:
-      # Authenticate to Kanopy
-      - kanopy-oidc kube login --non-interactive
-      
-      # Add helm repo
-      - helm repo add mongodb https://10gen.github.io/helm-charts
-      - helm repo update
-      
-      # Deploy using helm
-      - |
-        helm upgrade --install github-copier mongodb/web-app \
-          --namespace docs \
-          --values kanopy/production/values.yaml \
-          --set image.tag=${DRONE_TAG} \
-          --wait \
-          --timeout 5m
-      
-      # Verify deployment
-      - kubectl get pods -n docs -l app=github-copier
-      - kubectl rollout status deployment/github-copier -n docs
+    image: public.ecr.aws/kanopy/drone-helm:v3
+    settings:
+      chart: mongodb/web-app
+      add_repos: [mongodb=https://10gen.github.io/helm-charts]
+      namespace: docs
+      release: github-copier
+      values: image.tag=${DRONE_TAG},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+      values_files: ["kanopy/production/values.yaml"]
+      api_server: https://api.prod.corp.mongodb.com
+      kubernetes_token:
+        from_secret: prod_kubernetes_token
     when:
       event:
         - tag
