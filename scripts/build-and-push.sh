@@ -5,7 +5,7 @@ set -e
 # Usage: ./scripts/build-and-push.sh [version]
 
 VERSION=${1:-$(git describe --tags --always)}
-IMAGE_REPO="public.ecr.aws/kanopy/github-copier"
+IMAGE_REPO="795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier"
 IMAGE_TAG="${IMAGE_REPO}:${VERSION}"
 IMAGE_LATEST="${IMAGE_REPO}:latest"
 
@@ -26,10 +26,10 @@ echo ""
 echo "📦 Pushing to Artifactory..."
 
 # Check if logged in to ECR
-if ! docker info 2>/dev/null | grep -q "public.ecr.aws"; then
+if ! docker info 2>/dev/null | grep -q "795250896452.dkr.ecr.us-east-1.amazonaws.com"; then
   echo "⚠️  Not logged in to ECR. Attempting login..."
   echo "   You may need AWS credentials (ecr_access_key/ecr_secret_key from Drone secrets)."
-  echo "   For manual push, you can use: aws ecr-public get-login-password --region us-east-1 | docker login --username AWS --password-stdin public.ecr.aws"
+  echo "   For manual push, you can use: aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 795250896452.dkr.ecr.us-east-1.amazonaws.com"
   # Note: This will likely fail without AWS credentials
   # For CI/CD, Drone will handle authentication via kaniko plugin
 fi

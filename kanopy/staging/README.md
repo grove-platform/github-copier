@@ -27,8 +27,8 @@ This directory contains the Kanopy deployment configuration for github-copier in
    ```
 
 2. **Docker Image**
-   - Build and push to Kanopy's ECR registry
-   - Repository: `public.ecr.aws/kanopy/github-copier`
+   - Build and push to MongoDB's private ECR registry
+   - Repository: `795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier`
    - See [Building the Docker Image](#building-the-docker-image) below
 
 3. **Secrets**
@@ -53,15 +53,15 @@ This directory contains the Kanopy deployment configuration for github-copier in
 cd /Users/cbullinger/devdocs/grove/github-copier
 
 # Build the image
-docker build -t public.ecr.aws/kanopy/github-copier:v0.2.0 .
+docker build -t 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier:v0.2.0 .
 
 # Push the image (requires AWS ECR credentials - typically done via Drone CI/CD)
 # For manual push, you need ecr_access_key and ecr_secret_key
 # Usually this is automated via Drone, so you can skip the push for local testing
 
 # Tag as latest
-docker tag public.ecr.aws/kanopy/github-copier:v0.2.0 \
-           public.ecr.aws/kanopy/github-copier:latest
+docker tag 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier:v0.2.0 \
+           795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier:latest
 ```
 
 **Note:** For local testing, you don't need to push to ECR. Drone CI/CD will handle building and pushing automatically when you push to the `main` or `kanopy-deployment` branch.
@@ -206,9 +206,9 @@ kubectl get secret github-copier-app-credentials -n docs -o yaml
 
 ```bash
 # Verify image exists in ECR
-docker pull public.ecr.aws/kanopy/github-copier:latest
+docker pull 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier:latest
 
-# Check if Kanopy has pull access (should be automatic for public ECR)
+# Check if Kanopy has pull access (should be automatic for same AWS account)
 kubectl describe pod -n docs -l app=github-copier | grep -A 5 "Events:"
 ```
 

@@ -19,8 +19,9 @@ steps:
     image: plugins/kaniko-ecr
     pull: always
     settings:
-      registry: public.ecr.aws/kanopy
-      repo: github-copier
+      registry: 795250896452.dkr.ecr.us-east-1.amazonaws.com
+      repo: docs/github-copier
+      create_repository: true
       tags:
         - latest
         - git-${DRONE_COMMIT_SHA:0:8}
