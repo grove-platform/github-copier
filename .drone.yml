@@ -110,12 +110,3 @@ trigger:
   event:
     - push
     - tag
-
----
-# Secrets required for this pipeline:
-# - artifactory_username: Your Artifactory username
-# - artifactory_password: Your Artifactory password or API token
-# 
-# Create secrets in Drone:
-# https://drone.corp.mongodb.com/grove-platform/github-copier/settings
-
