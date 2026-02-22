@@ -25,17 +25,15 @@ steps:
       tags:
         - latest
         - git-${DRONE_COMMIT_SHA:0:8}
-        - ${DRONE_TAG}
       access_key:
         from_secret: ecr_access_key
       secret_key:
         from_secret: ecr_secret_key
       build_args:
-        VERSION: ${DRONE_TAG:-${DRONE_COMMIT_SHA:0:8}}
+        VERSION: ${DRONE_COMMIT_SHA:0:8}
     when:
       event:
         - push
-        - tag
       branch:
         - main
         - kanopy-deployment
