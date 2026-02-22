@@ -55,11 +55,18 @@ image:
   tag: "latest"  # Will be overridden by CI/CD with actual version
   pullPolicy: Always
 
+# Replica count - fixed at 1 to avoid webhook deduplication issues
+replicaCount: 1
+
 # Service configuration
-service:
-  type: ClusterIP
-  port: 80
-  targetPort: 8080  # App listens on 8080
+services:
+  - name: http
+    ingress: true
+    port: 80
+    probes: true
+    protocol: TCP
+    targetPort: 8080
+    type: ClusterIP
 
 # Ingress configuration
 ingress:
@@ -89,14 +96,12 @@ probes:
   path: /health
   headers: {}
   liveness:
-    httpGet: true
     initialDelaySeconds: 10
     periodSeconds: 30
     timeoutSeconds: 3
     successThreshold: 1
     failureThreshold: 3
   readiness:
-    httpGet: true
     initialDelaySeconds: 5
     periodSeconds: 10
     timeoutSeconds: 3
@@ -109,17 +114,19 @@ podAntiAffinity:
   topologyKey: "kubernetes.io/hostname"
   type: "soft"
 
-# Autoscaling
-autoscaling:
-  minReplicas: 1  # Start with 1 for staging
-  maxReplicas: 3
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
+# Autoscaling - disabled for now (using fixed replica count)
+# We use replicaCount: 1 to avoid webhook deduplication issues
+# autoscaling:
+#   apiVersion: autoscaling/v2
+#   minReplicas: 1
+#   maxReplicas: 3
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 70
 
 # Security context
 securityContext:
@@ -131,14 +138,13 @@ securityContext:
       - ALL
 
 # Pod labels for monitoring/observability
-podLabels:
+labels:
   app.kubernetes.io/name: github-copier
   app.kubernetes.io/component: webhook-receiver
   app.kubernetes.io/part-of: docs-automation
 
 # Annotations
-podAnnotations:
+annotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8080"
   prometheus.io/path: "/metrics"
-
