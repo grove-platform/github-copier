@@ -1,0 +1,66 @@
+---
+description: Go coding standards for github-copier
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# Go Conventions
+
+## Error Handling
+
+- Return errors, never `log.Fatal`
+- Wrap errors with context: `fmt.Errorf("context: %w", err)`
+- Use sentinel errors from `services/errors.go` where appropriate
+
+```go
+// ❌ BAD
+if err != nil {
+    log.Fatal(err)
+}
+
+// ✅ GOOD
+if err != nil {
+    return fmt.Errorf("failed to fetch config: %w", err)
+}
+```
+
+## GitHub API Safety
+
+Nil-check all GitHub API responses before dereferencing:
+
+```go
+// ❌ BAD
+name := *repo.Name
+
+// ✅ GOOD
+if repo.Name != nil {
+    name = *repo.Name
+}
+```
+
+## Logging
+
+Use `log/slog` for all logging—never `log` or `fmt.Print` for operational output:
+
+```go
+slog.Info("processing webhook", "delivery_id", deliveryID, "repo", repoName)
+slog.Error("failed to fetch file", "error", err, "path", filePath)
+```
+
+## Testing
+
+- Always run tests with `-race` flag: `go test -race ./...`
+- Use `httpmock` for HTTP mocking (see `tests/utils.go` for patterns)
+- Test files live alongside source: `foo.go` → `foo_test.go`
+
+## Pointers
+
+Use `github.Ptr()` (not deprecated `github.String`/`github.Int`/`github.Bool`):
+
+```go
+// ❌ BAD (deprecated)
+req.Title = github.String("PR title")
+
+// ✅ GOOD
+req.Title = github.Ptr("PR title")
+```

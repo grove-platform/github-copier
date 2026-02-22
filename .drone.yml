@@ -14,20 +14,22 @@ steps:
     commands:
       - go test -v -race ./services ./types
 
-  # Build and push Docker image to Artifactory
+  # Build and push Docker image to ECR
   - name: build-and-push
-    image: plugins/docker
+    image: plugins/kaniko-ecr
+    pull: always
     settings:
-      registry: artifactory.corp.mongodb.com
-      repo: artifactory.corp.mongodb.com/docs-docker-local/github-copier
+      registry: public.ecr.aws/kanopy
+      repo: github-copier
+      create_repository: true
       tags:
         - latest
-        - ${DRONE_COMMIT_SHA:0:8}
+        - git-${DRONE_COMMIT_SHA:0:8}
         - ${DRONE_TAG}
-      username:
-        from_secret: artifactory_username
-      password:
-        from_secret: artifactory_password
+      access_key:
+        from_secret: ecr_access_key
+      secret_key:
+        from_secret: ecr_secret_key
       build_args:
         - VERSION=${DRONE_TAG:-${DRONE_COMMIT_SHA:0:8}}
     when:

@@ -27,8 +27,8 @@ This directory contains the Kanopy deployment configuration for github-copier in
    ```
 
 2. **Docker Image**
-   - Build and push to MongoDB's Artifactory
-   - Repository: `artifactory.corp.mongodb.com/docs-docker-local/github-copier`
+   - Build and push to Kanopy's ECR registry
+   - Repository: `public.ecr.aws/kanopy/github-copier`
    - See [Building the Docker Image](#building-the-docker-image) below
 
 3. **Secrets**
@@ -53,19 +53,18 @@ This directory contains the Kanopy deployment configuration for github-copier in
 cd /Users/cbullinger/devdocs/grove/github-copier
 
 # Build the image
-docker build -t artifactory.corp.mongodb.com/docs-docker-local/github-copier:v0.2.0 .
+docker build -t public.ecr.aws/kanopy/github-copier:v0.2.0 .
 
-# Login to Artifactory (if not already logged in)
-docker login artifactory.corp.mongodb.com
-
-# Push the image
-docker push artifactory.corp.mongodb.com/docs-docker-local/github-copier:v0.2.0
+# Push the image (requires AWS ECR credentials - typically done via Drone CI/CD)
+# For manual push, you need ecr_access_key and ecr_secret_key
+# Usually this is automated via Drone, so you can skip the push for local testing
 
 # Tag as latest
-docker tag artifactory.corp.mongodb.com/docs-docker-local/github-copier:v0.2.0 \
-           artifactory.corp.mongodb.com/docs-docker-local/github-copier:latest
-docker push artifactory.corp.mongodb.com/docs-docker-local/github-copier:latest
+docker tag public.ecr.aws/kanopy/github-copier:v0.2.0 \
+           public.ecr.aws/kanopy/github-copier:latest
 ```
+
+**Note:** For local testing, you don't need to push to ECR. Drone CI/CD will handle building and pushing automatically when you push to the `main` or `kanopy-deployment` branch.
 
 ### 2. Create Secrets
 
@@ -206,10 +205,10 @@ kubectl get secret github-copier-app-credentials -n docs -o yaml
 ### Image pull errors
 
 ```bash
-# Verify image exists in Artifactory
-docker pull artifactory.corp.mongodb.com/docs-docker-local/github-copier:v0.2.0
+# Verify image exists in ECR
+docker pull public.ecr.aws/kanopy/github-copier:latest
 
-# Check if Kanopy has pull access (should be automatic for mongodb/* repos)
+# Check if Kanopy has pull access (should be automatic for public ECR)
 kubectl describe pod -n docs -l app=github-copier | grep -A 5 "Events:"
 ```
 

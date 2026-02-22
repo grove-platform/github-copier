@@ -49,9 +49,9 @@ envSecrets:
 
 # Image configuration
 image:
-  # We'll build and push to MongoDB's container registry
-  # Format: artifactory.corp.mongodb.com/docs-docker-local/github-copier
-  repository: artifactory.corp.mongodb.com/docs-docker-local/github-copier
+  # We'll build and push to Kanopy's ECR registry
+  # Format: public.ecr.aws/kanopy/github-copier
+  repository: public.ecr.aws/kanopy/github-copier
   tag: "latest"  # Will be overridden by CI/CD with actual version
   pullPolicy: Always
 

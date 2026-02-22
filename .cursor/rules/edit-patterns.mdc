@@ -1,0 +1,43 @@
+---
+description: File mapping for common edit tasks
+alwaysApply: true
+---
+
+# Edit Patterns
+
+Quick reference for which files to modify for common tasks.
+
+## Feature Changes
+
+| Task | Files to modify |
+|------|-----------------|
+| New transformation type | `types/config.go` (add const) → `services/workflow_processor.go` (implement) |
+| New pattern type | `types/config.go` (add const) → `services/pattern_matcher.go` (implement) |
+| New config field | `types/config.go` (add to struct) → consumers in `services/` |
+| Webhook logic | `services/webhook_handler_new.go` |
+| Rate limit behavior | `services/rate_limit.go` |
+| Auth flow | `services/github_auth.go` + `services/token_manager.go` |
+| Health/metrics endpoints | `services/health_metrics.go` |
+| Slack notifications | `services/slack_notifier.go` |
+
+## CLI Tools
+
+| Tool | Location |
+|------|----------|
+| config-validator | `cmd/config-validator/main.go` |
+| test-webhook | `cmd/test-webhook/main.go` |
+| test-pem | `cmd/test-pem/main.go` |
+
+## Key Entry Points
+
+- **App startup**: `app.go`
+- **Webhook orchestration**: `services/webhook_handler_new.go` → `HandleWebhookWithContainer()`
+- **Core file matching**: `services/workflow_processor.go` → `ProcessWorkflow()`
+- **DI container**: `services/service_container.go`
+
+## After Making Changes
+
+1. Run tests: `go test -race ./services -v`
+2. Run linter: `golangci-lint run ./...`
+3. Update `CHANGELOG.md` under `[Unreleased]`
+4. Update docs if user-facing (see `docs/`)
