@@ -58,7 +58,7 @@ steps:
         - main
         - kanopy-deployment
 
-  # Deploy to Kanopy production (manual approval required)
+  # Deploy to Kanopy production
   - name: deploy-production
     image: public.ecr.aws/kanopy/drone-helm:v3
     settings:
@@ -66,16 +66,16 @@ steps:
       add_repos: [mongodb=https://10gen.github.io/helm-charts]
       namespace: docs
       release: github-copier
-      values: image.tag=${DRONE_TAG},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+      values: image.tag=git-${DRONE_COMMIT_SHA:0:8},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
       values_files: ["kanopy/production/values.yaml"]
       api_server: https://api.prod.corp.mongodb.com
       kubernetes_token:
         from_secret: prod_kubernetes_token
     when:
       event:
-        - tag
-      ref:
-        - refs/tags/v*
+        - push
+      branch:
+        - main
 
 trigger:
   branch:

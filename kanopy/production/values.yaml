@@ -1,0 +1,152 @@
+# Kanopy web-app helm chart values for github-copier
+# Environment: production
+# Namespace: docs
+
+# Application environment variables
+env:
+  # Config Repository (where main config file is stored)
+  CONFIG_REPO_OWNER: "grove-platform"
+  CONFIG_REPO_NAME: "github-copier"
+  CONFIG_REPO_BRANCH: "main"
+  
+  # Application Settings
+  WEBSERVER_PATH: "/events"
+  MAIN_CONFIG_FILE: ".copier/main.yaml"
+  USE_MAIN_CONFIG: "true"
+  DEPRECATION_FILE: "deprecated_examples.json"
+  
+  # Committer Information
+  COMMITTER_NAME: "GitHub Copier App"
+  COMMITTER_EMAIL: "bot@mongodb.com"
+  
+  # Feature Flags
+  AUDIT_ENABLED: "false"
+  METRICS_ENABLED: "true"
+
+  # Disable Google Cloud logging (not available in Kanopy)
+  COPIER_DISABLE_CLOUD_LOGGING: "true"
+
+  # Skip Google Secret Manager (use Kubernetes secrets instead)
+  SKIP_SECRET_MANAGER: "true"
+
+# Secrets from Kubernetes Secret objects
+# These will be loaded as environment variables from the specified secrets
+# Secret names are prefixed with "github-copier-" to avoid collisions in the docs namespace
+envSecrets:
+  # GitHub App credentials
+  GITHUB_APP_ID: github-copier-app-credentials
+  INSTALLATION_ID: github-copier-app-credentials
+
+  # GitHub App private key (PEM file content)
+  # The app reads this directly when SKIP_SECRET_MANAGER=true
+  GITHUB_APP_PRIVATE_KEY: github-copier-pem
+
+  # Webhook secret for validating GitHub webhook signatures
+  WEBHOOK_SECRET: github-copier-webhook-secret
+
+  # MongoDB URI (optional - for audit logging)
+  # MONGO_URI: github-copier-mongo-uri
+
+# Image configuration
+image:
+  # We'll build and push to MongoDB's private ECR registry
+  # Format: 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+  repository: 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+  tag: "latest"  # Will be overridden by CI/CD with actual version
+  pullPolicy: Always
+
+# Replica count - fixed at 1 to avoid webhook deduplication issues
+replicaCount: 1
+
+# Service configuration
+services:
+  - name: http
+    ingress: true
+    port: 80
+    probes: true
+    protocol: TCP
+    targetPort: 8080
+    type: ClusterIP
+
+# Ingress configuration
+ingress:
+  enabled: true
+  hosts:
+    - github-copier.docs.prod.corp.mongodb.com
+
+# Istio service mesh
+mesh:
+  enabled: true
+  # We'll need permissive mode initially to allow external webhooks
+  # Once we get the vanity hostname with IP allowlist, we can tighten this
+  permissive: false
+
+# Resource limits
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Health probes
+probes:
+  enabled: true
+  path: /health
+  headers: {}
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    successThreshold: 1
+    failureThreshold: 3
+
+# Pod anti-affinity for high availability
+podAntiAffinity:
+  enabled: true
+  topologyKey: "kubernetes.io/hostname"
+  type: "soft"
+
+# Autoscaling - disabled for now (using fixed replica count)
+# We use replicaCount: 1 to avoid webhook deduplication issues
+# autoscaling:
+#   apiVersion: autoscaling/v2
+#   minReplicas: 1
+#   maxReplicas: 3
+#   metrics:
+#     - type: Resource
+#       resource:
+#         name: cpu
+#         target:
+#           type: Utilization
+#           averageUtilization: 70
+
+# Security context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# Pod labels for monitoring/observability
+labels:
+  app.kubernetes.io/name: github-copier
+  app.kubernetes.io/component: webhook-receiver
+  app.kubernetes.io/part-of: docs-automation
+  app.kubernetes.io/environment: production
+
+# Annotations
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+
