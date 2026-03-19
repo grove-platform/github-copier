@@ -182,7 +182,7 @@ func LogDebug(message string, args ...any) {
 
 // LogInfo writes an info-level log.
 func LogInfo(message string, args ...any) {
-	slog.Info(message, args...)
+	slog.Info(message, args...) // #nosec G706 -- structured logging; args are key-value pairs, not user input
 	logToGCP(slog.LevelInfo, message, args...)
 }
 
@@ -194,7 +194,7 @@ func LogWarning(message string, args ...any) {
 
 // LogError writes an error-level log.
 func LogError(message string, args ...any) {
-	slog.Error(message, args...)
+	slog.Error(message, args...) // #nosec G706 -- structured logging; args are key-value pairs, not user input
 	logToGCP(slog.LevelError, message, args...)
 }
 
