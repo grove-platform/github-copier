@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Audit logging enabled** — MongoDB audit logging is now enabled by default.
+
+### Fixed
+
+- **Missing `#nosec G706` annotations** — Added suppression comments to `LogInfo` and `LogError` for gosec false positives.
+
+### Security
+
+- **gRPC vulnerability fix** — Upgraded `google.golang.org/grpc` to v1.79.3 to address CVE-2026-33186.
+
 ## [v0.2.0] - 2026-02-20
 
 ### Added
