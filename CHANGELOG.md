@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.3.0] - 2026-04-14
+
 ### Changed
 
 - **Audit logging enabled** — MongoDB audit logging is now enabled by default.
