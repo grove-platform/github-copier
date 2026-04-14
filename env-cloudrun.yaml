@@ -31,5 +31,5 @@ GOOGLE_CLOUD_PROJECT_ID: "github-copy-code-examples"
 COPIER_LOG_NAME: "code-copier-log"
 
 # Feature Flags
-AUDIT_ENABLED: "false"
+AUDIT_ENABLED: "true"
 METRICS_ENABLED: "true"
