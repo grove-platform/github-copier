@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GitHub Copier — Operator</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; line-height: 1.45; color: #1a1a1a; background: #f6f7f9; }
+    body { margin: 0; padding: 1.25rem 1.5rem 3rem; max-width: 1100px; margin-inline: auto; }
+    h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
+    p.sub { margin: 0 0 1.25rem; color: #555; font-size: 0.95rem; }
+    section { background: #fff; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    h2 { font-size: 1.05rem; margin: 0 0 0.75rem; }
+    label { display: block; font-size: 0.85rem; color: #444; margin-bottom: 0.35rem; }
+    input[type="password"], input[type="text"] { width: 100%; max-width: 28rem; padding: 0.45rem 0.55rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.95rem; }
+    button { padding: 0.45rem 0.85rem; border-radius: 6px; border: 1px solid #2563eb; background: #2563eb; color: #fff; font-size: 0.9rem; cursor: pointer; }
+    button.secondary { background: #fff; color: #2563eb; }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .row { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; margin-top: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th, td { text-align: left; padding: 0.45rem 0.35rem; border-bottom: 1px solid #eee; vertical-align: top; }
+    th { color: #555; font-weight: 600; }
+    .ok { color: #15803d; font-weight: 600; }
+    .fail { color: #b91c1c; font-weight: 600; }
+    pre { background: #f1f5f9; padding: 0.75rem; border-radius: 8px; overflow: auto; font-size: 0.8rem; max-height: 320px; }
+    .err { color: #b91c1c; font-size: 0.9rem; margin-top: 0.5rem; }
+    .hint { font-size: 0.82rem; color: #64748b; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>GitHub Copier — Operator</h1>
+  <p class="sub">Recent copy audit events, deployment metadata, and optional tag-based release (same trigger as CI on version tags).</p>
+
+  <section>
+    <h2>Access</h2>
+    <label for="token">Operator token (<code>OPERATOR_UI_TOKEN</code>)</label>
+    <div class="row">
+      <input id="token" type="password" autocomplete="off" placeholder="Paste token" style="flex:1;min-width:220px" />
+      <button type="button" id="saveToken">Save in session</button>
+      <button type="button" class="secondary" id="clearToken">Clear</button>
+    </div>
+    <p class="hint">Stored only in <code>sessionStorage</code> for this browser tab. Send <code>Authorization: Bearer …</code> on API calls.</p>
+  </section>
+
+  <section>
+    <h2>Recent copy events</h2>
+    <div class="row">
+      <div>
+        <label for="limit">Limit</label>
+        <input id="limit" type="text" value="50" style="width:4rem" />
+      </div>
+      <button type="button" id="loadAudit">Refresh</button>
+    </div>
+    <p id="auditErr" class="err" hidden></p>
+    <div style="overflow:auto;margin-top:0.75rem">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Status</th>
+            <th>Rule</th>
+            <th>Source</th>
+            <th>Target</th>
+            <th>PR</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="auditBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Deployment</h2>
+    <button type="button" id="loadDeploy">Load</button>
+    <p id="deployErr" class="err" hidden></p>
+    <pre id="deployJson" hidden></pre>
+  </section>
+
+  <section>
+    <h2>Release (tag → deploy)</h2>
+    <p class="hint">Production deploy runs on <strong>version tag</strong> pushes (<code>vMAJOR.MINOR.PATCH</code>). Changelog updates still require <code>scripts/release.sh</code> locally unless you only create a tag.</p>
+    <label for="version">Version tag</label>
+    <div class="row">
+      <input id="version" type="text" placeholder="v0.4.0" style="max-width:10rem" />
+      <button type="button" id="doRelease">Create tag via API</button>
+    </div>
+    <p id="relErr" class="err" hidden></p>
+    <pre id="relJson" hidden></pre>
+  </section>
+
+  <script>
+    const TKEY = 'github-copier-operator-token';
+    function authHeaders() {
+      const t = sessionStorage.getItem(TKEY) || '';
+      const h = { 'Accept': 'application/json' };
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      return h;
+    }
+    function showErr(id, msg) {
+      const el = document.getElementById(id);
+      if (!msg) { el.hidden = true; el.textContent = ''; return; }
+      el.hidden = false; el.textContent = msg;
+    }
+    document.getElementById('saveToken').onclick = () => {
+      sessionStorage.setItem(TKEY, document.getElementById('token').value.trim());
+    };
+    document.getElementById('clearToken').onclick = () => {
+      sessionStorage.removeItem(TKEY);
+      document.getElementById('token').value = '';
+    };
+    document.getElementById('token').value = sessionStorage.getItem(TKEY) || '';
+
+    async function loadAudit() {
+      showErr('auditErr', '');
+      const lim = parseInt(document.getElementById('limit').value, 10) || 50;
+      const res = await fetch('/operator/api/audit/events?limit=' + encodeURIComponent(lim), { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { showErr('auditErr', body.error || res.statusText); return; }
+      const tb = document.getElementById('auditBody');
+      tb.innerHTML = '';
+      (body.events || []).forEach(ev => {
+        const tr = document.createElement('tr');
+        const st = ev.success ? '<span class="ok">copied</span>' : '<span class="fail">failed</span>';
+        const err = ev.error_message ? escapeHtml(ev.error_message.slice(0, 200)) : '';
+        tr.innerHTML = '<td>' + escapeHtml(ev.timestamp || '') + '</td><td>' + st + '</td><td>' + escapeHtml(ev.rule_name || '') + '</td><td>' + escapeHtml((ev.source_repo || '') + ':' + (ev.source_path || '')) + '</td><td>' + escapeHtml((ev.target_repo || '') + ':' + (ev.target_path || '')) + '</td><td>' + (ev.pr_number || '') + '</td><td>' + err + '</td>';
+        tb.appendChild(tr);
+      });
+    }
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    document.getElementById('loadAudit').onclick = loadAudit;
+
+    document.getElementById('loadDeploy').onclick = async () => {
+      showErr('deployErr', '');
+      const res = await fetch('/operator/api/deployment', { headers: authHeaders() });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { showErr('deployErr', body.error || res.statusText); return; }
+      const pre = document.getElementById('deployJson');
+      pre.hidden = false;
+      pre.textContent = JSON.stringify(body, null, 2);
+    };
+
+    document.getElementById('doRelease').onclick = async () => {
+      showErr('relErr', '');
+      const version = document.getElementById('version').value.trim();
+      const res = await fetch('/operator/api/release', {
+        method: 'POST',
+        headers: Object.assign({ 'Content-Type': 'application/json' }, authHeaders()),
+        body: JSON.stringify({ version })
+      });
+      const body = await res.json().catch(() => ({}));
+      const pre = document.getElementById('relJson');
+      pre.hidden = false;
+      pre.textContent = JSON.stringify(body, null, 2);
+      if (!res.ok) { showErr('relErr', body.error || res.statusText); }
+    };
+
+    loadAudit();
+  </script>
+</body>
+</html>

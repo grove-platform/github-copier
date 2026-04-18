@@ -69,6 +69,12 @@ type Config struct {
 	// Webhook retry configuration
 	WebhookMaxRetries        int // max retry attempts for failed webhook processing
 	WebhookRetryInitialDelay int // initial delay between retries in seconds (doubles each attempt)
+
+	// Operator web UI (optional) — protected by OPERATOR_UI_TOKEN when set
+	OperatorUIToken             string
+	OperatorRepoSlug            string // "owner/repo" for GitHub links and optional tag API
+	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
+	OperatorReleaseTargetBranch string // branch SHA used when creating a tag (default main)
 }
 
 const (
@@ -117,6 +123,10 @@ const (
 	WebhookProcessingTimeoutSeconds = "WEBHOOK_PROCESSING_TIMEOUT_SECONDS"
 	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
 	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
+	OperatorUIToken                 = "OPERATOR_UI_TOKEN"           // #nosec G101 -- env var name
+	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
+	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
+	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
 )
 
 // NewConfig returns a new Config instance with default values
@@ -234,6 +244,11 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.WebhookProcessingTimeoutSeconds = getIntEnvWithDefault(WebhookProcessingTimeoutSeconds, config.WebhookProcessingTimeoutSeconds)
 	config.WebhookMaxRetries = getIntEnvWithDefault(WebhookMaxRetries, config.WebhookMaxRetries)
 	config.WebhookRetryInitialDelay = getIntEnvWithDefault(WebhookRetryInitialDelay, config.WebhookRetryInitialDelay)
+
+	config.OperatorUIToken = os.Getenv(OperatorUIToken)
+	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
+	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
+	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
 
 	if err := validateConfig(config); err != nil {
 		return nil, err

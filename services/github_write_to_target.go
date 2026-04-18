@@ -54,7 +54,8 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 
 // AddFilesToTargetRepos uploads files to target repository branches.
 // It accepts the upload map as a parameter for concurrency safety.
-func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
+// When auditLogger is non-nil, each file copy is recorded (success or failure) for MongoDB audit.
+func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector, auditLogger AuditLogger) {
 	if config.DryRun {
 		for key, value := range filesToUpload {
 			LogInfo("[DRY-RUN] Would upload files to target repo",
@@ -71,11 +72,93 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 	}
 
 	for key, value := range filesToUpload {
+		batchStart := time.Now()
 		if err := uploadToTarget(ctx, config, key, value, prTemplateFetcher); err != nil {
 			LogCritical("Failed to upload files", "repo", key.RepoName, "error", err)
 			recordBatchFailure(metricsCollector, len(value.Content))
+			auditLogCopyBatchFailure(ctx, auditLogger, key, value, err)
+		} else {
+			auditLogCopyBatchSuccess(ctx, auditLogger, key, value, time.Since(batchStart))
 		}
 	}
+}
+
+func auditLogCopyBatchSuccess(ctx context.Context, auditLogger AuditLogger, key types.UploadKey, value types.UploadFileContent, elapsed time.Duration) {
+	if auditLogger == nil || len(value.Content) == 0 {
+		return
+	}
+	n := len(value.Content)
+	perFileMs := elapsed.Milliseconds() / int64(n)
+	if perFileMs == 0 && elapsed > 0 {
+		perFileMs = 1
+	}
+	for i := range value.Content {
+		f := value.Content[i]
+		meta := types.CopierFileMeta{}
+		if i < len(value.FileMeta) {
+			meta = value.FileMeta[i]
+		}
+		srcPath := meta.SourcePath
+		if srcPath == "" {
+			srcPath = f.GetPath()
+		}
+		ev := &AuditEvent{
+			RuleName:   meta.RuleName,
+			SourceRepo: meta.SourceRepo,
+			SourcePath: srcPath,
+			TargetRepo: key.RepoName,
+			TargetPath: f.GetName(),
+			PRNumber:   meta.PRNumber,
+			Success:    true,
+			DurationMs: perFileMs,
+			FileSize:   int64(decodedFileBytes(&f)),
+		}
+		if err := auditLogger.LogCopyEvent(ctx, ev); err != nil {
+			LogWarning("audit LogCopyEvent failed", "error", err)
+		}
+	}
+}
+
+func auditLogCopyBatchFailure(ctx context.Context, auditLogger AuditLogger, key types.UploadKey, value types.UploadFileContent, batchErr error) {
+	if auditLogger == nil || len(value.Content) == 0 {
+		return
+	}
+	msg := batchErr.Error()
+	for i := range value.Content {
+		f := value.Content[i]
+		meta := types.CopierFileMeta{}
+		if i < len(value.FileMeta) {
+			meta = value.FileMeta[i]
+		}
+		srcPath := meta.SourcePath
+		if srcPath == "" {
+			srcPath = f.GetPath()
+		}
+		ev := &AuditEvent{
+			RuleName:     meta.RuleName,
+			SourceRepo:   meta.SourceRepo,
+			SourcePath:   srcPath,
+			TargetRepo:   key.RepoName,
+			TargetPath:   f.GetName(),
+			PRNumber:     meta.PRNumber,
+			Success:      false,
+			ErrorMessage: msg,
+		}
+		if err := auditLogger.LogCopyEvent(ctx, ev); err != nil {
+			LogWarning("audit LogCopyEvent (failure) failed", "error", err)
+		}
+	}
+}
+
+func decodedFileBytes(f *github.RepositoryContent) int {
+	if f == nil {
+		return 0
+	}
+	c, err := f.GetContent()
+	if err != nil {
+		return 0
+	}
+	return len(c)
 }
 
 // uploadToTarget handles a single upload-key: authenticates for the target org,

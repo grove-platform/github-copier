@@ -150,7 +150,7 @@ func (wp *workflowProcessor) ProcessWorkflow(
 			continue // fetch failed — already logged
 		}
 		mr.fileContent.Name = github.Ptr(mr.targetPath)
-		wp.queueUpload(ctx, mr.workflow, mr.fileContent, mr.targetPath, mr.prNumber, mr.sourceCommitSHA)
+		wp.queueUpload(ctx, mr.workflow, mr.fileContent, mr.targetPath, mr.prNumber, mr.sourceCommitSHA, mr.file.Path)
 		filesMatched++
 	}
 
@@ -411,6 +411,7 @@ func (wp *workflowProcessor) queueUpload(
 	targetPath string,
 	prNumber int,
 	sourceCommitSHA string,
+	sourcePath string,
 ) {
 
 	// Create upload key — includes CommitStrategy so that workflows with
@@ -454,6 +455,12 @@ func (wp *workflowProcessor) queueUpload(
 
 	// Add file to content
 	content.Content = append(content.Content, *fileContent)
+	content.FileMeta = append(content.FileMeta, types.CopierFileMeta{
+		RuleName:   workflow.Name,
+		SourceRepo: workflow.Source.Repo,
+		SourcePath: sourcePath,
+		PRNumber:   prNumber,
+	})
 
 	// Render templates with message context
 	msgCtx := types.NewMessageContext()

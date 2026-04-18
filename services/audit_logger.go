@@ -21,21 +21,21 @@ const (
 
 // AuditEvent represents an audit log entry
 type AuditEvent struct {
-	ID             string         `bson:"_id,omitempty"`
-	Timestamp      time.Time      `bson:"timestamp"`
-	EventType      AuditEventType `bson:"event_type"`
-	RuleName       string         `bson:"rule_name,omitempty"`
-	SourceRepo     string         `bson:"source_repo"`
-	SourcePath     string         `bson:"source_path"`
-	TargetRepo     string         `bson:"target_repo,omitempty"`
-	TargetPath     string         `bson:"target_path,omitempty"`
-	CommitSHA      string         `bson:"commit_sha,omitempty"`
-	PRNumber       int            `bson:"pr_number,omitempty"`
-	Success        bool           `bson:"success"`
-	ErrorMessage   string         `bson:"error_message,omitempty"`
-	DurationMs     int64          `bson:"duration_ms,omitempty"`
-	FileSize       int64          `bson:"file_size,omitempty"`
-	AdditionalData map[string]any `bson:"additional_data,omitempty"`
+	ID             string         `bson:"_id,omitempty" json:"id,omitempty"`
+	Timestamp      time.Time      `bson:"timestamp" json:"timestamp"`
+	EventType      AuditEventType `bson:"event_type" json:"event_type"`
+	RuleName       string         `bson:"rule_name,omitempty" json:"rule_name,omitempty"`
+	SourceRepo     string         `bson:"source_repo" json:"source_repo"`
+	SourcePath     string         `bson:"source_path" json:"source_path"`
+	TargetRepo     string         `bson:"target_repo,omitempty" json:"target_repo,omitempty"`
+	TargetPath     string         `bson:"target_path,omitempty" json:"target_path,omitempty"`
+	CommitSHA      string         `bson:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+	PRNumber       int            `bson:"pr_number,omitempty" json:"pr_number,omitempty"`
+	Success        bool           `bson:"success" json:"success"`
+	ErrorMessage   string         `bson:"error_message,omitempty" json:"error_message,omitempty"`
+	DurationMs     int64          `bson:"duration_ms,omitempty" json:"duration_ms,omitempty"`
+	FileSize       int64          `bson:"file_size,omitempty" json:"file_size,omitempty"`
+	AdditionalData map[string]any `bson:"additional_data,omitempty" json:"additional_data,omitempty"`
 }
 
 // AuditLogger handles audit logging to MongoDB
