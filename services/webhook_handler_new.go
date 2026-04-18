@@ -464,7 +464,7 @@ func fetchChangedFiles(ctx context.Context, config *configs.Config, container *S
 func uploadAndDeprecateFiles(ctx context.Context, config *configs.Config, container *ServiceContainer, sourceRepoOwner, sourceRepoName, sourceBranch string, prNumber int) {
 	// Upload queued files
 	filesToUpload := container.FileStateService.GetFilesToUpload()
-	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector)
+	AddFilesToTargetRepos(ctx, config, filesToUpload, container.PRTemplateFetcher, container.MetricsCollector, container.AuditLogger)
 	container.FileStateService.ClearFilesToUpload()
 
 	// Build deprecation map and update file in the source repo
