@@ -20,6 +20,13 @@ func TestDeliveryTracker_TryRecord(t *testing.T) {
 	if dt.TryRecord("delivery-1") {
 		t.Error("expected duplicate TryRecord to return false")
 	}
+	hist := dt.RecentDeliveries(10)
+	if len(hist) < 2 {
+		t.Fatalf("expected history len >= 2, got %d", len(hist))
+	}
+	if !hist[len(hist)-1].Duplicate {
+		t.Error("expected last history entry to be duplicate")
+	}
 
 	// Different ID should succeed
 	if !dt.TryRecord("delivery-2") {

@@ -155,28 +155,22 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 	// Create HTTP handler with all routes
 	mux := http.NewServeMux()
 
-	// Webhook endpoint
-	mux.HandleFunc(config.WebserverPath, func(w http.ResponseWriter, r *http.Request) {
-		handleWebhook(w, r, config, container)
-	})
-
-	// Liveness probe — lightweight, always 200 if process is running
+	// Register built-in paths before the configurable webhook route so a mis-set
+	// WEBSERVER_PATH can never shadow /health, /ready, /metrics, /config, or /operator.
 	mux.HandleFunc("/health", services.HealthHandler(container.StartTime, version))
-
-	// Readiness probe — checks GitHub auth, MongoDB connectivity
 	mux.HandleFunc("/ready", services.ReadinessHandler(container))
-
-	// Metrics endpoint (if enabled)
 	if config.MetricsEnabled {
 		mux.HandleFunc("/metrics", services.MetricsHandler(container.MetricsCollector, container.FileStateService))
 	}
-
-	// Config diagnostic endpoint — shows resolved config with secrets redacted
 	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container, version))
-
-	if config.OperatorUIToken != "" {
+	if config.OperatorUIEnabled {
 		services.RegisterOperatorRoutes(mux, config, container, version)
 	}
+
+	// GitHub webhook (configurable path, typically /events)
+	mux.HandleFunc(config.WebserverPath, func(w http.ResponseWriter, r *http.Request) {
+		handleWebhook(w, r, config, container)
+	})
 
 	// Info endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -193,8 +187,8 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		if config.MetricsEnabled {
 			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
 		}
-		if config.OperatorUIToken != "" {
-			_, _ = fmt.Fprintf(w, "Operator UI: /operator/\n")
+		if config.OperatorUIEnabled {
+			_, _ = fmt.Fprintf(w, "Operator UI: /operator/ (set OPERATOR_UI_TOKEN for secured APIs)\n")
 		}
 	})
 

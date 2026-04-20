@@ -88,25 +88,40 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	if err != nil {
 		LogWebhookOperation(ctx, "read_body", "failed to read webhook body", err)
 		container.MetricsCollector.RecordWebhookFailed()
+		AppendWebhookTrace(container, WebhookTraceEntry{
+			DeliveryID: r.Header.Get("X-GitHub-Delivery"),
+			EventType:  r.Header.Get("X-GitHub-Event"),
+			Outcome:    "read_body_failed",
+			Detail:     err.Error(),
+		})
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
 
 	eventType := r.Header.Get("X-GitHub-Event")
+	deliveryID := r.Header.Get("X-GitHub-Delivery")
 	if eventType == "" {
 		LogWebhookOperation(ctx, "missing_event", "missing X-GitHub-Event header", nil)
 		container.MetricsCollector.RecordWebhookFailed()
+		AppendWebhookTrace(container, WebhookTraceEntry{
+			DeliveryID: deliveryID,
+			Outcome:    "missing_event_header",
+		})
 		http.Error(w, "missing event type", http.StatusBadRequest)
 		return
 	}
 
 	// Check for duplicate delivery using X-GitHub-Delivery header
-	deliveryID := r.Header.Get("X-GitHub-Delivery")
 	if deliveryID != "" && container.DeliveryTracker != nil {
 		if !container.DeliveryTracker.TryRecord(deliveryID) {
 			LogInfoCtx(ctx, "duplicate webhook delivery, skipping", map[string]interface{}{
 				"delivery_id": deliveryID,
 				"event_type":  eventType,
+			})
+			AppendWebhookTrace(container, WebhookTraceEntry{
+				DeliveryID: deliveryID,
+				EventType:  eventType,
+				Outcome:    "duplicate_delivery",
 			})
 			w.WriteHeader(http.StatusOK)
 			return
@@ -125,6 +140,11 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		if !simpleVerifySignature(sigHeader, payload, []byte(config.WebhookSecret)) {
 			LogWebhookOperation(ctx, "signature_verification", "webhook signature verification failed", nil)
 			container.MetricsCollector.RecordWebhookFailed()
+			AppendWebhookTrace(container, WebhookTraceEntry{
+				DeliveryID: deliveryID,
+				EventType:  eventType,
+				Outcome:    "signature_failed",
+			})
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -141,6 +161,12 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		LogWebhookOperation(ctx, "parse_payload", "failed to parse webhook payload", err,
 			map[string]interface{}{"event_type": eventType})
 		container.MetricsCollector.RecordWebhookFailed()
+		AppendWebhookTrace(container, WebhookTraceEntry{
+			DeliveryID: deliveryID,
+			EventType:  eventType,
+			Outcome:    "parse_failed",
+			Detail:     err.Error(),
+		})
 		http.Error(w, "bad webhook", http.StatusBadRequest)
 		return
 	}
@@ -155,6 +181,11 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 		LogInfoCtx(ctx, "ignoring non-pull_request event", map[string]interface{}{
 			"event_type": eventType,
 			"size_bytes": len(payload),
+		})
+		AppendWebhookTrace(container, WebhookTraceEntry{
+			DeliveryID: deliveryID,
+			EventType:  eventType,
+			Outcome:    "ignored_non_pull_request",
 		})
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -173,6 +204,23 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 			"action": action,
 			"merged": merged,
 		})
+		trace := WebhookTraceEntry{
+			DeliveryID: deliveryID,
+			EventType:  eventType,
+			Action:     action,
+			Outcome:    "skipped_not_merged_pr",
+			Detail:     fmt.Sprintf("merged=%v", merged),
+		}
+		if r := prEvt.GetRepo(); r != nil {
+			trace.Repo = r.GetFullName()
+		}
+		if pr := prEvt.GetPullRequest(); pr != nil {
+			trace.PRNumber = pr.GetNumber()
+			if b := pr.GetBase(); b != nil {
+				trace.BaseBranch = b.GetRef()
+			}
+		}
+		AppendWebhookTrace(container, trace)
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -185,6 +233,13 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	repo := prEvt.GetRepo()
 	if repo == nil {
 		LogWarningCtx(ctx, "webhook missing repository info", nil)
+		AppendWebhookTrace(container, WebhookTraceEntry{
+			DeliveryID: deliveryID,
+			EventType:  eventType,
+			Action:     action,
+			PRNumber:   prNumber,
+			Outcome:    "invalid_payload_missing_repo",
+		})
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -230,6 +285,10 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	// Process asynchronously in background with a new context.
 	// Don't use the request context as it will be cancelled when the request completes.
 	bgCtx := context.Background()
+	// Attach log buffer for operator diagnostics
+	if container.DeliveryLogs != nil {
+		bgCtx = ContextWithLogBuffer(bgCtx, deliveryID, container.DeliveryLogs)
+	}
 
 	// Apply a timeout to prevent stuck API calls from running indefinitely (#9).
 	if config.WebhookProcessingTimeoutSeconds > 0 {
@@ -252,6 +311,27 @@ func HandleWebhookWithContainer(w http.ResponseWriter, r *http.Request, config *
 	}
 }
 
+// webhookResult carries completion info from a successful webhook processing run,
+// surfaced in the operator UI webhook trace for at-a-glance diagnostics.
+type webhookResult struct {
+	TargetRepos   []string
+	FilesMatched  int
+	FilesUploaded int
+	FilesFailed   int
+}
+
+func (r *webhookResult) traceDetail(attempt int) string {
+	if r == nil {
+		return fmt.Sprintf("attempt %d", attempt)
+	}
+	targets := strings.Join(r.TargetRepos, ", ")
+	if targets == "" {
+		targets = "(none)"
+	}
+	return fmt.Sprintf("attempt %d | %d matched, %d uploaded, %d failed | targets: %s",
+		attempt, r.FilesMatched, r.FilesUploaded, r.FilesFailed, targets)
+}
+
 // processWebhookWithRetry wraps handleMergedPRWithContainer with panic recovery
 // and exponential-backoff retries for transient failures (#7).
 func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, deliveryID string, config *configs.Config, container *ServiceContainer) {
@@ -261,8 +341,20 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		lastErr = runWithRecovery(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+		result, err := runWithRecovery(ctx, prNumber, sourceCommitSHA, repoOwner, repoName, baseBranch, config, container)
+		lastErr = err
 		if lastErr == nil {
+			AppendWebhookTrace(container, WebhookTraceEntry{
+				DeliveryID: deliveryID,
+				EventType:  "pull_request",
+				Action:     "closed",
+				Repo:       webhookRepo,
+				BaseBranch: baseBranch,
+				CommitSHA:  sourceCommitSHA,
+				PRNumber:   prNumber,
+				Outcome:    "processed_ok",
+				Detail:     result.traceDetail(attempt),
+			})
 			return // success
 		}
 
@@ -322,6 +414,17 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 		"error", lastErr,
 	)
 	container.MetricsCollector.RecordWebhookFailed()
+	AppendWebhookTrace(container, WebhookTraceEntry{
+		DeliveryID: deliveryID,
+		EventType:  "pull_request",
+		Action:     "closed",
+		Repo:       webhookRepo,
+		BaseBranch: baseBranch,
+		CommitSHA:  sourceCommitSHA,
+		PRNumber:   prNumber,
+		Outcome:    "processing_failed",
+		Detail:     fmt.Sprintf("after %d attempt(s): %v", maxAttempts, lastErr),
+	})
 	if notifyErr := container.SlackNotifier.NotifyError(ctx, &ErrorEvent{
 		Operation:  operation,
 		Error:      fmt.Errorf("failed after %d attempt(s): %w", maxAttempts, lastErr),
@@ -336,9 +439,10 @@ func processWebhookWithRetry(ctx context.Context, prNumber int, sourceCommitSHA 
 
 // runWithRecovery calls handleMergedPRWithContainer in a panic-safe wrapper,
 // converting panics into errors.
-func runWithRecovery(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) (retErr error) {
+func runWithRecovery(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) (retResult *webhookResult, retErr error) {
 	defer func() {
 		if r := recover(); r != nil {
+			retResult = nil
 			retErr = fmt.Errorf("panic: %v", r)
 			LogCritical("panic in webhook handler", "pr_number", prNumber, "repo_owner", repoOwner, "repo_name", repoName, "recovered", r)
 		}
@@ -348,8 +452,9 @@ func runWithRecovery(ctx context.Context, prNumber int, sourceCommitSHA string, 
 
 // handleMergedPRWithContainer orchestrates processing of a merged PR:
 // auth → config → match workflows → fetch changed files → process → upload → notify.
-// Returns an error if a retryable failure occurred (#6 — per-workflow error tracking).
-func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) error {
+// Returns a webhookResult on success (for operator trace enrichment) and an error
+// if a retryable failure occurred (#6 — per-workflow error tracking).
+func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommitSHA string, repoOwner string, repoName string, baseBranch string, config *configs.Config, container *ServiceContainer) (*webhookResult, error) {
 	startTime := time.Now()
 	webhookRepo := fmt.Sprintf("%s/%s", repoOwner, repoName)
 
@@ -359,20 +464,20 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 			LogAndReturnError(ctx, "auth", "failed to configure GitHub permissions", err)
 			container.MetricsCollector.RecordWebhookFailed()
 			notifySlackError(ctx, container, "auth", err, prNumber, webhookRepo)
-			return fmt.Errorf("auth: %w", err)
+			return nil, fmt.Errorf("auth: %w", err)
 		}
 	}
 
 	// 2. Load config and find matching workflows
 	yamlConfig, err := loadAndMatchWorkflows(ctx, config, container, webhookRepo, baseBranch, prNumber)
 	if err != nil {
-		return fmt.Errorf("config: %w", err)
+		return nil, fmt.Errorf("config: %w", err)
 	}
 
 	// 3. Fetch changed files from the source PR
 	changedFiles, err := fetchChangedFiles(ctx, config, container, repoOwner, repoName, prNumber, webhookRepo)
 	if err != nil {
-		return fmt.Errorf("fetch_files: %w", err)
+		return nil, fmt.Errorf("fetch_files: %w", err)
 	}
 
 	// 4. Snapshot metrics before processing
@@ -391,16 +496,24 @@ func handleMergedPRWithContainer(ctx context.Context, prNumber int, sourceCommit
 	reportCompletion(ctx, container, webhookRepo, prNumber, sourceCommitSHA, startTime,
 		filesMatchedBefore, filesUploadedBefore, filesFailedBefore, targetRepos)
 
+	// Build result for operator trace enrichment
+	result := &webhookResult{
+		TargetRepos:   targetRepos,
+		FilesMatched:  container.MetricsCollector.GetFilesMatched() - filesMatchedBefore,
+		FilesUploaded: container.MetricsCollector.GetFilesUploaded() - filesUploadedBefore,
+		FilesFailed:   container.MetricsCollector.GetFilesUploadFailed() - filesFailedBefore,
+	}
+
 	// Return an aggregate error if any workflows failed (enables retry for partial failures)
 	if len(workflowErrors) > 0 {
 		errMsgs := make([]string, 0, len(workflowErrors))
 		for wfName, wfErr := range workflowErrors {
 			errMsgs = append(errMsgs, fmt.Sprintf("%s: %v", wfName, wfErr))
 		}
-		return fmt.Errorf("%d workflow(s) failed: %s", len(workflowErrors), strings.Join(errMsgs, "; "))
+		return result, fmt.Errorf("%d workflow(s) failed: %s", len(workflowErrors), strings.Join(errMsgs, "; "))
 	}
 
-	return nil
+	return result, nil
 }
 
 // loadAndMatchWorkflows loads the YAML config and filters to workflows matching

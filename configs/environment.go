@@ -70,7 +70,8 @@ type Config struct {
 	WebhookMaxRetries        int // max retry attempts for failed webhook processing
 	WebhookRetryInitialDelay int // initial delay between retries in seconds (doubles each attempt)
 
-	// Operator web UI (optional) — protected by OPERATOR_UI_TOKEN when set
+	// Operator web UI — off unless OPERATOR_UI_ENABLED=true (intended for local dev).
+	OperatorUIEnabled           bool
 	OperatorUIToken             string
 	OperatorRepoSlug            string // "owner/repo" for GitHub links and optional tag API
 	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
@@ -123,7 +124,8 @@ const (
 	WebhookProcessingTimeoutSeconds = "WEBHOOK_PROCESSING_TIMEOUT_SECONDS"
 	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
 	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
-	OperatorUIToken                 = "OPERATOR_UI_TOKEN"           // #nosec G101 -- env var name
+	OperatorUIEnabled               = "OPERATOR_UI_ENABLED"
+	OperatorUIToken                 = "OPERATOR_UI_TOKEN" // #nosec G101 -- env var name
 	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
 	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
 	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
@@ -245,6 +247,7 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.WebhookMaxRetries = getIntEnvWithDefault(WebhookMaxRetries, config.WebhookMaxRetries)
 	config.WebhookRetryInitialDelay = getIntEnvWithDefault(WebhookRetryInitialDelay, config.WebhookRetryInitialDelay)
 
+	config.OperatorUIEnabled = getBoolEnvWithDefault(OperatorUIEnabled, false)
 	config.OperatorUIToken = os.Getenv(OperatorUIToken)
 	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
 	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
@@ -338,5 +341,33 @@ func validateConfig(config *Config) error {
 		}
 	}
 
+	if err := validateWebserverPath(config.WebserverPath); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateWebserverPath rejects values that would collide with built-in HTTP routes.
+func validateWebserverPath(p string) error {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return fmt.Errorf("WEBSERVER_PATH cannot be empty")
+	}
+	if !strings.HasPrefix(p, "/") {
+		return fmt.Errorf("WEBSERVER_PATH must start with / (got %q)", p)
+	}
+	if p == "/" {
+		return fmt.Errorf("WEBSERVER_PATH cannot be / (reserved; use a dedicated path such as /events)")
+	}
+	for _, reserved := range []string{"/health", "/ready", "/metrics", "/config", "/operator"} {
+		if strings.EqualFold(p, reserved) {
+			return fmt.Errorf("WEBSERVER_PATH cannot be %s (reserved for a built-in route)", reserved)
+		}
+	}
+	norm := strings.TrimSuffix(strings.ToLower(p), "/") + "/"
+	if strings.HasPrefix(norm, "/operator/") {
+		return fmt.Errorf("WEBSERVER_PATH cannot be under /operator/ (reserved for the operator UI)")
+	}
 	return nil
 }

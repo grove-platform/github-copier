@@ -459,6 +459,7 @@ func (wp *workflowProcessor) queueUpload(
 		RuleName:   workflow.Name,
 		SourceRepo: workflow.Source.Repo,
 		SourcePath: sourcePath,
+		CommitSHA:  sourceCommitSHA,
 		PRNumber:   prNumber,
 	})
 

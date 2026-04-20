@@ -48,25 +48,37 @@ type AuditLogger interface {
 	GetEventsByRule(ctx context.Context, ruleName string, limit int) ([]AuditEvent, error)
 	GetStatsByRule(ctx context.Context) (map[string]RuleStats, error)
 	GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error)
+	QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error)
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
+// AuditListQuery filters audit rows for operator dashboards and APIs.
+type AuditListQuery struct {
+	Limit      int
+	EventType  string     // empty = any; otherwise copy | deprecation | error
+	Success    *bool      // nil = any
+	RuleName   string     // exact match when non-empty
+	PRNumber   *int       // nil = any; exact match when set
+	PathSearch string     // substring match on source_path OR target_path when non-empty
+	Since      *time.Time // inclusive lower bound on timestamp when set
+}
+
 // RuleStats represents statistics for a specific rule
 type RuleStats struct {
-	RuleName     string  `bson:"_id"`
-	TotalCopies  int     `bson:"total_copies"`
-	SuccessCount int     `bson:"success_count"`
-	FailureCount int     `bson:"failure_count"`
-	AvgDuration  float64 `bson:"avg_duration"`
+	RuleName     string  `bson:"_id" json:"rule_name"`
+	TotalCopies  int     `bson:"total_copies" json:"total_copies"`
+	SuccessCount int     `bson:"success_count" json:"success_count"`
+	FailureCount int     `bson:"failure_count" json:"failure_count"`
+	AvgDuration  float64 `bson:"avg_duration" json:"avg_duration_ms"`
 }
 
 // DailyStats represents daily copy volume statistics
 type DailyStats struct {
-	Date         string `bson:"_id"`
-	TotalCopies  int    `bson:"total_copies"`
-	SuccessCount int    `bson:"success_count"`
-	FailureCount int    `bson:"failure_count"`
+	Date         string `bson:"_id" json:"date"`
+	TotalCopies  int    `bson:"total_copies" json:"total_copies"`
+	SuccessCount int    `bson:"success_count" json:"success_count"`
+	FailureCount int    `bson:"failure_count" json:"failure_count"`
 }
 
 // MongoAuditLogger implements AuditLogger using MongoDB
@@ -92,7 +104,10 @@ func NewMongoAuditLogger(ctx context.Context, mongoURI, database, collection str
 		SetConnectTimeout(5 * time.Second).
 		SetTimeout(10 * time.Second).
 		SetMaxPoolSize(10).
-		SetRetryWrites(true)
+		SetRetryWrites(true).
+		SetBSONOptions(&options.BSONOptions{
+			ObjectIDAsHexString: true,
+		})
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
@@ -168,7 +183,51 @@ func (mal *MongoAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEven
 	return err
 }
 
-// GetRecentEvents retrieves recent audit events
+// QueryAuditEvents retrieves audit events matching the given filter criteria.
+func (mal *MongoAuditLogger) QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	filter := bson.M{}
+	if q.EventType != "" {
+		filter["event_type"] = AuditEventType(q.EventType)
+	}
+	if q.Success != nil {
+		filter["success"] = *q.Success
+	}
+	if q.RuleName != "" {
+		filter["rule_name"] = q.RuleName
+	}
+	if q.PRNumber != nil {
+		filter["pr_number"] = *q.PRNumber
+	}
+	if q.PathSearch != "" {
+		filter["$or"] = bson.A{
+			bson.M{"source_path": bson.M{"$regex": q.PathSearch, "$options": "i"}},
+			bson.M{"target_path": bson.M{"$regex": q.PathSearch, "$options": "i"}},
+		}
+	}
+	if q.Since != nil {
+		filter["timestamp"] = bson.M{"$gte": *q.Since}
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(int64(limit))
+	cursor, err := mal.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var events []AuditEvent
+	if err := cursor.All(ctx, &events); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 func (mal *MongoAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(int64(limit))
 	cursor, err := mal.collection.Find(ctx, bson.M{}, opts)
@@ -317,6 +376,9 @@ func (nal *NoOpAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rule
 }
 func (nal *NoOpAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error) {
 	return []DailyStats{}, nil
+}
+func (nal *NoOpAuditLogger) QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error) {
+	return []AuditEvent{}, nil
 }
 func (nal *NoOpAuditLogger) Ping(ctx context.Context) error  { return nil }
 func (nal *NoOpAuditLogger) Close(ctx context.Context) error { return nil }
