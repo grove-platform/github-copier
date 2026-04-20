@@ -127,6 +127,7 @@ type CopierFileMeta struct {
 	RuleName   string `json:"rule_name,omitempty"`
 	SourceRepo string `json:"source_repo,omitempty"`
 	SourcePath string `json:"source_path,omitempty"`
+	CommitSHA  string `json:"commit_sha,omitempty"`
 	PRNumber   int    `json:"pr_number,omitempty"`
 }
 

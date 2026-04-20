@@ -33,3 +33,7 @@ COPIER_LOG_NAME: "code-copier-log"
 # Feature Flags
 AUDIT_ENABLED: "true"
 METRICS_ENABLED: "true"
+
+# Operator UI is disabled by default (OPERATOR_UI_ENABLED unset/false). Intended for
+# local runs only — do not set OPERATOR_UI_ENABLED in Cloud Run unless you explicitly
+# want this surface on the internet-facing service.

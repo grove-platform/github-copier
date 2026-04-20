@@ -28,6 +28,12 @@ type ServiceContainer struct {
 	// Webhook deduplication
 	DeliveryTracker *DeliveryTracker
 
+	// Recent webhook outcomes for operator troubleshooting (in-memory)
+	WebhookTraces *WebhookTraceBuffer
+
+	// Per-delivery log capture for operator diagnostics (in-memory)
+	DeliveryLogs *DeliveryLogBuffer
+
 	// Server state
 	StartTime time.Time
 
@@ -101,6 +107,8 @@ func NewServiceContainer(config *configs.Config) (*ServiceContainer, error) {
 		MetricsCollector:  metricsCollector,
 		SlackNotifier:     slackNotifier,
 		DeliveryTracker:   NewDeliveryTracker(1 * time.Hour),
+		WebhookTraces:     NewWebhookTraceBuffer(),
+		DeliveryLogs:      NewDeliveryLogBuffer(),
 		StartTime:         time.Now(),
 	}, nil
 }
