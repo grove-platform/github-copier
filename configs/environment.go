@@ -73,6 +73,8 @@ type Config struct {
 	// Operator web UI — off unless OPERATOR_UI_ENABLED=true (intended for local dev).
 	OperatorUIEnabled           bool
 	OperatorUIToken             string
+	OperatorAuthMode            string // "token" (default) or "github"
+	OperatorAuthRepo            string // repo to check permissions against when AuthMode=github (e.g. "org/repo")
 	OperatorRepoSlug            string // "owner/repo" for GitHub links and optional tag API
 	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
 	OperatorReleaseTargetBranch string // branch SHA used when creating a tag (default main)
@@ -125,7 +127,9 @@ const (
 	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
 	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
 	OperatorUIEnabled               = "OPERATOR_UI_ENABLED"
-	OperatorUIToken                 = "OPERATOR_UI_TOKEN" // #nosec G101 -- env var name
+	OperatorUIToken                 = "OPERATOR_UI_TOKEN"  // #nosec G101 -- env var name
+	OperatorAuthMode                = "OPERATOR_AUTH_MODE" // "token" or "github"
+	OperatorAuthRepo                = "OPERATOR_AUTH_REPO" // repo for permission check in github mode
 	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
 	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
 	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
@@ -249,6 +253,8 @@ func LoadEnvironment(envFile string) (*Config, error) {
 
 	config.OperatorUIEnabled = getBoolEnvWithDefault(OperatorUIEnabled, false)
 	config.OperatorUIToken = os.Getenv(OperatorUIToken)
+	config.OperatorAuthMode = getEnvWithDefault(OperatorAuthMode, "token")
+	config.OperatorAuthRepo = os.Getenv(OperatorAuthRepo)
 	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
 	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
 	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
