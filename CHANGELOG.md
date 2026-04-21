@@ -33,6 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Token auth removed** — the operator UI no longer accepts a shared bearer token; all access is per-user via GitHub PAT with repo-scoped permission checks.
 
+## [v0.3.0] - 2026-04-14
+
 ### Changed
 
 - **Audit logging enabled** — MongoDB audit logging is now enabled by default.
