@@ -188,7 +188,7 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
 		}
 		if config.OperatorUIEnabled {
-			_, _ = fmt.Fprintf(w, "Operator UI: /operator/ (set OPERATOR_UI_TOKEN for secured APIs)\n")
+			_, _ = fmt.Fprintf(w, "Operator UI: /operator/ (authenticate with a GitHub PAT; role from %s)\n", config.OperatorAuthRepo)
 		}
 	})
 

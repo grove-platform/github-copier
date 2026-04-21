@@ -3,7 +3,6 @@ package services
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -25,16 +24,16 @@ var operatorIndexHTML []byte
 var operatorVersionTagRe = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // RegisterOperatorRoutes mounts the operator HTML UI and JSON APIs under /operator/.
-// Call only when cfg.OperatorUIEnabled is true (local/dev). Secured APIs require
-// OPERATOR_UI_TOKEN on the server plus Authorization: Bearer from the client.
+// Call only when cfg.OperatorUIEnabled is true. Works with any HTTP origin (local
+// dev, Cloud Run, Kubernetes, etc.). Every secured API requires an Authorization:
+// Bearer <github-pat> header. The user's permission on cfg.OperatorAuthRepo
+// determines their role (operator or writer).
 func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *ServiceContainer, version string) {
 	o := &operatorUI{
 		cfg:       cfg,
 		container: container,
 		version:   version,
-	}
-	if cfg.OperatorAuthMode == "github" {
-		o.ghCache = newGHAuthCache(5 * time.Minute)
+		ghCache:   newGHAuthCache(5 * time.Minute),
 	}
 	// Register specific paths before the /operator/ subtree so /operator/api/* is not handled by serveIndex.
 	mux.HandleFunc("/operator/api/status", o.handleOperatorStatus)
@@ -53,20 +52,7 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 	mux.HandleFunc("/operator", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/operator/", http.StatusFound)
 	})
-	switch cfg.OperatorAuthMode {
-	case "github":
-		authRepo := cfg.OperatorAuthRepo
-		if authRepo == "" {
-			authRepo = "(any valid GitHub user)"
-		}
-		LogInfo("Operator UI: /operator/ with GitHub PAT authentication", "auth_repo", authRepo)
-	default:
-		if cfg.OperatorUIToken == "" {
-			LogInfo("Operator UI: /operator/ (set OPERATOR_UI_TOKEN or OPERATOR_AUTH_MODE=github to enable APIs)")
-		} else {
-			LogInfo("Operator UI: /operator/ with token authentication enabled")
-		}
-	}
+	LogInfo("Operator UI: /operator/ with GitHub PAT authentication", "auth_repo", cfg.OperatorAuthRepo)
 }
 
 type operatorUI struct {
@@ -74,7 +60,7 @@ type operatorUI struct {
 	container      *ServiceContainer
 	version        string
 	replayInFlight sync.Map     // key: "owner/repo#pr" → prevents concurrent replays
-	ghCache        *ghAuthCache // GitHub PAT validation cache (nil when auth mode is "token")
+	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache
 }
 
 // operatorUserCtxKey is the context key for the authenticated operator user.
@@ -86,56 +72,39 @@ func operatorUserFromCtx(r *http.Request) *OperatorUser {
 	return u
 }
 
+// wrapAPI validates the incoming request's GitHub PAT and attaches the user to the context.
 func (o *operatorUI) wrapAPI(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		token := bearerToken(r)
-
-		if o.cfg.OperatorAuthMode == "github" {
-			// GitHub PAT mode: validate the token as a GitHub PAT
-			if token == "" {
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": "provide a GitHub Personal Access Token as Bearer token"})
-				return
-			}
-			user, err := o.authenticateGitHub(r.Context(), token)
-			if err != nil {
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
-				return
-			}
-			// Attach the user to the request context for downstream handlers
-			ctx := context.WithValue(r.Context(), operatorUserCtxKey{}, user)
-			next(w, r.WithContext(ctx))
-			return
-		}
-
-		// Default: simple shared-token mode
-		if o.cfg.OperatorUIToken == "" {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": "operator APIs disabled on server: set OPERATOR_UI_TOKEN (or OPERATOR_AUTH_MODE=github) and redeploy",
-			})
-			return
-		}
-		if !operatorAuthOK(o.cfg.OperatorUIToken, token) {
+		if token == "" {
 			w.WriteHeader(http.StatusUnauthorized)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "provide a GitHub Personal Access Token as Bearer token"})
 			return
 		}
-		next(w, r)
+		user, err := o.authenticateGitHub(r.Context(), token)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		ctx := context.WithValue(r.Context(), operatorUserCtxKey{}, user)
+		next(w, r.WithContext(ctx))
 	}
 }
 
 // wrapOperatorOnly wraps a handler that requires the "operator" role (replay, release).
-// In token mode, all authenticated users are operators. In github mode, checks the role.
 func (o *operatorUI) wrapOperatorOnly(next http.HandlerFunc) http.HandlerFunc {
 	return o.wrapAPI(func(w http.ResponseWriter, r *http.Request) {
 		user := operatorUserFromCtx(r)
-		if user != nil && user.Role != RoleOperator {
+		if user == nil || user.Role != RoleOperator {
+			role := "unknown"
+			if user != nil {
+				role = string(user.Role)
+			}
 			w.WriteHeader(http.StatusForbidden)
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"error": fmt.Sprintf("this action requires operator access (you have %s)", string(user.Role)),
+				"error": fmt.Sprintf("this action requires operator access (you have %s)", role),
 			})
 			return
 		}
@@ -167,10 +136,9 @@ func (o *operatorUI) handleOperatorStatus(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	apisEnabled := o.cfg.OperatorUIToken != "" || o.cfg.OperatorAuthMode == "github"
 	out := map[string]any{
-		"operator_apis_enabled": apisEnabled,
-		"auth_mode":             o.cfg.OperatorAuthMode,
+		"operator_apis_enabled": true,
+		"auth_repo":             o.cfg.OperatorAuthRepo,
 		"metrics_enabled":       o.cfg.MetricsEnabled,
 		"audit_enabled":         o.cfg.AuditEnabled,
 		"version":               o.version,
@@ -185,7 +153,7 @@ func (o *operatorUI) handleOperatorStatus(w http.ResponseWriter, r *http.Request
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// handleMe returns the authenticated user info (GitHub mode) or a generic response (token mode).
+// handleMe returns the authenticated user's GitHub login, avatar, and role.
 func (o *operatorUI) handleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -193,19 +161,16 @@ func (o *operatorUI) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := operatorUserFromCtx(r)
-	if user != nil {
-		_ = json.NewEncoder(w).Encode(user)
+	if user == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "no authenticated user in context"})
 		return
 	}
-	// Token mode — no user identity
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"login": "operator",
-		"role":  "operator",
-	})
+	_ = json.NewEncoder(w).Encode(user)
 }
 
 // handleRepoPermission reports whether the authenticated user has read access to a given repo.
-// Used by the frontend to pre-check replay eligibility. In token mode, always returns true.
+// Used by the frontend to pre-check replay eligibility per source repo.
 // Query params: repos=owner/repo1,owner/repo2 (comma-separated).
 func (o *operatorUI) handleRepoPermission(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -221,18 +186,6 @@ func (o *operatorUI) handleRepoPermission(w http.ResponseWriter, r *http.Request
 	}
 	repos := strings.Split(reposParam, ",")
 	result := make(map[string]bool, len(repos))
-
-	// Token mode: no per-repo restrictions — grant all
-	if o.cfg.OperatorAuthMode != "github" || o.ghCache == nil {
-		for _, repo := range repos {
-			repo = strings.TrimSpace(repo)
-			if repo != "" {
-				result[repo] = true
-			}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"permissions": result})
-		return
-	}
 
 	user := operatorUserFromCtx(r)
 	userPAT := bearerToken(r)
@@ -262,15 +215,6 @@ func bearerToken(r *http.Request) string {
 		return strings.TrimSpace(h[len(p):])
 	}
 	return ""
-}
-
-func operatorAuthOK(expected, got string) bool {
-	if expected == "" || got == "" {
-		return false
-	}
-	// subtle.ConstantTimeCompare returns 0 for different-length inputs without
-	// leaking the expected token length through timing.
-	return subtle.ConstantTimeCompare([]byte(expected), []byte(got)) == 1
 }
 
 func (o *operatorUI) serveIndex(w http.ResponseWriter, r *http.Request) {
@@ -704,24 +648,27 @@ func (o *operatorUI) handleReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Source-repo permission check (GitHub auth mode only): the user's PAT must
-	// have at least read access to the source repo being replayed.
-	if o.cfg.OperatorAuthMode == "github" && o.ghCache != nil {
+	// Source-repo permission check: the user's PAT must have at least read
+	// access to the source repo being replayed.
+	{
 		user := operatorUserFromCtx(r)
 		userPAT := bearerToken(r)
-		if user != nil && userPAT != "" {
-			permCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-			canRead, permErr := o.ghCache.CanUserReadRepo(permCtx, userPAT, user.Login, req.Repo)
-			cancel()
-			if !canRead {
-				w.WriteHeader(http.StatusForbidden)
-				msg := fmt.Sprintf("you do not have access to source repo %s", req.Repo)
-				if permErr != nil {
-					msg = fmt.Sprintf("%s: %s", msg, permErr.Error())
-				}
-				_ = json.NewEncoder(w).Encode(operatorReplayResponse{Error: msg})
-				return
+		if user == nil || userPAT == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(operatorReplayResponse{Error: "unauthenticated"})
+			return
+		}
+		permCtx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		canRead, permErr := o.ghCache.CanUserReadRepo(permCtx, userPAT, user.Login, req.Repo)
+		cancel()
+		if !canRead {
+			w.WriteHeader(http.StatusForbidden)
+			msg := fmt.Sprintf("you do not have access to source repo %s", req.Repo)
+			if permErr != nil {
+				msg = fmt.Sprintf("%s: %s", msg, permErr.Error())
 			}
+			_ = json.NewEncoder(w).Encode(operatorReplayResponse{Error: msg})
+			return
 		}
 	}
 

@@ -162,13 +162,13 @@ func validateGitHubPAT(ctx context.Context, pat string, authRepo string) (*Opera
 		Role:      RoleWriter, // default to read-only
 	}
 
-	// 2. If no auth repo configured, grant operator access to any valid GitHub user
+	// authRepo is required in github mode (enforced at config load via
+	// validateOperatorAuth). This guard is defensive only.
 	if authRepo == "" {
-		user.Role = RoleOperator
-		return user, nil
+		return nil, fmt.Errorf("OPERATOR_AUTH_REPO is not configured")
 	}
 
-	// 3. Check the user's permission on the auth repo
+	// 2. Check the user's permission on the auth repo
 	perm, err := ghAPIGetRepoPermission(ctx, pat, authRepo, ghUser.Login)
 	if err != nil {
 		// If we can't check permissions (repo not found, no access), default to writer
