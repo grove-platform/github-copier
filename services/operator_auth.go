@@ -6,10 +6,22 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
+
+// ghUsernameRe matches valid GitHub usernames: alphanumeric + hyphens,
+// cannot start or end with a hyphen, max 39 chars. Used to reject hostile
+// input before it reaches URL construction for the GitHub API. (RE2 has no
+// lookahead, so this doesn't reject consecutive hyphens — that's a GitHub
+// policy issue, not a security one; such requests simply fail downstream.)
+var ghUsernameRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$`)
+
+// ghRepoNameRe matches valid GitHub repo names.
+var ghRepoNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,100}$`)
 
 // OperatorRole represents the permission level for the operator UI.
 type OperatorRole string
@@ -239,8 +251,22 @@ func ghAPIGetRepoPermission(ctx context.Context, pat string, repo string, userna
 	if len(parts) != 2 {
 		return "", fmt.Errorf("invalid repo format: %s (expected owner/repo)", repo)
 	}
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/collaborators/%s/permission", parts[0], parts[1], username)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	// Validate path components against strict whitelists before URL construction.
+	// Host is hardcoded to api.github.com — not user-controlled.
+	if !ghUsernameRe.MatchString(parts[0]) {
+		return "", fmt.Errorf("invalid owner in repo %q", repo)
+	}
+	if !ghRepoNameRe.MatchString(parts[1]) {
+		return "", fmt.Errorf("invalid repo name in %q", repo)
+	}
+	if !ghUsernameRe.MatchString(username) {
+		return "", fmt.Errorf("invalid username %q", username)
+	}
+	apiURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/collaborators/%s/permission",
+		url.PathEscape(parts[0]), url.PathEscape(parts[1]), url.PathEscape(username),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) // #nosec G107 G704 -- host is hardcoded to api.github.com; path components validated above
 	if err != nil {
 		return "", err
 	}
@@ -248,7 +274,7 @@ func ghAPIGetRepoPermission(ctx context.Context, pat string, repo string, userna
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req) // #nosec G107 G704 -- host is hardcoded to api.github.com; path components validated above
 	if err != nil {
 		return "", err
 	}
