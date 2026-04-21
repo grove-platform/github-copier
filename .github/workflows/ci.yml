@@ -128,7 +128,7 @@ jobs:
             --region $REGION \
             --project $PROJECT_ID \
             --allow-unauthenticated \
-            --set-env-vars="^|^CONFIG_REPO_OWNER=grove-platform|CONFIG_REPO_NAME=github-copier|CONFIG_REPO_BRANCH=main|PEM_NAME=CODE_COPIER_PEM|WEBHOOK_SECRET_NAME=webhook-secret|MONGO_URI_SECRET_NAME=mongo-uri|WEBSERVER_PATH=/events|MAIN_CONFIG_FILE=.copier/main.yaml|USE_MAIN_CONFIG=true|DEPRECATION_FILE=deprecated_examples.json|COMMITTER_NAME=GitHub Copier App|COMMITTER_EMAIL=bot@mongodb.com|GOOGLE_CLOUD_PROJECT_ID=github-copy-code-examples|COPIER_LOG_NAME=code-copier-log|AUDIT_ENABLED=false|METRICS_ENABLED=true|GITHUB_APP_ID=${{ secrets.APP_ID }}|INSTALLATION_ID=${{ secrets.INSTALLATION_ID }}" \
+            --set-env-vars="^|^CONFIG_REPO_OWNER=grove-platform|CONFIG_REPO_NAME=github-copier|CONFIG_REPO_BRANCH=main|PEM_NAME=CODE_COPIER_PEM|WEBHOOK_SECRET_NAME=webhook-secret|MONGO_URI_SECRET_NAME=mongo-uri|WEBSERVER_PATH=/events|MAIN_CONFIG_FILE=.copier/main.yaml|USE_MAIN_CONFIG=true|DEPRECATION_FILE=deprecated_examples.json|COMMITTER_NAME=GitHub Copier App|COMMITTER_EMAIL=bot@mongodb.com|GOOGLE_CLOUD_PROJECT_ID=github-copy-code-examples|COPIER_LOG_NAME=code-copier-log|AUDIT_ENABLED=true|METRICS_ENABLED=true|OPERATOR_UI_ENABLED=true|OPERATOR_AUTH_REPO=grove-platform/github-copier|OPERATOR_REPO_SLUG=grove-platform/github-copier|GITHUB_APP_ID=${{ secrets.APP_ID }}|INSTALLATION_ID=${{ secrets.INSTALLATION_ID }}" \
             --set-build-env-vars="VERSION=${{ steps.version.outputs.tag }}" \
             --tag="${{ steps.version.outputs.traffic_tag }}" \
             --max-instances=10 \

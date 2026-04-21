@@ -34,6 +34,19 @@ COPIER_LOG_NAME: "code-copier-log"
 AUDIT_ENABLED: "true"
 METRICS_ENABLED: "true"
 
-# Operator UI is disabled by default (OPERATOR_UI_ENABLED unset/false). Intended for
-# local runs only — do not set OPERATOR_UI_ENABLED in Cloud Run unless you explicitly
-# want this surface on the internet-facing service.
+# Operator dashboard at https://<service>/operator/
+# Access is gated by each user's GitHub PAT: they authenticate with their
+# personal token, and their permission on OPERATOR_AUTH_REPO determines role
+# (admin/maintain/write → operator, read/triage → writer).
+OPERATOR_UI_ENABLED: "true"
+OPERATOR_AUTH_REPO: "grove-platform/github-copier"
+OPERATOR_REPO_SLUG: "grove-platform/github-copier"
+#
+# Optional: OPERATOR_RELEASE_GITHUB_TOKEN, OPERATOR_RELEASE_TARGET_BRANCH
+#
+# AI rule suggester (optional) — if set, points the operator UI at an
+# Ollama-compatible endpoint. Operators can also configure base URL and
+# active model from the UI at runtime without a redeploy.
+# LLM_PROVIDER: "ollama"
+# LLM_BASE_URL: "http://ollama.internal:11434"
+# LLM_MODEL: "qwen2.5-coder:7b"
