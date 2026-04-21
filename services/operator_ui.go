@@ -35,6 +35,14 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 		version:   version,
 		ghCache:   newGHAuthCache(5 * time.Minute),
 	}
+	// Always create the LLM client; availability is checked dynamically via Ping.
+	// Operators can change the active model and base URL from the UI without restart.
+	if client, err := NewLLMClient(cfg.LLMProvider, cfg.LLMBaseURL, cfg.LLMModel); err != nil {
+		LogWarning("LLM client init failed", "error", err.Error())
+	} else {
+		o.llm = client
+		LogInfo("LLM rule suggester ready", "provider", client.ProviderName(), "base_url", cfg.LLMBaseURL, "model", cfg.LLMModel, "note", "availability checked at request time")
+	}
 	// Register specific paths before the /operator/ subtree so /operator/api/* is not handled by serveIndex.
 	mux.HandleFunc("/operator/api/status", o.handleOperatorStatus)
 	mux.HandleFunc("/operator/api/audit/events", o.wrapAPI(o.handleAuditEvents))
@@ -48,6 +56,11 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 	mux.HandleFunc("/operator/api/logs", o.wrapAPI(o.handleDeliveryLogs))
 	mux.HandleFunc("/operator/api/me", o.wrapAPI(o.handleMe))
 	mux.HandleFunc("/operator/api/repo-permission", o.wrapAPI(o.handleRepoPermission))
+	mux.HandleFunc("/operator/api/suggest-rule", o.wrapAPI(o.handleSuggestRule))
+	mux.HandleFunc("/operator/api/llm/status", o.wrapAPI(o.handleLLMStatus))
+	mux.HandleFunc("/operator/api/llm/settings", o.wrapOperatorOnly(o.handleLLMSettings))
+	mux.HandleFunc("/operator/api/llm/model", o.wrapOperatorOnly(o.handleLLMDeleteModel))
+	mux.HandleFunc("/operator/api/llm/pull", o.wrapOperatorOnly(o.handleLLMPullModel))
 	mux.HandleFunc("/operator/", o.serveIndex)
 	mux.HandleFunc("/operator", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/operator/", http.StatusFound)
@@ -61,6 +74,7 @@ type operatorUI struct {
 	version        string
 	replayInFlight sync.Map     // key: "owner/repo#pr" → prevents concurrent replays
 	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache
+	llm            LLMClient    // optional: enabled when cfg.LLMEnabled is true
 }
 
 // operatorUserCtxKey is the context key for the authenticated operator user.
@@ -139,6 +153,7 @@ func (o *operatorUI) handleOperatorStatus(w http.ResponseWriter, r *http.Request
 	out := map[string]any{
 		"operator_apis_enabled": true,
 		"auth_repo":             o.cfg.OperatorAuthRepo,
+		"llm_available":         o.llm != nil, // client exists; reachability checked via /operator/api/llm/status
 		"metrics_enabled":       o.cfg.MetricsEnabled,
 		"audit_enabled":         o.cfg.AuditEnabled,
 		"version":               o.version,

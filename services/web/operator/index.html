@@ -219,6 +219,34 @@
     .pr-search{display:flex;gap:0.5rem;align-items:flex-end;margin-bottom:0.65rem;padding:0.55rem 0.75rem;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;}
     .pr-search input{flex:1;max-width:14rem;}
 
+    /* AI settings panel */
+    .ai-status-line{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.7rem;border-radius:6px;background:var(--surface-alt);border:1px solid var(--border);margin-bottom:0.6rem;}
+    .ai-status-line.ai-ok{background:var(--green-light);border-color:var(--green);}
+    .ai-status-line.ai-fail{background:var(--red-light);border-color:var(--red);}
+    .ai-status-line .dot{flex-shrink:0;}
+    .ai-model-list{display:flex;flex-direction:column;gap:0.35rem;margin-top:0.5rem;}
+    .ai-model-row{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;}
+    .ai-model-row.active{border-color:var(--blue);background:var(--blue-light);}
+    .ai-model-name{flex:1;font-family:ui-monospace,monospace;font-size:0.8rem;word-break:break-all;}
+    .ai-model-size{font-size:0.72rem;color:var(--text-3);white-space:nowrap;}
+    .ai-progress{margin-top:0.5rem;padding:0.5rem 0.7rem;border-radius:6px;background:var(--surface-alt);border:1px solid var(--border);font-size:0.82rem;}
+    .ai-progress-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:0.3rem;}
+    .ai-progress-fill{height:100%;background:var(--blue);transition:width 0.2s;}
+    .ai-progress-status{display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-3);margin-top:0.25rem;}
+    .ai-install-steps{font-size:0.82rem;color:var(--text-2);line-height:1.6;margin-top:0.4rem;}
+    .ai-install-steps ol{margin:0.3rem 0;padding-left:1.4rem;}
+    .ai-install-steps code{background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:0.08rem 0.3rem;font-size:0.78rem;}
+
+    /* AI rule suggester */
+    .ai-badge{display:inline-block;font-size:0.65rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:3px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;letter-spacing:.05em;margin-left:0.4rem;vertical-align:middle;}
+    .ai-result{margin-top:0.65rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-alt);}
+    .ai-verify{display:inline-flex;align-items:center;gap:4px;padding:0.15rem 0.5rem;border-radius:9999px;font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;}
+    .ai-verify-ok{background:var(--green-light);color:var(--green);border:1px solid var(--green);}
+    .ai-verify-fail{background:var(--red-light);color:var(--red);border:1px solid var(--red);}
+    .ai-yaml{background:var(--pre-bg);border:1px solid var(--border-light);border-radius:6px;padding:0.6rem;font-family:ui-monospace,monospace;font-size:0.78rem;color:var(--text);white-space:pre;overflow:auto;max-height:260px;margin:0.3rem 0;}
+    .ai-explain{font-size:0.84rem;color:var(--text-2);margin-top:0.4rem;line-height:1.5;}
+    .ai-disabled{padding:0.75rem;color:var(--text-3);font-size:0.85rem;background:var(--surface-alt);border:1px dashed var(--border);border-radius:6px;}
+
     /* File match tester */
     .fmt-result{margin-top:0.5rem;padding:0.5rem 0.7rem;border-radius:8px;font-size:0.84rem;}
     .fmt-match{background:var(--green-light);border:1px solid var(--green);color:var(--green);}
@@ -481,6 +509,85 @@
           <button type="button" class="secondary" id="fmtClear">Clear</button>
         </div>
         <div id="fmtResults" style="margin-top:0.5rem"></div>
+      </div>
+    </section>
+
+    <!-- AI settings (operator-only admin panel) -->
+    <section data-section="ai-settings" class="operator-only">
+      <div class="sh" onclick="toggleSection('ai-settings')">
+        <div class="sh-left"><span class="chev"></span><h2>AI settings<span class="ai-badge">AI</span></h2></div>
+        <span class="refreshed" id="aiSettingsRefreshed"></span>
+      </div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Configure the local LLM provider (Ollama) for the AI rule suggester. Settings are in-memory and reset on server restart.</p>
+        <div class="row">
+          <button type="button" id="aiRefreshStatus">Refresh status</button>
+        </div>
+        <div id="aiStatusLine"></div>
+        <div id="aiConnectedUI" hidden>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><label for="aiActiveModelSel">Active model</label><select id="aiActiveModelSel" style="width:100%"></select></div>
+            <button type="button" id="aiSetActive">Set active</button>
+          </div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Installed models</h3>
+          <div id="aiModelList" class="ai-model-list"></div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Pull a new model</h3>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:20rem"><input id="aiPullName" type="text" placeholder="qwen2.5-coder:7b" style="width:100%" /></div>
+            <button type="button" id="aiPullStart">Pull</button>
+          </div>
+          <div id="aiPullProgress" hidden></div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><input id="aiBaseURL" type="text" placeholder="http://localhost:11434" class="mono" style="width:100%" /></div>
+            <button type="button" id="aiSaveBaseURL">Save</button>
+          </div>
+        </div>
+        <div id="aiNotConnectedUI" hidden>
+          <div class="ai-install-steps">
+            <strong>To enable the AI rule suggester:</strong>
+            <ol>
+              <li>Install Ollama from <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a></li>
+              <li>Start it (on macOS the Ollama app runs automatically after install)</li>
+              <li>Click <strong>Refresh status</strong> above</li>
+              <li>Then pull a model from the section that will appear below</li>
+            </ol>
+            Base URL used for detection: <code id="aiNotConnectedURL">http://localhost:11434</code>. If Ollama is running on a different host/port, update the base URL below.
+          </div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><input id="aiBaseURLDisc" type="text" placeholder="http://localhost:11434" class="mono" style="width:100%" /></div>
+            <button type="button" id="aiSaveBaseURLDisc">Save &amp; retry</button>
+          </div>
+        </div>
+        <p id="aiSettingsErr" class="err" hidden></p>
+      </div>
+    </section>
+
+    <!-- AI rule suggester -->
+    <section data-section="ai-suggester">
+      <div class="sh" onclick="toggleSection('ai-suggester')">
+        <div class="sh-left"><span class="chev"></span><h2>AI rule suggester<span class="ai-badge">AI</span></h2></div>
+      </div>
+      <div class="sb">
+        <div id="aiDisabledNote" class="ai-disabled" hidden>
+          The AI rule suggester is disabled on this server. Ask an operator to set <code>LLM_ENABLED=true</code> and configure an Ollama instance (<code>LLM_BASE_URL</code>, <code>LLM_MODEL</code>).
+        </div>
+        <div id="aiEnabledUI" hidden>
+          <p class="hint" style="margin-top:0">Describe a source→target transformation and have the LLM propose a workflow rule. The generated rule is verified against your example before display.</p>
+          <div class="row">
+            <div style="flex:1;min-width:220px;max-width:24rem"><label for="aiSource">Source file path</label><input id="aiSource" type="text" placeholder="agg/python/models/user.py" style="width:100%" /></div>
+            <div style="flex:1;min-width:220px;max-width:24rem"><label for="aiTarget">Desired target path</label><input id="aiTarget" type="text" placeholder="shared/python/models/user.py" style="width:100%" /></div>
+          </div>
+          <div class="row">
+            <div style="flex:1;min-width:180px;max-width:18rem"><label for="aiTargetRepo">Target repo <span style="color:var(--text-3)">(optional)</span></label><input id="aiTargetRepo" type="text" placeholder="org/dest-repo" style="width:100%" /></div>
+            <div style="flex:1;min-width:180px;max-width:18rem"><label for="aiSourceRepo">Source repo <span style="color:var(--text-3)">(optional)</span></label><input id="aiSourceRepo" type="text" placeholder="org/source-repo" style="width:100%" /></div>
+            <button type="button" id="aiGenerate">Generate rule</button>
+            <button type="button" class="secondary" id="aiClear">Clear</button>
+          </div>
+          <p id="aiErr" class="err" hidden></p>
+          <div id="aiResult" style="margin-top:0.5rem"></div>
+        </div>
       </div>
     </section>
 
@@ -813,6 +920,7 @@ function checkServerStatus(){
       var lbl=$('authRepoLabel');
       if(lbl){lbl.textContent=d.auth_repo;}
     }
+    setLLMAvailable(!!d.llm_available);
   }).catch(function(){});
 }
 
@@ -1343,6 +1451,229 @@ $('fmtClear').onclick=function(){
   document.querySelectorAll('.wf-card').forEach(function(c){c.classList.remove('wf-match','wf-nomatch');});
 };
 
+/* ── AI rule suggester ── */
+var _llmAvailable=false;
+function setLLMAvailable(enabled){
+  _llmAvailable=enabled;
+  $('aiEnabledUI').hidden=!enabled;
+  $('aiDisabledNote').hidden=enabled;
+}
+async function generateRuleSuggestion(){
+  showErr('aiErr','');
+  var src=$('aiSource').value.trim();
+  var tgt=$('aiTarget').value.trim();
+  if(!src||!tgt){showErr('aiErr','Both source and target paths are required');return;}
+  var btn=$('aiGenerate');
+  var orig=btn.textContent;
+  btn.disabled=true;btn.textContent='Generating\u2026 (can take 10-60s)';
+  try{
+    var res=await fetch(appURL('/operator/api/suggest-rule'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify({
+        source_path:src,
+        target_path:tgt,
+        target_repo:$('aiTargetRepo').value.trim(),
+        source_repo:$('aiSourceRepo').value.trim()
+      })
+    });
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){showErr('aiErr',body.error||res.statusText);$('aiResult').innerHTML='';return;}
+    renderAIResult(body);
+  }catch(e){showErr('aiErr','Request failed: '+e);}
+  finally{btn.disabled=false;btn.textContent=orig;}
+}
+function renderAIResult(body){
+  var html='';
+  var verify=body.verified
+    ?'<div class="ai-verify ai-verify-ok">\u2713 Verified — rule produces the expected target path</div>'
+    :'<div class="ai-verify ai-verify-fail">\u2717 Not verified — rule does not produce the expected target path</div>';
+  html+=verify;
+  if(!body.verified&&body.computed_path){
+    html+='<div class="hint" style="margin:0 0 0.5rem">Rule would produce: <code>'+escapeHtml(body.computed_path)+'</code></div>';
+  }
+  if(!body.verified&&body.verify_error){
+    html+='<div class="hint" style="margin:0 0 0.5rem;color:var(--red)">Reason: '+escapeHtml(body.verify_error)+'</div>';
+  }
+  if(body.warning){
+    html+='<div class="hint" style="margin:0 0 0.5rem;color:var(--amber)">\u26A0 '+escapeHtml(body.warning)+'</div>';
+  }
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.4rem">';
+  html+='<strong style="font-size:0.82rem">Generated rule</strong>';
+  html+='<button type="button" class="btn-sm" onclick="copyAIRule()">Copy YAML</button>';
+  html+='</div>';
+  html+='<pre class="ai-yaml" id="aiYAML">'+escapeHtml(body.rule_yaml||'')+'</pre>';
+  if(body.explanation){
+    html+='<div class="ai-explain"><strong>Why:</strong> '+escapeHtml(body.explanation)+'</div>';
+  }
+  $('aiResult').innerHTML='<div class="ai-result">'+html+'</div>';
+}
+function copyAIRule(){
+  var yaml=$('aiYAML').textContent;
+  navigator.clipboard.writeText(yaml).then(function(){toast('Rule YAML copied to clipboard','info');}).catch(function(){toast('Copy failed','error');});
+}
+$('aiGenerate').onclick=generateRuleSuggestion;
+$('aiClear').onclick=function(){
+  $('aiSource').value='';$('aiTarget').value='';$('aiTargetRepo').value='';$('aiSourceRepo').value='';
+  $('aiResult').innerHTML='';showErr('aiErr','');
+};
+// Pre-fill from the file match tester if the user has already typed a source path
+$('aiSource').addEventListener('focus',function(){
+  if(!this.value){var fmt=$('fmtPath').value.trim();if(fmt)this.value=fmt;}
+});
+
+/* ── AI settings panel ── */
+var _aiLastStatus=null;
+function fmtBytes(n){
+  if(!n||n<=0)return'';
+  var units=['B','KB','MB','GB','TB'];var i=0;var v=n;
+  while(v>=1024&&i<units.length-1){v/=1024;i++;}
+  return v.toFixed(i===0?0:1)+' '+units[i];
+}
+async function loadAISettingsStatus(){
+  showErr('aiSettingsErr','');
+  try{
+    var res=await fetch(appURL('/operator/api/llm/status'),{headers:authHeaders()});
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){showErr('aiSettingsErr',body.error||res.statusText);return;}
+    _aiLastStatus=body;
+    renderAISettings(body);
+    setRefreshed('aiSettingsRefreshed');
+    // Keep the AI rule suggester's availability in sync
+    setLLMAvailable(!!body.reachable);
+  }catch(e){showErr('aiSettingsErr','Request failed: '+e);}
+}
+function renderAISettings(s){
+  var line=$('aiStatusLine');
+  if(!s.available){
+    line.className='ai-status-line ai-fail';
+    line.innerHTML='<span class="dot dot-red"></span> LLM client not initialized';
+    $('aiConnectedUI').hidden=true;$('aiNotConnectedUI').hidden=true;
+    return;
+  }
+  if(!s.reachable){
+    line.className='ai-status-line ai-fail';
+    line.innerHTML='<span class="dot dot-red"></span> Ollama unreachable at <code>'+escapeHtml(s.base_url||'')+'</code>'+(s.error?' — '+escapeHtml(s.error):'');
+    $('aiConnectedUI').hidden=true;$('aiNotConnectedUI').hidden=false;
+    $('aiNotConnectedURL').textContent=s.base_url||'';
+    if(!$('aiBaseURLDisc').value) $('aiBaseURLDisc').value=s.base_url||'';
+    return;
+  }
+  line.className='ai-status-line ai-ok';
+  line.innerHTML='<span class="dot dot-green"></span> Ollama connected at <code>'+escapeHtml(s.base_url||'')+'</code>';
+  $('aiConnectedUI').hidden=false;$('aiNotConnectedUI').hidden=true;
+
+  // Populate model dropdown and list
+  var sel=$('aiActiveModelSel');sel.innerHTML='';
+  var list=$('aiModelList');list.innerHTML='';
+  var models=s.models||[];
+  if(models.length===0){
+    list.innerHTML='<div class="empty-state" style="padding:1rem"><div class="es-icon">\u{1F4E6}</div>No models installed. Pull one below to get started.</div>';
+  }else{
+    models.forEach(function(m){
+      var opt=document.createElement('option');opt.value=m.name;opt.textContent=m.name;
+      if(m.name===s.active_model)opt.selected=true;
+      sel.appendChild(opt);
+      var row=document.createElement('div');
+      row.className='ai-model-row'+(m.name===s.active_model?' active':'');
+      var badge=m.name===s.active_model?' <span style="font-size:0.7rem;color:var(--blue);font-weight:600">\u2713 active</span>':'';
+      row.innerHTML='<span class="ai-model-name">'+escapeHtml(m.name)+badge+'</span>'
+        +'<span class="ai-model-size">'+escapeHtml(fmtBytes(m.size))+'</span>'
+        +'<button class="btn-sm" onclick="aiDeleteModel(\''+escapeHtml(m.name)+'\')">Delete</button>';
+      list.appendChild(row);
+    });
+  }
+  if(!$('aiBaseURL').value) $('aiBaseURL').value=s.base_url||'';
+}
+$('aiRefreshStatus').onclick=function(){withLoading('aiRefreshStatus',loadAISettingsStatus);};
+$('aiSetActive').onclick=async function(){
+  var m=$('aiActiveModelSel').value;
+  if(!m){toast('Pick a model first','info');return;}
+  await updateLLMSettings({active_model:m});
+};
+$('aiSaveBaseURL').onclick=async function(){
+  var u=$('aiBaseURL').value.trim();
+  if(!u){toast('Enter a base URL','info');return;}
+  await updateLLMSettings({base_url:u});
+};
+$('aiSaveBaseURLDisc').onclick=async function(){
+  var u=$('aiBaseURLDisc').value.trim();
+  if(!u){toast('Enter a base URL','info');return;}
+  await updateLLMSettings({base_url:u});
+};
+async function updateLLMSettings(settings){
+  try{
+    var res=await fetch(appURL('/operator/api/llm/settings'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify(settings)
+    });
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){toast('Update failed: '+(body.error||res.statusText),'error');return;}
+    toast('Settings updated','info');
+    loadAISettingsStatus();
+  }catch(e){toast('Request failed: '+e,'error');}
+}
+async function aiDeleteModel(name){
+  if(!confirm('Delete model "'+name+'"? This frees disk space on the Ollama server.'))return;
+  try{
+    var res=await fetch(appURL('/operator/api/llm/model?name='+encodeURIComponent(name)),{method:'DELETE',headers:authHeaders()});
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){toast('Delete failed: '+(body.error||res.statusText),'error');return;}
+    toast('Deleted '+name,'info');
+    loadAISettingsStatus();
+  }catch(e){toast('Request failed: '+e,'error');}
+}
+// Pull with streaming NDJSON progress
+$('aiPullStart').onclick=async function(){
+  var name=$('aiPullName').value.trim();
+  if(!name){toast('Enter a model name (e.g. qwen2.5-coder:7b)','info');return;}
+  var btn=$('aiPullStart');
+  var orig=btn.textContent;
+  btn.disabled=true;btn.textContent='Pulling\u2026';
+  var prog=$('aiPullProgress');prog.hidden=false;
+  prog.innerHTML='<div class="ai-progress"><div><strong>Pulling '+escapeHtml(name)+'</strong></div><div class="ai-progress-bar"><div class="ai-progress-fill" style="width:0%"></div></div><div class="ai-progress-status"><span class="ai-status-text">starting\u2026</span><span class="ai-progress-pct">0%</span></div></div>';
+  try{
+    var res=await fetch(appURL('/operator/api/llm/pull'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify({name:name})
+    });
+    if(!res.ok){
+      var errBody=await res.json().catch(function(){return{};});
+      prog.querySelector('.ai-status-text').textContent='failed: '+(errBody.error||res.statusText);
+      return;
+    }
+    var reader=res.body.getReader();
+    var decoder=new TextDecoder();
+    var buf='';
+    while(true){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buf+=decoder.decode(chunk.value,{stream:true});
+      var lines=buf.split('\n');
+      buf=lines.pop();
+      lines.forEach(function(line){
+        line=line.trim();if(!line)return;
+        try{
+          var ev=JSON.parse(line);
+          var pct=0;
+          if(ev.total&&ev.completed)pct=Math.round(ev.completed/ev.total*100);
+          prog.querySelector('.ai-status-text').textContent=(ev.status||'')+(ev.error?' ('+ev.error+')':'');
+          if(pct>0){
+            prog.querySelector('.ai-progress-fill').style.width=pct+'%';
+            prog.querySelector('.ai-progress-pct').textContent=pct+'%'+(ev.total?' · '+fmtBytes(ev.completed)+' / '+fmtBytes(ev.total):'');
+          }
+        }catch(e){}
+      });
+    }
+    toast('Pull complete: '+name,'info');
+    $('aiPullName').value='';
+    loadAISettingsStatus();
+  }catch(e){toast('Pull failed: '+e,'error');}
+  finally{btn.disabled=false;btn.textContent=orig;}
+};
+
 /* ── Workflow browser ── */
 var _wfData=[];
 async function loadWorkflows(){
@@ -1527,7 +1858,7 @@ $('doRelease').onclick=function(){
 };
 
 /* ── Global refresh ── */
-function loadAllSecured(){if(!hasToken())return;loadAudit();loadWebhookTraces();loadDeliveries();loadOverview();loadWorkflows();$('loadDeploy').click();}
+function loadAllSecured(){if(!hasToken())return;loadAudit();loadWebhookTraces();loadDeliveries();loadOverview();loadWorkflows();loadAISettingsStatus();$('loadDeploy').click();}
 function refreshAll(){if(COP_ORIGIN){loadMetricsCards();loadAllProbes();}loadAllSecured();}
 $('refreshAll').onclick=refreshAll;
 
@@ -1571,7 +1902,7 @@ function restoreAutoRefresh(){
 initDarkMode();initMode();syncTimeBtn();initSections();initTabs();initFromURL();checkServerStatus();startHeartbeat();
 if(COP_ORIGIN){
   loadAllProbes();loadMetricsCards();restoreAutoRefresh();
-  if(hasToken()){fetchMe();loadAudit();loadWebhookTraces();loadOverview();$('loadDeploy').click();}
+  if(hasToken()){fetchMe();loadAudit();loadWebhookTraces();loadOverview();loadAISettingsStatus();$('loadDeploy').click();}
 }
 </script>
 
