@@ -158,6 +158,26 @@ func LoadMongoURI(ctx context.Context, config *configs.Config) error {
 	return nil
 }
 
+// LoadAnthropicAPIKey loads the Anthropic API key from Secret Manager or
+// environment variable. Only called when the LLM provider is "anthropic".
+// Missing value is non-fatal: NewLLMClient will refuse to construct a client,
+// the operator UI will show "not configured", and the rest of the app runs.
+func LoadAnthropicAPIKey(ctx context.Context, config *configs.Config) error {
+	if config.AnthropicAPIKey != "" {
+		return nil
+	}
+	if config.AnthropicAPIKeySecretName == "" {
+		return nil
+	}
+	resolvedName := config.SecretPath(config.AnthropicAPIKeySecretName)
+	key, err := getSecretFromSecretManager(ctx, resolvedName, "ANTHROPIC_API_KEY")
+	if err != nil {
+		return fmt.Errorf("failed to load Anthropic API key: %w", err)
+	}
+	config.AnthropicAPIKey = key
+	return nil
+}
+
 // getSecretFromSecretManager is a generic function to retrieve any secret from Secret Manager
 func getSecretFromSecretManager(ctx context.Context, secretName, envVarName string) (string, error) {
 	if os.Getenv("SKIP_SECRET_MANAGER") == "true" {

@@ -37,7 +37,12 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 	}
 	// Always create the LLM client; availability is checked dynamically via Ping.
 	// Operators can change the active model and base URL from the UI without restart.
-	if client, err := NewLLMClient(cfg.LLMProvider, cfg.LLMBaseURL, cfg.LLMModel); err != nil {
+	if client, err := NewLLMClient(LLMClientOptions{
+		Provider: cfg.LLMProvider,
+		BaseURL:  cfg.LLMBaseURL,
+		Model:    cfg.LLMModel,
+		APIKey:   cfg.AnthropicAPIKey,
+	}); err != nil {
 		LogWarning("LLM client init failed", "error", err.Error())
 	} else {
 		o.llm = client

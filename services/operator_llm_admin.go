@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +25,9 @@ func (o *operatorUI) handleLLMStatus(w http.ResponseWriter, r *http.Request) {
 		"active_model": "",
 		"reachable":    false,
 		"models":       []LLMModel{},
+		// supports_model_mgmt tells the UI whether to show pull/delete sections.
+		// Hosted providers (anthropic) don't expose those operations.
+		"supports_model_mgmt": strings.ToLower(strings.TrimSpace(o.cfg.LLMProvider)) != "anthropic",
 	}
 	if o.llm == nil {
 		out["error"] = "LLM client not initialized"
@@ -110,7 +114,11 @@ func (o *operatorUI) handleLLMDeleteModel(w http.ResponseWriter, r *http.Request
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if err := o.llm.DeleteModel(ctx, name); err != nil {
-		w.WriteHeader(http.StatusBadGateway)
+		status := http.StatusBadGateway
+		if errors.Is(err, ErrModelManagementNotSupported) {
+			status = http.StatusBadRequest
+		}
+		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
@@ -143,6 +151,13 @@ func (o *operatorUI) handleLLMPullModel(w http.ResponseWriter, r *http.Request) 
 	if req.Name == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "name is required"})
+		return
+	}
+	// Reject up-front for hosted providers so the client doesn't have to interpret
+	// an NDJSON error event.
+	if strings.ToLower(strings.TrimSpace(o.cfg.LLMProvider)) == "anthropic" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": ErrModelManagementNotSupported.Error()})
 		return
 	}
 

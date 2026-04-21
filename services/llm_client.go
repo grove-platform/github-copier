@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,12 @@ import (
 	"sync"
 	"time"
 )
+
+// ErrModelManagementNotSupported is returned by providers (e.g. Anthropic) where
+// model pulls/deletes don't apply. Handlers should map this to a 400-class
+// response rather than a 502, since it's a client-intent error, not a backend
+// failure.
+var ErrModelManagementNotSupported = errors.New("model management not supported for this provider")
 
 // LLMClient is the minimal interface used by the operator UI. It supports
 // runtime reconfiguration (active model, base URL) and provider management
@@ -64,13 +71,24 @@ type LLMPullProgress struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// LLMClientOptions carries the per-provider settings NewLLMClient needs.
+// APIKey is required for hosted providers (anthropic); ignored by ollama.
+type LLMClientOptions struct {
+	Provider string
+	BaseURL  string
+	Model    string
+	APIKey   string
+}
+
 // NewLLMClient returns a client for the configured provider.
-func NewLLMClient(provider, baseURL, model string) (LLMClient, error) {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
+func NewLLMClient(opts LLMClientOptions) (LLMClient, error) {
+	switch strings.ToLower(strings.TrimSpace(opts.Provider)) {
 	case "", "ollama":
+		baseURL := opts.BaseURL
 		if baseURL == "" {
 			baseURL = "http://localhost:11434"
 		}
+		model := opts.Model
 		if model == "" {
 			model = "qwen2.5-coder:7b"
 		}
@@ -82,8 +100,13 @@ func NewLLMClient(provider, baseURL, model string) (LLMClient, error) {
 				// No timeout for pulls — model downloads can take 10+ minutes
 			},
 		}, nil
+	case "anthropic":
+		if strings.TrimSpace(opts.APIKey) == "" {
+			return nil, fmt.Errorf("anthropic provider requires ANTHROPIC_API_KEY")
+		}
+		return newAnthropicClient(opts.BaseURL, opts.Model, opts.APIKey), nil
 	default:
-		return nil, fmt.Errorf("unsupported LLM provider: %q (only \"ollama\" is implemented)", provider)
+		return nil, fmt.Errorf("unsupported LLM provider: %q (expected \"ollama\" or \"anthropic\")", opts.Provider)
 	}
 }
 

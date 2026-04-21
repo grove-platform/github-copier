@@ -83,9 +83,15 @@ type Config struct {
 	// AI rule suggestion (optional) — LLM-powered rule generation in the operator UI.
 	// The feature is available whenever the LLM provider is reachable at runtime;
 	// operators can change the active model and base URL from the UI without restart.
-	LLMProvider string // "ollama" (default). Pluggable for future providers.
+	LLMProvider string // "ollama" (local) or "anthropic" (hosted)
 	LLMBaseURL  string // initial default; overridable from the UI
 	LLMModel    string // initial default; overridable from the UI
+
+	// Anthropic API key — required when LLMProvider="anthropic". Loaded from
+	// Secret Manager via AnthropicAPIKeySecretName, or directly via
+	// ANTHROPIC_API_KEY for local dev.
+	AnthropicAPIKey           string
+	AnthropicAPIKeySecretName string
 }
 
 const (
@@ -142,6 +148,8 @@ const (
 	LLMProvider                     = "LLM_PROVIDER"
 	LLMBaseURL                      = "LLM_BASE_URL"
 	LLMModel                        = "LLM_MODEL"
+	AnthropicAPIKey                 = "ANTHROPIC_API_KEY"             // #nosec G101 -- env var name, not a credential
+	AnthropicAPIKeySecretName       = "ANTHROPIC_API_KEY_SECRET_NAME" // #nosec G101 -- env var name, not a credential
 )
 
 // NewConfig returns a new Config instance with default values
@@ -266,9 +274,17 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
 	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
 
-	config.LLMProvider = getEnvWithDefault(LLMProvider, "ollama")
-	config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "http://localhost:11434")
-	config.LLMModel = getEnvWithDefault(LLMModel, "qwen2.5-coder:7b")
+	config.LLMProvider = strings.ToLower(getEnvWithDefault(LLMProvider, "ollama"))
+	// Per-provider defaults: Ollama runs locally, Anthropic is hosted.
+	if config.LLMProvider == "anthropic" {
+		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "https://api.anthropic.com")
+		config.LLMModel = getEnvWithDefault(LLMModel, "claude-haiku-4-5-20251001")
+	} else {
+		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "http://localhost:11434")
+		config.LLMModel = getEnvWithDefault(LLMModel, "qwen2.5-coder:7b")
+	}
+	config.AnthropicAPIKey = os.Getenv(AnthropicAPIKey)
+	config.AnthropicAPIKeySecretName = os.Getenv(AnthropicAPIKeySecretName)
 
 	if err := validateConfig(config); err != nil {
 		return nil, err
