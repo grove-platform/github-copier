@@ -81,23 +81,37 @@ func (c *anthropicClient) SetActiveModel(model string) {
 // newAuthedRequest builds a request with the Anthropic auth + version headers.
 // Callers must have already validated that URL components are not user-supplied;
 // the base URL is derived from a pinned default or operator-set value.
+//
+// We set both x-api-key (native Anthropic) and api-key (Azure API Management
+// gateway convention) so the same client works when LLM_BASE_URL points at
+// either the direct API or an APIM-fronted proxy. Sending both is harmless —
+// the target service uses whichever it recognizes and ignores the other.
 func (c *anthropicClient) newAuthedRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, c.GetBaseURL()+path, body) // #nosec G107 -- base URL is pinned default or operator-set; path is a literal constant
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("x-api-key", c.apiKey)
+	req.Header.Set("api-key", c.apiKey)
 	req.Header.Set("anthropic-version", anthropicAPIVersion)
 	req.Header.Set("content-type", "application/json")
 	return req, nil
 }
 
-// Ping calls GET /v1/models as an auth + reachability check.
+// Ping issues a minimal /v1/messages call as an auth + reachability check.
+// Using /v1/messages (rather than /v1/models) keeps this working behind
+// proxies — including Azure APIM-fronted gateways — that only expose the
+// messages endpoint. Cost per ping is roughly 1 input + 1 output token.
 func (c *anthropicClient) Ping(ctx context.Context) error {
 	if strings.TrimSpace(c.apiKey) == "" {
 		return fmt.Errorf("ANTHROPIC_API_KEY is not configured")
 	}
-	req, err := c.newAuthedRequest(ctx, http.MethodGet, "/v1/models", nil)
+	body, _ := json.Marshal(anthropicMessagesRequest{
+		Model:     c.GetActiveModel(),
+		MaxTokens: 1,
+		Messages:  []anthropicMessage{{Role: "user", Content: "ping"}},
+	})
+	req, err := c.newAuthedRequest(ctx, http.MethodPost, "/v1/messages", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -110,8 +124,8 @@ func (c *anthropicClient) Ping(ctx context.Context) error {
 		return fmt.Errorf("anthropic auth failed (HTTP %d) — check ANTHROPIC_API_KEY", resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<15))
-		return fmt.Errorf("anthropic returned %s: %s", resp.Status, strings.TrimSpace(string(body)))
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<15))
+		return fmt.Errorf("anthropic returned %s: %s", resp.Status, strings.TrimSpace(string(respBody)))
 	}
 	return nil
 }
