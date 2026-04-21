@@ -79,6 +79,13 @@ type Config struct {
 	OperatorRepoSlug            string // "owner/repo" for GitHub links in audit/trace rows (optional)
 	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
 	OperatorReleaseTargetBranch string // branch SHA used when creating a tag (default main)
+
+	// AI rule suggestion (optional) — LLM-powered rule generation in the operator UI.
+	// The feature is available whenever the LLM provider is reachable at runtime;
+	// operators can change the active model and base URL from the UI without restart.
+	LLMProvider string // "ollama" (default). Pluggable for future providers.
+	LLMBaseURL  string // initial default; overridable from the UI
+	LLMModel    string // initial default; overridable from the UI
 }
 
 const (
@@ -132,6 +139,9 @@ const (
 	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
 	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
 	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
+	LLMProvider                     = "LLM_PROVIDER"
+	LLMBaseURL                      = "LLM_BASE_URL"
+	LLMModel                        = "LLM_MODEL"
 )
 
 // NewConfig returns a new Config instance with default values
@@ -255,6 +265,10 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
 	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
 	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
+
+	config.LLMProvider = getEnvWithDefault(LLMProvider, "ollama")
+	config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "http://localhost:11434")
+	config.LLMModel = getEnvWithDefault(LLMModel, "qwen2.5-coder:7b")
 
 	if err := validateConfig(config); err != nil {
 		return nil, err
