@@ -413,14 +413,14 @@ func (sn *DefaultSlackNotifier) sendMessageWithFallback(ctx context.Context, mes
 
 // sendPayload sends the raw JSON payload to Slack
 func (sn *DefaultSlackNotifier) sendPayload(ctx context.Context, payload []byte) error {
-	req, err := http.NewRequestWithContext(ctx, "POST", sn.webhookURL, bytes.NewBuffer(payload))
+	req, err := http.NewRequestWithContext(ctx, "POST", sn.webhookURL, bytes.NewBuffer(payload)) // #nosec G107 G704 -- URL is the Slack webhook URL from trusted server config, not user input
 	if err != nil {
 		return fmt.Errorf("failed to create slack request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := sn.httpClient.Do(req) // #nosec G704 -- URL is the Slack webhook URL from trusted config
+	resp, err := sn.httpClient.Do(req) // #nosec G107 G704 -- URL is the Slack webhook URL from trusted server config, not user input
 	if err != nil {
 		return fmt.Errorf("failed to send slack message: %w", err)
 	}
