@@ -136,13 +136,32 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Printf("║  Version:      %-48s║\n", version)
 	fmt.Printf("║  Port:         %-48s║\n", config.Port)
 	fmt.Printf("║  Webhook Path: %-48s║\n", config.WebserverPath)
-	fmt.Printf("║  Config File:  %-48s║\n", config.EffectiveConfigFile())
+	fmt.Printf("║  Config File:  %-48s║\n", truncMiddle(config.EffectiveConfigFile(), 48))
 	fmt.Printf("║  Dry Run:      %-48v║\n", config.DryRun)
 	fmt.Printf("║  Audit Log:    %-48v║\n", config.AuditEnabled)
 	fmt.Printf("║  Metrics:      %-48v║\n", config.MetricsEnabled)
 	fmt.Printf("║  Slack:        %-48v║\n", config.SlackEnabled)
+	fmt.Printf("║  Operator UI:  %-48v║\n", config.OperatorUIEnabled)
+	if config.OperatorUIEnabled {
+		fmt.Printf("║    Auth Repo:  %-48s║\n", truncMiddle(config.OperatorAuthRepo, 48))
+		fmt.Printf("║    AI Model:   %-48s║\n", truncMiddle(config.LLMModel, 48))
+		fmt.Printf("║    AI URL:     %-48s║\n", truncMiddle(config.LLMBaseURL, 48))
+	}
 	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
+}
+
+// truncMiddle shortens s to max bytes, replacing the middle with "..." when
+// too long. Uses ASCII so Go's byte-count-based %-Ns padding stays aligned.
+func truncMiddle(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max < 6 {
+		return s[:max]
+	}
+	keep := (max - 3) / 2
+	return s[:keep] + "..." + s[len(s)-(max-3-keep):]
 }
 
 func validateConfiguration(container *services.ServiceContainer) error {
