@@ -243,6 +243,11 @@
     .help-content ol,.help-content ul{padding-left:1.4rem;margin:0.3rem 0;}
     .help-content li{margin:0.2rem 0;}
 
+    /* User avatar */
+    .tb-avatar{width:16px;height:16px;border-radius:50%;vertical-align:middle;}
+    /* Writer role: hide operator-only actions */
+    body.role-writer .operator-only{display:none !important;}
+
     /* Mode toggle */
     .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:0.78rem;}
     .mode-toggle button{padding:0.18rem 0.55rem;border:none;background:var(--surface);color:var(--text-3);cursor:pointer;font-size:0.78rem;font-weight:500;transition:all 0.15s;}
@@ -279,6 +284,7 @@
     <span class="chip" id="tbMongo" hidden></span>
     <span class="chip" id="tbLastWH" hidden></span>
     <span class="chip chip-err" id="tbConn" hidden><span class="dot dot-red"></span> Disconnected</span>
+    <span class="chip" id="tbUser" hidden></span>
   </div>
   <div class="topbar-right">
     <div class="mode-toggle" id="modeToggle"><button data-mode="writer" title="Writer view: Workflows + Audit">Writer</button><button data-mode="operator" title="Operator view: all tabs">Operator</button></div>
@@ -557,7 +563,7 @@
       <div class="sb">
         <p class="hint" style="margin-top:0">Pushes a <code>vMAJOR.MINOR.PATCH</code> tag. Changelog requires <code>scripts/release.sh</code>.</p>
         <label for="version">Version tag</label>
-        <div class="row"><input id="version" type="text" placeholder="v0.4.0" style="max-width:10rem" /><button type="button" id="doRelease">Create tag via API</button></div>
+        <div class="row operator-only"><input id="version" type="text" placeholder="v0.4.0" style="max-width:10rem" /><button type="button" id="doRelease">Create tag via API</button></div>
         <p id="relErr" class="err" hidden></p><pre id="relJson" hidden></pre>
       </div>
     </section>
@@ -750,8 +756,35 @@ $('modeToggle').onclick=function(e){var btn=e.target.closest('button');if(btn&&b
 
 /* ── Token ── */
 $('token').value=sessionStorage.getItem(TKEY)||'';
-$('saveToken').onclick=function(){var v=$('token').value.trim();if(!v)return;sessionStorage.setItem(TKEY,v);var btn=$('saveToken');btn.textContent='Saved!';btn.style.background='var(--green)';btn.style.borderColor='var(--green)';setTimeout(function(){btn.textContent='Save in session';btn.style.background='';btn.style.borderColor='';},1200);loadAllSecured();};
-$('clearToken').onclick=function(){sessionStorage.removeItem(TKEY);$('token').value='';};
+$('saveToken').onclick=function(){var v=$('token').value.trim();if(!v)return;sessionStorage.setItem(TKEY,v);var btn=$('saveToken');btn.textContent='Saved!';btn.style.background='var(--green)';btn.style.borderColor='var(--green)';setTimeout(function(){btn.textContent='Save in session';btn.style.background='';btn.style.borderColor='';},1200);fetchMe();loadAllSecured();};
+$('clearToken').onclick=function(){
+  sessionStorage.removeItem(TKEY);$('token').value='';
+  $('tbUser').hidden=true;
+  document.body.classList.remove('role-writer');
+  _repoPerm={};_currentUser=null;
+};
+
+/* ── Authenticated user ── */
+var _currentUser=null;
+function fetchMe(){
+  if(!hasToken())return;
+  fetch(appURL('/operator/api/me'),{headers:authHeaders()}).then(function(r){
+    if(!r.ok)return null;
+    return r.json();
+  }).then(function(user){
+    if(!user)return;
+    _currentUser=user;
+    var el=$('tbUser');
+    el.hidden=false;
+    var inner='';
+    if(user.avatar_url)inner+='<img class="tb-avatar" src="'+escapeHtml(user.avatar_url)+'&s=32" alt=""> ';
+    inner+=escapeHtml(user.login||'operator');
+    if(user.role&&user.role!=='operator')inner+=' <span style="opacity:0.6">('+escapeHtml(user.role)+')</span>';
+    el.innerHTML=inner;
+    // Apply role-based visibility
+    document.body.classList.toggle('role-writer',user.role==='writer');
+  }).catch(function(){});
+}
 
 /* ── Status bar ── */
 function updateTBVersion(v){$('tbVersion').textContent=v||'...';}
@@ -764,7 +797,9 @@ var _connected=true;
 function startHeartbeat(){if(!COP_ORIGIN)return;setInterval(function(){fetch(appURL('/operator/api/status')).then(function(r){if(!_connected){_connected=true;$('tbConn').hidden=true;toast('Reconnected to server','info');}}).catch(function(){if(_connected){_connected=false;$('tbConn').hidden=false;toast('Connection lost to server','error');}});},60000);}
 
 /* Server status */
-function checkServerStatus(){if(!COP_ORIGIN){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Open this page at http://127.0.0.1:<PORT>/operator/.';return;}fetch(appURL('/operator/api/status')).then(function(r){if(r.status===404){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Operator routes not enabled.';return null;}return r.json();}).then(function(d){if(!d)return;updateTBVersion(d.version);if(!d.operator_apis_enabled){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='No OPERATOR_UI_TOKEN: secured APIs return 503.';}}).catch(function(){});}
+function checkServerStatus(){if(!COP_ORIGIN){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Open this page at http://127.0.0.1:<PORT>/operator/.';return;}fetch(appURL('/operator/api/status')).then(function(r){if(r.status===404){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Operator routes not enabled.';return null;}return r.json();}).then(function(d){if(!d)return;updateTBVersion(d.version);
+    if(d.auth_mode==='github'){$('token').placeholder='GitHub Personal Access Token';$('token').parentNode.parentNode.querySelector('label').innerHTML='<strong>GitHub token</strong> (PAT with repo read access)';}
+    if(!d.operator_apis_enabled){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='No authentication configured: set OPERATOR_UI_TOKEN or OPERATOR_AUTH_MODE=github.';}}).catch(function(){});}
 
 /* ── Metrics with groups, deltas, sparklines, health accents ── */
 var _prevMetrics={}, _metricHistory={};
@@ -877,7 +912,14 @@ $('loadMetricsCards').onclick=function(){withLoading('loadMetricsCards',loadMetr
 
 /* ── Webhook traces with client-side filter/search (#4, #9) ── */
 var _traceData=[];
+// Map of repo -> bool (true = user has read access). Populated after loading traces.
+// In token mode, every repo is true. In github mode, only repos the user has access to.
+var _repoPerm={};
 function traceOutcomeClass(o){if(!o)return'';if(o==='processed_ok')return'ok';if(o==='duplicate_delivery'||o==='skipped_not_merged_pr'||o==='ignored_non_pull_request')return'warn';return'fail';}
+function canReplayRepo(repo){
+  // If we haven't checked yet (undefined), assume yes. If checked and false, disable.
+  return _repoPerm[repo]!==false;
+}
 function renderTraces(){
   var outcomeF=$('traceOutcome').value,searchF=$('traceSearch').value.toLowerCase().trim();
   var filtered=_traceData;
@@ -888,7 +930,12 @@ function renderTraces(){
     var tr=document.createElement('tr'),oc=row.outcome||'';
     if(row.event_type==='operator_replay')tr.className='trace-replay';
     var replayBtn='';
-    if(row.repo&&row.pr_number&&row.base_branch){replayBtn='<button class="btn-sm" onclick="event.stopPropagation();confirmReplay('+escapeHtml(JSON.stringify(row.repo))+','+row.pr_number+','+escapeHtml(JSON.stringify(row.base_branch))+','+escapeHtml(JSON.stringify(row.commit_sha||''))+')">Replay</button>';}
+    if(row.repo&&row.pr_number&&row.base_branch){
+      var allowed=canReplayRepo(row.repo);
+      var disAttrs=allowed?'':' disabled title="You do not have GitHub access to '+escapeHtml(row.repo)+'"';
+      var onClick=allowed?'event.stopPropagation();confirmReplay('+escapeHtml(JSON.stringify(row.repo))+','+row.pr_number+','+escapeHtml(JSON.stringify(row.base_branch))+','+escapeHtml(JSON.stringify(row.commit_sha||''))+')':'event.stopPropagation()';
+      replayBtn='<button class="btn-sm operator-only" onclick="'+onClick+'"'+disAttrs+'>Replay</button>';
+    }
     if(row.delivery_id){replayBtn+=' <button class="btn-sm" onclick="event.stopPropagation();viewDeliveryLogs(\''+escapeHtml(row.delivery_id)+'\')">Logs</button>';}
     var detailHtml=parseDetailBadges(row.detail||'');
     tr.innerHTML='<td class="mono">'+fmtTime(row.at)+'</td><td><span class="'+traceOutcomeClass(oc)+'">'+escapeHtml(oc)+'</span></td><td>'+ghLink(row.repo)+'</td><td>'+ghPR(row.repo,row.pr_number)+'</td><td class="mono">'+escapeHtml(row.base_branch||'')+'</td><td class="mono">'+escapeHtml(row.event_type||'')+'</td><td class="mono">'+escapeHtml(row.action||'')+'</td><td class="mono">'+escapeHtml(row.delivery_id||'')+'</td><td>'+detailHtml+'</td><td>'+replayBtn+'</td>';
@@ -896,6 +943,27 @@ function renderTraces(){
   });
   setBadge('tracesCount',filtered.length+(_traceData.length>filtered.length?' / '+_traceData.length:''));
   emptyState('traceBody',10,'\u{1F4E1}','No webhook activity yet');
+}
+
+// Fetch repo read-permission for each unique source repo in _traceData.
+// Only relevant in github auth mode; in token mode the backend returns true for all.
+async function fetchRepoPermissions(){
+  if(!_currentUser||!hasToken())return;
+  var uniqueRepos={};
+  _traceData.forEach(function(r){if(r.repo)uniqueRepos[r.repo]=true;});
+  // Also include audit data source repos so replay from the drawer works
+  _auditData.forEach(function(e){if(e.source_repo)uniqueRepos[e.source_repo]=true;});
+  // Skip repos we've already checked
+  var toCheck=Object.keys(uniqueRepos).filter(function(r){return _repoPerm[r]===undefined;});
+  if(toCheck.length===0)return;
+  try{
+    var res=await fetch(appURL('/operator/api/repo-permission?repos='+encodeURIComponent(toCheck.join(','))),{headers:authHeaders()});
+    if(!res.ok)return;
+    var body=await res.json();
+    var perms=body.permissions||{};
+    Object.keys(perms).forEach(function(r){_repoPerm[r]=!!perms[r];});
+    renderTraces(); // Re-render to update button states
+  }catch(e){}
 }
 async function loadWebhookTraces(){
   showErr('traceErr','');
@@ -907,6 +975,7 @@ async function loadWebhookTraces(){
   renderTraces();setRefreshed('tracesRefreshed');
   if(_traceData.length>0&&_traceData[_traceData.length-1].at)updateTBLastWH(_traceData[_traceData.length-1].at);
   updateTabBadges();
+  fetchRepoPermissions();
 }
 $('traceOutcome').addEventListener('change',renderTraces);
 $('traceSearch').addEventListener('input',renderTraces);
@@ -972,7 +1041,9 @@ function openAuditDetail(idx){
   rows.forEach(function(r){var v=r[1];if(v===undefined||v===null||v==='')return;html+='<tr><th>'+escapeHtml(r[0])+'</th><td>'+escapeHtml(String(v))+'</td></tr>';});
   html+='</table>';
   if(ev.source_repo&&ev.pr_number){
-    html+='<div style="margin-top:0.75rem"><button class="btn-sm" onclick="confirmReplay(\''+escapeHtml(ev.source_repo)+'\','+ev.pr_number+',\'\',\''+escapeHtml(ev.commit_sha||'')+'\')">Replay this PR</button></div>';
+    var rpAllowed=canReplayRepo(ev.source_repo);
+    var rpDis=rpAllowed?'':' disabled title="You do not have GitHub access to '+escapeHtml(ev.source_repo)+'"';
+    html+='<div style="margin-top:0.75rem" class="operator-only"><button class="btn-sm" onclick="confirmReplay(\''+escapeHtml(ev.source_repo)+'\','+ev.pr_number+',\'\',\''+escapeHtml(ev.commit_sha||'')+'\')"'+rpDis+'>Replay this PR</button></div>';
   }
   $('drawerBody').innerHTML=html;$('drawer').hidden=false;
 }
@@ -1485,7 +1556,7 @@ function restoreAutoRefresh(){
 initDarkMode();initMode();syncTimeBtn();initSections();initTabs();initFromURL();checkServerStatus();startHeartbeat();
 if(COP_ORIGIN){
   loadAllProbes();loadMetricsCards();restoreAutoRefresh();
-  if(hasToken()){loadAudit();loadWebhookTraces();loadOverview();$('loadDeploy').click();}
+  if(hasToken()){fetchMe();loadAudit();loadWebhookTraces();loadOverview();$('loadDeploy').click();}
 }
 </script>
 
