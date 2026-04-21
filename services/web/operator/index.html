@@ -519,7 +519,7 @@
         <span class="refreshed" id="aiSettingsRefreshed"></span>
       </div>
       <div class="sb">
-        <p class="hint" style="margin-top:0">Configure the local LLM provider (Ollama) for the AI rule suggester. Settings are in-memory and reset on server restart.</p>
+        <p class="hint" style="margin-top:0" id="aiSettingsHint">Configure the LLM provider for the AI rule suggester. Settings are in-memory and reset on server restart.</p>
         <div class="row">
           <button type="button" id="aiRefreshStatus">Refresh status</button>
         </div>
@@ -529,14 +529,16 @@
             <div style="flex:1;min-width:200px;max-width:24rem"><label for="aiActiveModelSel">Active model</label><select id="aiActiveModelSel" style="width:100%"></select></div>
             <button type="button" id="aiSetActive">Set active</button>
           </div>
-          <h3 class="small" style="margin:0.75rem 0 0.3rem">Installed models</h3>
-          <div id="aiModelList" class="ai-model-list"></div>
-          <h3 class="small" style="margin:0.75rem 0 0.3rem">Pull a new model</h3>
-          <div class="row">
-            <div style="flex:1;min-width:200px;max-width:20rem"><input id="aiPullName" type="text" placeholder="qwen2.5-coder:7b" style="width:100%" /></div>
-            <button type="button" id="aiPullStart">Pull</button>
+          <div id="aiOllamaOnly">
+            <h3 class="small" style="margin:0.75rem 0 0.3rem">Installed models</h3>
+            <div id="aiModelList" class="ai-model-list"></div>
+            <h3 class="small" style="margin:0.75rem 0 0.3rem">Pull a new model</h3>
+            <div class="row">
+              <div style="flex:1;min-width:200px;max-width:20rem"><input id="aiPullName" type="text" placeholder="qwen2.5-coder:7b" style="width:100%" /></div>
+              <button type="button" id="aiPullStart">Pull</button>
+            </div>
+            <div id="aiPullProgress" hidden></div>
           </div>
-          <div id="aiPullProgress" hidden></div>
           <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
           <div class="row">
             <div style="flex:1;min-width:200px;max-width:24rem"><input id="aiBaseURL" type="text" placeholder="http://localhost:11434" class="mono" style="width:100%" /></div>
@@ -544,8 +546,8 @@
           </div>
         </div>
         <div id="aiNotConnectedUI" hidden>
-          <div class="ai-install-steps">
-            <strong>To enable the AI rule suggester:</strong>
+          <div class="ai-install-steps" id="aiInstallStepsOllama">
+            <strong>To enable the AI rule suggester (Ollama):</strong>
             <ol>
               <li>Install Ollama from <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a></li>
               <li>Start it (on macOS the Ollama app runs automatically after install)</li>
@@ -553,6 +555,15 @@
               <li>Then pull a model from the section that will appear below</li>
             </ol>
             Base URL used for detection: <code id="aiNotConnectedURL">http://localhost:11434</code>. If Ollama is running on a different host/port, update the base URL below.
+          </div>
+          <div class="ai-install-steps" id="aiInstallStepsAnthropic" hidden>
+            <strong>Anthropic AI is not reachable.</strong> The server needs a valid <code>ANTHROPIC_API_KEY</code>.
+            <ul>
+              <li>Set <code>ANTHROPIC_API_KEY</code> directly (local dev) or <code>ANTHROPIC_API_KEY_SECRET_NAME</code> pointing at a Secret Manager secret (Cloud Run).</li>
+              <li>Restart the service so the key is picked up at boot.</li>
+              <li>Click <strong>Refresh status</strong> above.</li>
+            </ul>
+            The base URL is <code>https://api.anthropic.com</code> by default; override only to route through an internal gateway.
           </div>
           <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
           <div class="row">
@@ -571,7 +582,7 @@
       </div>
       <div class="sb">
         <div id="aiDisabledNote" class="ai-disabled" hidden>
-          The AI rule suggester is disabled on this server. Ask an operator to set <code>LLM_ENABLED=true</code> and configure an Ollama instance (<code>LLM_BASE_URL</code>, <code>LLM_MODEL</code>).
+          The AI rule suggester is unavailable. An operator can configure it from <strong>System → AI settings</strong> (choose a provider via <code>LLM_PROVIDER</code>: <code>ollama</code> for local or <code>anthropic</code> for hosted).
         </div>
         <div id="aiEnabledUI" hidden>
           <p class="hint" style="margin-top:0">Describe a source→target transformation and have the LLM propose a workflow rule. The generated rule is verified against your example before display.</p>
@@ -1545,6 +1556,19 @@ async function loadAISettingsStatus(){
 }
 function renderAISettings(s){
   var line=$('aiStatusLine');
+  var provider=(s.provider||'ollama').toLowerCase();
+  var providerLabel=provider==='anthropic'?'Anthropic':'Ollama';
+  var supportsMgmt=s.supports_model_mgmt!==false && provider!=='anthropic';
+
+  // Toggle installed-models / pull-new-model section based on provider.
+  var ollamaOnly=$('aiOllamaOnly'); if(ollamaOnly) ollamaOnly.hidden=!supportsMgmt;
+
+  // Toggle the disconnected onboarding content based on provider.
+  var stepsOllama=$('aiInstallStepsOllama');
+  var stepsAnthropic=$('aiInstallStepsAnthropic');
+  if(stepsOllama) stepsOllama.hidden=provider==='anthropic';
+  if(stepsAnthropic) stepsAnthropic.hidden=provider!=='anthropic';
+
   if(!s.available){
     line.className='ai-status-line ai-fail';
     line.innerHTML='<span class="dot dot-red"></span> LLM client not initialized';
@@ -1553,36 +1577,41 @@ function renderAISettings(s){
   }
   if(!s.reachable){
     line.className='ai-status-line ai-fail';
-    line.innerHTML='<span class="dot dot-red"></span> Ollama unreachable at <code>'+escapeHtml(s.base_url||'')+'</code>'+(s.error?' — '+escapeHtml(s.error):'');
+    line.innerHTML='<span class="dot dot-red"></span> '+escapeHtml(providerLabel)+' unreachable at <code>'+escapeHtml(s.base_url||'')+'</code>'+(s.error?' — '+escapeHtml(s.error):'');
     $('aiConnectedUI').hidden=true;$('aiNotConnectedUI').hidden=false;
     $('aiNotConnectedURL').textContent=s.base_url||'';
     if(!$('aiBaseURLDisc').value) $('aiBaseURLDisc').value=s.base_url||'';
     return;
   }
   line.className='ai-status-line ai-ok';
-  line.innerHTML='<span class="dot dot-green"></span> Ollama connected at <code>'+escapeHtml(s.base_url||'')+'</code>';
+  line.innerHTML='<span class="dot dot-green"></span> '+escapeHtml(providerLabel)+' connected at <code>'+escapeHtml(s.base_url||'')+'</code>';
   $('aiConnectedUI').hidden=false;$('aiNotConnectedUI').hidden=true;
 
   // Populate model dropdown and list
   var sel=$('aiActiveModelSel');sel.innerHTML='';
-  var list=$('aiModelList');list.innerHTML='';
+  var list=$('aiModelList');if(list) list.innerHTML='';
   var models=s.models||[];
-  if(models.length===0){
-    list.innerHTML='<div class="empty-state" style="padding:1rem"><div class="es-icon">\u{1F4E6}</div>No models installed. Pull one below to get started.</div>';
-  }else{
-    models.forEach(function(m){
-      var opt=document.createElement('option');opt.value=m.name;opt.textContent=m.name;
-      if(m.name===s.active_model)opt.selected=true;
-      sel.appendChild(opt);
-      var row=document.createElement('div');
-      row.className='ai-model-row'+(m.name===s.active_model?' active':'');
-      var badge=m.name===s.active_model?' <span style="font-size:0.7rem;color:var(--blue);font-weight:600">\u2713 active</span>':'';
-      row.innerHTML='<span class="ai-model-name">'+escapeHtml(m.name)+badge+'</span>'
-        +'<span class="ai-model-size">'+escapeHtml(fmtBytes(m.size))+'</span>'
-        +'<button class="btn-sm" onclick="aiDeleteModel(\''+escapeHtml(m.name)+'\')">Delete</button>';
-      list.appendChild(row);
-    });
+  if(supportsMgmt && list){
+    if(models.length===0){
+      list.innerHTML='<div class="empty-state" style="padding:1rem"><div class="es-icon">\u{1F4E6}</div>No models installed. Pull one below to get started.</div>';
+    }else{
+      models.forEach(function(m){
+        var row=document.createElement('div');
+        row.className='ai-model-row'+(m.name===s.active_model?' active':'');
+        var badge=m.name===s.active_model?' <span style="font-size:0.7rem;color:var(--blue);font-weight:600">\u2713 active</span>':'';
+        row.innerHTML='<span class="ai-model-name">'+escapeHtml(m.name)+badge+'</span>'
+          +'<span class="ai-model-size">'+escapeHtml(fmtBytes(m.size))+'</span>'
+          +'<button class="btn-sm" onclick="aiDeleteModel(\''+escapeHtml(m.name)+'\')">Delete</button>';
+        list.appendChild(row);
+      });
+    }
   }
+  // Always populate the active-model dropdown from the returned list.
+  models.forEach(function(m){
+    var opt=document.createElement('option');opt.value=m.name;opt.textContent=m.name;
+    if(m.name===s.active_model)opt.selected=true;
+    sel.appendChild(opt);
+  });
   if(!$('aiBaseURL').value) $('aiBaseURL').value=s.base_url||'';
 }
 $('aiRefreshStatus').onclick=function(){withLoading('aiRefreshStatus',loadAISettingsStatus);};

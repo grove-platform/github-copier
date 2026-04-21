@@ -63,6 +63,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Anthropic API key is only needed when the operator UI's AI suggester uses
+	// the anthropic provider. Failure to load is non-fatal — the UI will show
+	// "not configured" and writers can still use every other feature.
+	if config.OperatorUIEnabled && config.LLMProvider == "anthropic" {
+		if err := services.LoadAnthropicAPIKey(ctx, config); err != nil {
+			fmt.Printf("⚠️  Anthropic API key not loaded: %v (AI suggester will be disabled)\n", err)
+		}
+	}
+
 	// Override dry-run from command line
 	if dryRun {
 		config.DryRun = true
@@ -144,6 +153,7 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Printf("║  Operator UI:  %-48v║\n", config.OperatorUIEnabled)
 	if config.OperatorUIEnabled {
 		fmt.Printf("║    Auth Repo:  %-48s║\n", truncMiddle(config.OperatorAuthRepo, 48))
+		fmt.Printf("║    AI Provider:%-48s║\n", truncMiddle(config.LLMProvider, 48))
 		fmt.Printf("║    AI Model:   %-48s║\n", truncMiddle(config.LLMModel, 48))
 		fmt.Printf("║    AI URL:     %-48s║\n", truncMiddle(config.LLMBaseURL, 48))
 	}
