@@ -301,13 +301,13 @@
 
   <section>
     <div class="sb" style="padding-top:0.85rem">
-      <label for="token"><strong>Operator token</strong> (<code>OPERATOR_UI_TOKEN</code>)</label>
+      <label for="token"><strong>GitHub Personal Access Token</strong> (read access to <code id="authRepoLabel">the configured auth repo</code>)</label>
       <div class="row">
-        <div class="token-wrap"><input id="token" type="password" autocomplete="off" placeholder="Paste token" /><button type="button" class="token-eye" id="tokenEye" title="Show/hide token">&#x1F441;</button></div>
+        <div class="token-wrap"><input id="token" type="password" autocomplete="off" placeholder="ghp_... or github_pat_..." /><button type="button" class="token-eye" id="tokenEye" title="Show/hide token">&#x1F441;</button></div>
         <button type="button" id="saveToken">Save in session</button>
         <button type="button" class="secondary" id="clearToken">Clear</button>
       </div>
-      <p class="hint">Stored in <code>sessionStorage</code> (this tab only).</p>
+      <p class="hint">Stored in <code>sessionStorage</code> (this tab only). Your permission on the auth repo determines your role (operator or writer).</p>
     </div>
   </section>
 
@@ -797,9 +797,24 @@ var _connected=true;
 function startHeartbeat(){if(!COP_ORIGIN)return;setInterval(function(){fetch(appURL('/operator/api/status')).then(function(r){if(!_connected){_connected=true;$('tbConn').hidden=true;toast('Reconnected to server','info');}}).catch(function(){if(_connected){_connected=false;$('tbConn').hidden=false;toast('Connection lost to server','error');}});},60000);}
 
 /* Server status */
-function checkServerStatus(){if(!COP_ORIGIN){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Open this page at http://127.0.0.1:<PORT>/operator/.';return;}fetch(appURL('/operator/api/status')).then(function(r){if(r.status===404){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Operator routes not enabled.';return null;}return r.json();}).then(function(d){if(!d)return;updateTBVersion(d.version);
-    if(d.auth_mode==='github'){$('token').placeholder='GitHub Personal Access Token';$('token').parentNode.parentNode.querySelector('label').innerHTML='<strong>GitHub token</strong> (PAT with repo read access)';}
-    if(!d.operator_apis_enabled){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='No authentication configured: set OPERATOR_UI_TOKEN or OPERATOR_AUTH_MODE=github.';}}).catch(function(){});}
+function checkServerStatus(){
+  if(!COP_ORIGIN){
+    $('serverStatusBanner').hidden=false;
+    $('serverStatusBanner').textContent='Open this page at http://127.0.0.1:<PORT>/operator/.';
+    return;
+  }
+  fetch(appURL('/operator/api/status')).then(function(r){
+    if(r.status===404){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Operator routes not enabled (OPERATOR_UI_ENABLED=false).';return null;}
+    return r.json();
+  }).then(function(d){
+    if(!d)return;
+    updateTBVersion(d.version);
+    if(d.auth_repo){
+      var lbl=$('authRepoLabel');
+      if(lbl){lbl.textContent=d.auth_repo;}
+    }
+  }).catch(function(){});
+}
 
 /* ── Metrics with groups, deltas, sparklines, health accents ── */
 var _prevMetrics={}, _metricHistory={};
