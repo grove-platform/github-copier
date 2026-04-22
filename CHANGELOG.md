@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **Operator UI — comprehensive writer + operator dashboard** at `/operator/` (`OPERATOR_UI_ENABLED=true`). Five tabs (Overview, Webhooks, Audit, Workflows, System), sticky status bar, dark mode, keyboard shortcuts, shareable URLs, and a writer/operator mode toggle persisted to localStorage.
-- **GitHub PAT authentication** — users sign in with their personal access token; role is derived from their permission on `OPERATOR_AUTH_REPO` (admin/maintain/write → operator, read/triage → writer). Replay and other write actions additionally enforce read access on the source repo for that specific delivery.
+- **GitHub PAT authentication** — users sign in with their personal access token; role is derived from their permission on `OPERATOR_AUTH_REPO` (admin/maintain → operator, write/triage/read → writer). Operator actions (replay, release, AI settings) require an explicit admin or maintain grant, since most writers have `write` on the auth repo. Replay additionally enforces read access on the source repo for that specific delivery.
 - **AI rule suggester** — paste a source path and desired target state, receive a suggested workflow rule with self-verification via the in-process `PatternMatcher`. Two providers supported:
   - **Anthropic (hosted)** — default for Cloud Run. API key loaded from Secret Manager via `ANTHROPIC_API_KEY_SECRET_NAME`. No infra required; operators switch between Haiku / Sonnet / Opus from the UI.
   - **Ollama (local)** — for dev or self-hosted deployments. UI manages connection, model pulls, deletes, and active-model switching without a redeploy.

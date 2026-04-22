@@ -37,7 +37,7 @@ METRICS_ENABLED: "true"
 # Operator dashboard at https://<service>/operator/
 # Access is gated by each user's GitHub PAT: they authenticate with their
 # personal token, and their permission on OPERATOR_AUTH_REPO determines role
-# (admin/maintain/write → operator, read/triage → writer).
+# (admin/maintain → operator, write/triage/read → writer).
 OPERATOR_UI_ENABLED: "true"
 OPERATOR_AUTH_REPO: "grove-platform/github-copier"
 OPERATOR_REPO_SLUG: "grove-platform/github-copier"
