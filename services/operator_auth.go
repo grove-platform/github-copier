@@ -189,10 +189,15 @@ func validateGitHubPAT(ctx context.Context, pat string, authRepo string) (*Opera
 		return user, nil
 	}
 
+	// admin/maintain → operator; write/triage/read → writer. "write" is
+	// deliberately NOT operator: most writers have write access to the
+	// auth repo, so mapping write → operator would give every writer the
+	// ability to replay and cut releases. Operator actions require an
+	// explicit admin or maintain grant.
 	switch perm {
-	case "admin", "maintain", "write":
+	case "admin", "maintain":
 		user.Role = RoleOperator
-	case "read", "triage":
+	case "write", "triage", "read":
 		user.Role = RoleWriter
 	default:
 		user.Role = RoleDenied
