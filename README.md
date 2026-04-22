@@ -29,6 +29,13 @@ A GitHub app that automatically copies code examples and files from source repos
 - **Development Tools** - Dry-run mode, CLI validation, enhanced logging
 - **Thread-Safe** - Concurrent webhook processing with proper state management
 
+### Operator UI
+- **Web dashboard at `/operator/`** - Five-tab UI (Overview, Webhooks, Audit, Workflows, System) with dark mode, keyboard shortcuts, and shareable URLs
+- **GitHub PAT authentication** - Users sign in with their personal access token; role is derived from their permission on a configured auth repo (`admin`/`maintain` → operator, `write`/`triage`/`read` → writer)
+- **Per-repo replay authorization** - Replay requires the caller's PAT to have read access to the source repo of the webhook being replayed
+- **Writer-facing tools** - Workflow browser, PR lookup, recent copies feed, file match tester, audit drawer, per-delivery log viewer
+- **AI rule suggester** - Paste a source/target pair; get a generated copier rule self-verified against the in-process pattern matcher. Two providers: [Anthropic](https://www.anthropic.com/) (hosted, default in prod via the Grove Foundry APIM gateway) or [Ollama](https://ollama.com) (local, for dev)
+
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -385,6 +392,47 @@ Get performance metrics:
 curl http://localhost:8080/metrics
 ```
 
+## Operator UI
+
+The operator UI is a web dashboard served from `/operator/` for diagnosing webhook processing, replaying failed deliveries, browsing workflows, and generating copier rules with AI assistance.
+
+### Enabling the UI
+
+Set the required env vars:
+
+```yaml
+OPERATOR_UI_ENABLED: "true"
+OPERATOR_AUTH_REPO: "your-org/some-repo"  # user permissions here determine role
+OPERATOR_REPO_SLUG: "your-org/some-repo"  # optional; enables audit-row deep links
+```
+
+**Startup fails** if `OPERATOR_UI_ENABLED=true` without `OPERATOR_AUTH_REPO` — this prevents an accidentally-open operator UI.
+
+### Authentication and roles
+
+Each user authenticates with their own **GitHub Personal Access Token**. Paste the PAT into the sign-in prompt; the server checks the user's permission on `OPERATOR_AUTH_REPO` and assigns a role:
+
+| GitHub permission | Operator UI role | Can do |
+|---|---|---|
+| `admin` / `maintain` | **operator** | View everything; replay deliveries; cut release tags; change AI settings |
+| `write` / `triage` / `read` | **writer** | View workflows, audit, recent copies, file match tester, AI rule suggester |
+| None | **denied** | 401 Unauthorized |
+
+`write` maps to writer (not operator) so typical docs contributors with repo write access can't replay deliveries or cut releases — those need an explicit `admin` / `maintain` grant.
+
+On top of the role, **replay is repo-scoped**: the user's PAT must also have read access to the source repo of the webhook being replayed.
+
+### AI rule suggester
+
+The operator UI includes an LLM-backed helper that takes a source/target file pair and returns a generated copier workflow rule, self-verified against the in-process pattern matcher before display.
+
+Two providers are supported via `LLM_PROVIDER`:
+
+- **`anthropic`** (default in Cloud Run): calls the Anthropic Messages API. For MongoDB deployments this routes through the Grove Foundry APIM gateway — set `LLM_BASE_URL=https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic` and load the gateway key from Secret Manager via `ANTHROPIC_API_KEY_SECRET_NAME`.
+- **`ollama`** (default for local dev): runs against a local Ollama instance at `http://localhost:11434`. Connect, pull models, and switch the active model from the UI's System → AI settings panel without a redeploy.
+
+Smoke-test the LLM provider end-to-end with [`cmd/test-llm`](cmd/test-llm/README.md).
+
 ## Audit Logging
 
 When enabled, all operations are logged to MongoDB:
@@ -598,4 +646,6 @@ See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the complete deployment and rollba
 
 - **[Config Validator](cmd/config-validator/README.md)** - CLI tool for validating configs
 - **[Test Webhook](cmd/test-webhook/README.md)** - CLI tool for testing webhooks
+- **[Test PEM](cmd/test-pem/README.md)** - CLI tool for verifying the GitHub App private key
+- **[Test LLM](cmd/test-llm/README.md)** - CLI tool for smoke-testing the AI rule suggester's LLM provider
 - **[Scripts](scripts/README.md)** - Helper scripts for deployment, testing, and releases

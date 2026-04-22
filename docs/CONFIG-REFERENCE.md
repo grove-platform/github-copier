@@ -15,6 +15,8 @@ Complete reference for all github-copier configuration options: environment vari
   - [Audit Logging](#audit-logging)
   - [GitHub API Tuning](#github-api-tuning)
   - [Webhook Processing](#webhook-processing)
+  - [Operator UI](#operator-ui)
+  - [AI Rule Suggester (LLM)](#ai-rule-suggester-llm)
   - [Google Cloud](#google-cloud)
 - [Workflow YAML Schema](#workflow-yaml-schema)
   - [Main Config](#main-config)
@@ -126,6 +128,32 @@ Set via `.env` files, `env-cloudrun.yaml`, or process environment.
 | `WEBHOOK_PROCESSING_TIMEOUT_SECONDS` | int | `300` | Timeout for the background webhook processing goroutine. `0` disables the timeout. |
 | `WEBHOOK_MAX_RETRIES` | int | `2` | Max retry attempts for failed webhook processing (total attempts = retries + 1). |
 | `WEBHOOK_RETRY_INITIAL_DELAY` | int | `5` | Initial delay between retries in **seconds** (doubles each attempt). |
+
+### Operator UI
+
+Mount the web dashboard at `/operator/` (see the [Operator UI section of the README](../README.md#operator-ui) for access model, roles, and feature overview). Off unless `OPERATOR_UI_ENABLED=true`.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `OPERATOR_UI_ENABLED` | bool | `false` | Enable the operator UI routes (`/operator/*`). |
+| `OPERATOR_AUTH_REPO` | string | — | `owner/repo` — the user's permission on this repo determines their role (`admin`/`maintain` → operator, `write`/`triage`/`read` → writer). **Required** when the UI is enabled — startup fails otherwise. |
+| `OPERATOR_REPO_SLUG` | string | — | `owner/repo` used to build clickable GitHub links in audit/trace rows. Optional. |
+| `OPERATOR_RELEASE_GITHUB_TOKEN` | string | — | PAT with `contents:write` used by the UI to create version tag refs. Optional; without it the release button is hidden. |
+| `OPERATOR_RELEASE_TARGET_BRANCH` | string | `main` | Branch whose HEAD SHA is tagged when cutting a release from the UI. |
+
+### AI Rule Suggester (LLM)
+
+Powers `/operator/api/suggest-rule`. The feature surface is always available when the operator UI is enabled; connectivity to the configured provider is checked at request time, and operators can switch model / base URL from the UI at runtime (process-global, reverts on restart).
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `LLM_PROVIDER` | string | `ollama` | Provider selector: `ollama` (local) or `anthropic` (hosted, default in Cloud Run). |
+| `LLM_BASE_URL` | string | per-provider | Provider endpoint. Default `http://localhost:11434` for Ollama or `https://api.anthropic.com` for Anthropic. For MongoDB's Grove Foundry APIM gateway, use `https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic`. |
+| `LLM_MODEL` | string | per-provider | Initial active model. Default `qwen2.5-coder:7b` for Ollama or `claude-haiku-4-5` for Anthropic. |
+| `ANTHROPIC_API_KEY` | string | — | Anthropic API / gateway key. Loaded directly from the env for local dev. Ignored when `LLM_PROVIDER=ollama`. |
+| `ANTHROPIC_API_KEY_SECRET_NAME` | string | — | GCP Secret Manager name for the Anthropic key; used in Cloud Run so no key material is ever in env vars or YAML. Short name (e.g. `anthropic-api-key`) is resolved to a full path via `SecretPath()`. |
+
+The suggester is rate-limited to 30 requests/hour per authenticated user (keyed by hashed PAT) to cap provider cost. Denied requests return 429 with a `Retry-After` header.
 
 ### Google Cloud
 
