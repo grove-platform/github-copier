@@ -39,8 +39,18 @@ func (o *operatorUI) handleLLMStatus(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	if err := o.llm.Ping(ctx); err != nil {
-		out["error"] = err.Error()
+
+	// Cache the ping outcome for 30s. For Anthropic this saves real tokens
+	// (every refresh of the status tab used to hit /v1/messages); for
+	// Ollama it saves an /api/tags round-trip. handleLLMSettings clears the
+	// entry when base URL / model change so operators see fresh state.
+	pingErr, ok := o.llmPing.get(30 * time.Second)
+	if !ok {
+		pingErr = o.llm.Ping(ctx)
+		o.llmPing.set(pingErr)
+	}
+	if pingErr != nil {
+		out["error"] = pingErr.Error()
 		_ = json.NewEncoder(w).Encode(out)
 		return
 	}
@@ -81,11 +91,20 @@ func (o *operatorUI) handleLLMSettings(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+	changed := false
 	if m := strings.TrimSpace(req.ActiveModel); m != "" {
 		o.llm.SetActiveModel(m)
+		changed = true
 	}
 	if u := strings.TrimSpace(req.BaseURL); u != "" {
 		o.llm.SetBaseURL(u)
+		changed = true
+	}
+	// Invalidate the ping cache on mutation so the next /llm/status call
+	// re-checks liveness against the new config — otherwise an operator
+	// flipping the URL sees a stale "connected" line for up to 30s.
+	if changed {
+		o.llmPing.invalidate()
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"active_model": o.llm.GetActiveModel(),
