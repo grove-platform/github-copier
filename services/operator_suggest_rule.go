@@ -116,30 +116,55 @@ func (o *operatorUI) handleSuggestRule(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// SuggestRuleSystemPrompt is the system prompt used by the AI rule suggester.
+// Exported so cmd/test-llm can exercise the real prompt end-to-end against
+// the configured provider (same prompt writers will hit via the UI).
+const SuggestRuleSystemPrompt = `You are a configuration generator for GitHub Copier workflows.
+
+Given a single source→target file transformation example, output ONLY a valid JSON object — no markdown, no prose outside the JSON. Generate ONE rule describing ONE transformation.
+
+Transform types (prefer the simplest that works — move > copy > glob > regex):
+- "move"  — rename a directory prefix. Matches any file under transform_from; replaces the prefix with transform_to. Use when the source and target share the subpath below the renamed prefix.
+- "copy"  — rename ONE exact file. Use when the example is a specific file pair, not a pattern.
+- "glob"  — wildcards in pattern (e.g. "dir/**/*.ext"). Use "${relative_path}" in transform_template to preserve subdir structure after the matched prefix.
+- "regex" — Go RE2 regex with named captures (e.g. "(?P<name>.+)"). Use ONLY when move/copy/glob cannot express the rename.
+
+Response shape (omit fields that don't apply to the chosen transform_type):
+{
+  "name": "kebab-case-rule-name",
+  "destination_repo": "org/dest-repo",
+  "destination_branch": "main",
+  "commit_strategy": "pull_request",
+  "transform_type": "move" | "copy" | "glob" | "regex",
+  "transform_from": "<for move or copy>",
+  "transform_to":   "<for move or copy>",
+  "pattern":             "<for glob or regex>",
+  "transform_template":  "<for glob or regex>",
+  "explanation": "one sentence describing what this rule does"
+}
+
+Rules:
+- destination_branch defaults to "main"; commit_strategy defaults to "pull_request" (use "direct" only if the user's intent is clearly a direct commit).
+- If the user did not provide a target repo, use a placeholder like "org/target-repo" so the writer can fill it in.
+- name should be short and kebab-case, derived from the source directory or file.
+- The rule MUST produce the user's target path when applied to their source path. Verify the logic before responding.
+
+Examples
+
+Input:  source=mflix/server/java-spring/App.java  target=server/App.java  repo=mongodb/sample-app-java-mflix
+Output: {"name":"mflix-java-spring-server","destination_repo":"mongodb/sample-app-java-mflix","destination_branch":"main","commit_strategy":"pull_request","transform_type":"move","transform_from":"mflix/server/java-spring","transform_to":"server","explanation":"Renames the mflix/server/java-spring prefix to server when copying into the target repo."}
+
+Input:  source=mflix/README-JAVA-SPRING.md  target=README.md  repo=mongodb/sample-app-java-mflix
+Output: {"name":"mflix-readme","destination_repo":"mongodb/sample-app-java-mflix","destination_branch":"main","commit_strategy":"pull_request","transform_type":"copy","transform_from":"mflix/README-JAVA-SPRING.md","transform_to":"README.md","explanation":"Copies one specific README file and renames it in the destination."}
+
+Input:  source=agg/python/models/user.py  target=shared/python/models/user.py  repo=org/shared-examples
+Output: {"name":"agg-python","destination_repo":"org/shared-examples","destination_branch":"main","commit_strategy":"pull_request","transform_type":"glob","pattern":"agg/python/**/*.py","transform_template":"shared/python/${relative_path}","explanation":"Matches any .py file under agg/python and preserves the subdirectory structure under shared/python."}
+
+Input:  source=tutorials/v2/getting-started.mdx  target=docs/getting-started-v2.mdx  repo=org/docs-site
+Output: {"name":"tutorials-versioned","destination_repo":"org/docs-site","destination_branch":"main","commit_strategy":"pull_request","transform_type":"regex","pattern":"tutorials/v(?P<ver>[0-9]+)/(?P<slug>.+)\\.mdx","transform_template":"docs/${slug}-v${ver}.mdx","explanation":"Extracts version and slug from the source path and rebuilds the target filename with the version as a suffix."}`
+
 // askLLMForRule sends a structured prompt to the LLM and parses the JSON response.
 func (o *operatorUI) askLLMForRule(ctx context.Context, req operatorSuggestRuleRequest) (*llmSuggestedRule, error) {
-	systemPrompt := `You are an expert in GitHub Copier workflow configuration. You generate concise, correct YAML rules that match a single source→target file transformation example.
-
-The copier supports 4 transform types (pick the simplest that works):
-- move: { from: "prefix/path", to: "new/prefix" } — renames a directory prefix. Matches any file under "from" and replaces the prefix with "to".
-- copy: { from: "exact/file.md", to: "new/file.md" } — renames one exact file. Use only when source is a single specific file.
-- glob: { pattern: "dir/**/*.ext", transform: "new/${relative_path}" } — matches files by glob pattern. Use "${relative_path}" to preserve subdirectory structure.
-- regex: { pattern: "dir/(?P<name>.+)\\.ext", transform: "new/${name}.ext" } — uses Go regex with named capture groups. Use ONLY when move/copy/glob are insufficient.
-
-Prefer move > copy > glob > regex (simpler is better).
-
-You return JSON with these fields:
-- transform_type: "move" | "copy" | "glob" | "regex"
-- transform_from, transform_to: for move/copy
-- pattern, transform_template: for glob/regex
-- name: a kebab-case rule name (e.g., "agg-python-models")
-- destination_repo: the target repository (use the one the user provided, or infer from context)
-- destination_branch: optional, defaults to "main"
-- commit_strategy: "direct" or "pull_request" (default "pull_request")
-- explanation: 1-2 sentence plain-English justification
-
-IMPORTANT: The generated rule MUST produce the user's target file when applied to their source file. Test your logic mentally before responding.`
-
 	userPrompt := fmt.Sprintf(`Generate a copier rule for this transformation:
 
 Source file: %s
@@ -149,7 +174,7 @@ Target repo: %s
 Return ONLY a JSON object with the fields documented above. No prose outside the JSON.`,
 		req.SourcePath, req.TargetPath, defaultIfEmpty(req.TargetRepo, "(user did not specify — use a placeholder like \"org/target-repo\")"))
 
-	raw, err := o.llm.GenerateJSON(ctx, systemPrompt, userPrompt)
+	raw, err := o.llm.GenerateJSON(ctx, SuggestRuleSystemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM error: %w", err)
 	}

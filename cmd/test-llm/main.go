@@ -83,13 +83,18 @@ func main() {
 		}
 	}
 
-	// 3. GenerateJSON with the real rule-suggester system prompt.
-	systemPrompt := `You are an expert in GitHub Copier workflow configuration. Given a source→target file transformation example, return a JSON object with fields: transform_type ("move"|"copy"|"glob"|"regex"), transform_from, transform_to, pattern, transform_template, name, destination_repo, destination_branch, commit_strategy, explanation. Prefer the simplest transform type that works.`
-	userPrompt := `Source file: agg/python/models/user.py
+	// 3. GenerateJSON using the real rule-suggester system prompt. Importing
+	// services.SuggestRuleSystemPrompt keeps the smoke test in lock-step with
+	// what writers hit via the UI — if the prompt changes, the smoke test
+	// covers the new behavior automatically.
+	systemPrompt := services.SuggestRuleSystemPrompt
+	userPrompt := `Generate a copier rule for this transformation:
+
+Source file: agg/python/models/user.py
 Target file: shared/python/models/user.py
 Target repo: org/shared-examples
 
-Return ONLY a JSON object.`
+Return ONLY a JSON object with the fields documented above. No prose outside the JSON.`
 
 	ctx, cancel = context.WithTimeout(context.Background(), *timeout)
 	raw, err := client.GenerateJSON(ctx, systemPrompt, userPrompt)
