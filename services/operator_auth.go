@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +15,34 @@ import (
 	"sync"
 	"time"
 )
+
+// ghAPIError is returned by the GitHub API helper calls on any non-2xx
+// response. Callers can inspect StatusCode to distinguish transient 5xx
+// failures (should not flip authorization decisions) from 4xx responses
+// (definitive "no access").
+type ghAPIError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *ghAPIError) Error() string {
+	return fmt.Sprintf("GitHub API HTTP %d: %s", e.StatusCode, e.Body)
+}
+
+func (e *ghAPIError) IsTransient() bool { return e.StatusCode >= 500 }
+
+// hashToken returns the SHA-256 hex digest of a PAT. Used as the cache key so
+// raw tokens never sit in the process heap beyond the lifetime of a single
+// request — a memory dump of the running server won't leak active tokens.
+func hashToken(t string) string {
+	sum := sha256.Sum256([]byte(t))
+	return hex.EncodeToString(sum[:])
+}
+
+// githubAPIBaseURL is the base for GitHub REST API calls. Package var (rather
+// than a const) so tests can point it at an httptest.Server. Never set from
+// user input — the SSRF surface for ghAPIGet* is unchanged.
+var githubAPIBaseURL = "https://api.github.com"
 
 // ghUsernameRe matches valid GitHub usernames: alphanumeric + hyphens,
 // cannot start or end with a hyphen, max 39 chars. Used to reject hostile
@@ -71,10 +102,15 @@ func newGHAuthCache(ttl time.Duration) *ghAuthCache {
 	}
 }
 
+// Cache methods take raw tokens and hash them internally, so callers never
+// have to think about the token→digest boundary. Raw tokens never become
+// map keys.
+
 func (c *ghAuthCache) get(token string) (*OperatorUser, error, bool) {
+	key := hashToken(token)
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	e, ok := c.entries[token]
+	e, ok := c.entries[key]
 	if !ok || time.Now().After(e.expiresAt) {
 		return nil, nil, false
 	}
@@ -82,9 +118,10 @@ func (c *ghAuthCache) get(token string) (*OperatorUser, error, bool) {
 }
 
 func (c *ghAuthCache) set(token string, user *OperatorUser, err error) {
+	key := hashToken(token)
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.entries[token] = &ghAuthEntry{
+	c.entries[key] = &ghAuthEntry{
 		user:      user,
 		err:       err,
 		expiresAt: time.Now().Add(c.ttl),
@@ -101,7 +138,7 @@ func (c *ghAuthCache) set(token string, user *OperatorUser, err error) {
 }
 
 func (c *ghAuthCache) getRepoPerm(token, repo string) (string, error, bool) {
-	key := token + "\x00" + repo
+	key := hashToken(token) + "\x00" + repo
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	e, ok := c.repoPerm[key]
@@ -112,7 +149,7 @@ func (c *ghAuthCache) getRepoPerm(token, repo string) (string, error, bool) {
 }
 
 func (c *ghAuthCache) setRepoPerm(token, repo, permission string, err error) {
-	key := token + "\x00" + repo
+	key := hashToken(token) + "\x00" + repo
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.repoPerm[key] = &ghRepoPermEntry{
@@ -180,13 +217,24 @@ func validateGitHubPAT(ctx context.Context, pat string, authRepo string) (*Opera
 		return nil, fmt.Errorf("OPERATOR_AUTH_REPO is not configured")
 	}
 
-	// 2. Check the user's permission on the auth repo
+	// 2. Check the user's permission on the auth repo.
+	//
+	// Authorization posture: only a transient GitHub outage (5xx) lets the
+	// caller through with the default writer role — otherwise a GitHub
+	// hiccup locks out every legitimate operator. Every other failure
+	// (404 "not a collaborator", 401/403, network error, parse error)
+	// denies access. This closes the "any valid PAT gets writer" hole that
+	// existed when we soft-failed on all errors.
 	perm, err := ghAPIGetRepoPermission(ctx, pat, authRepo, ghUser.Login)
 	if err != nil {
-		// If we can't check permissions (repo not found, no access), default to writer
-		LogWarning("GitHub permission check failed, defaulting to writer role",
-			"user", ghUser.Login, "repo", authRepo, "error", err)
-		return user, nil
+		var apiErr *ghAPIError
+		if errors.As(err, &apiErr) && apiErr.IsTransient() {
+			LogWarning("GitHub permission check transiently failed, keeping writer role",
+				"user", ghUser.Login, "repo", authRepo, "status", apiErr.StatusCode)
+			return user, nil
+		}
+		user.Role = RoleDenied
+		return user, fmt.Errorf("user %s has no access to %s: %w", ghUser.Login, authRepo, err)
 	}
 
 	// admin/maintain → operator; write/triage/read → writer. "write" is
@@ -214,7 +262,7 @@ type ghUserResponse struct {
 }
 
 func ghAPIGetUser(ctx context.Context, pat string) (*ghUserResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, githubAPIBaseURL+"/user", nil) // #nosec G107 -- githubAPIBaseURL is set by the binary, not user input
 	if err != nil {
 		return nil, err
 	}
@@ -229,11 +277,8 @@ func ghAPIGetUser(ctx context.Context, pat string) (*ghUserResponse, error) {
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, fmt.Errorf("invalid or expired GitHub token (HTTP %d)", resp.StatusCode)
-	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("GitHub API error: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, &ghAPIError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
 	var user ghUserResponse
@@ -268,8 +313,8 @@ func ghAPIGetRepoPermission(ctx context.Context, pat string, repo string, userna
 		return "", fmt.Errorf("invalid username %q", username)
 	}
 	apiURL := fmt.Sprintf(
-		"https://api.github.com/repos/%s/%s/collaborators/%s/permission",
-		url.PathEscape(parts[0]), url.PathEscape(parts[1]), url.PathEscape(username),
+		"%s/repos/%s/%s/collaborators/%s/permission",
+		githubAPIBaseURL, url.PathEscape(parts[0]), url.PathEscape(parts[1]), url.PathEscape(username),
 	)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil) // #nosec G107 G704 -- host is hardcoded to api.github.com; path components validated above
 	if err != nil {
@@ -287,7 +332,7 @@ func ghAPIGetRepoPermission(ctx context.Context, pat string, repo string, userna
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("permission check: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", &ghAPIError{StatusCode: resp.StatusCode, Body: strings.TrimSpace(string(body))}
 	}
 
 	var perm ghPermissionResponse
