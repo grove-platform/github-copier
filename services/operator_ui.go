@@ -34,6 +34,9 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 		container: container,
 		version:   version,
 		ghCache:   newGHAuthCache(5 * time.Minute),
+		// 30 suggestions/hour/PAT caps Anthropic spend per operator. Normal
+		// usage is well under this; a misbehaving client can't rack up a bill.
+		suggestLimiter: newTokenBucket(30, time.Hour),
 	}
 	// Always create the LLM client; availability is checked dynamically via Ping.
 	// Operators can change the active model and base URL from the UI without restart.
@@ -80,6 +83,42 @@ type operatorUI struct {
 	replayInFlight sync.Map     // key: "owner/repo#pr" → prevents concurrent replays
 	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache
 	llm            LLMClient    // optional: enabled when cfg.LLMEnabled is true
+	suggestLimiter *tokenBucket // per-PAT rate limit for /api/suggest-rule (LLM cost cap)
+	llmPing        llmPingCache // cached Ping() result so /llm/status doesn't burn tokens on every refresh
+}
+
+// llmPingCache memoises the most recent LLMClient.Ping() outcome. Status-tab
+// refreshes don't need fresh liveness data more than once every 30s, and
+// each uncached ping costs one input + one output Anthropic token.
+type llmPingCache struct {
+	mu        sync.RWMutex
+	err       error
+	checkedAt time.Time
+}
+
+func (p *llmPingCache) get(ttl time.Duration) (err error, ok bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.checkedAt.IsZero() || time.Since(p.checkedAt) > ttl {
+		return nil, false
+	}
+	return p.err, true
+}
+
+func (p *llmPingCache) set(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.err = err
+	p.checkedAt = time.Now()
+}
+
+// invalidate forces the next get() to miss, so operators who change the
+// base URL or active model see fresh liveness state on the next refresh.
+func (p *llmPingCache) invalidate() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.err = nil
+	p.checkedAt = time.Time{}
 }
 
 // operatorUserCtxKey is the context key for the authenticated operator user.

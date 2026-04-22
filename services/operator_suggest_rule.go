@@ -66,6 +66,22 @@ func (o *operatorUI) handleSuggestRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Per-PAT rate limit caps Anthropic token spend per operator. Keyed by
+	// hashed PAT so the bucket survives across cache evictions of the full
+	// user record and can't be leaked by a memory dump.
+	if pat := bearerToken(r); pat != "" && o.suggestLimiter != nil {
+		allowed, resetAt := o.suggestLimiter.Allow(hashToken(pat))
+		if !allowed {
+			retry := time.Until(resetAt).Round(time.Second)
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retry.Seconds())))
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(operatorSuggestRuleResponse{
+				Error: fmt.Sprintf("rate limit exceeded — try again in %s", retry),
+			})
+			return
+		}
+	}
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, 4096))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
