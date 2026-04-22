@@ -519,7 +519,7 @@
         <span class="refreshed" id="aiSettingsRefreshed"></span>
       </div>
       <div class="sb">
-        <p class="hint" style="margin-top:0" id="aiSettingsHint">Configure the LLM provider for the AI rule suggester. Settings are in-memory and reset on server restart.</p>
+        <p class="hint" style="margin-top:0" id="aiSettingsHint">Configure the LLM provider for the AI rule suggester. <strong>Settings are process-global:</strong> changes affect every operator using this revision, apply immediately, and revert to env-var defaults on restart. Coordinate with other operators before changing the active model or base URL.</p>
         <div class="row">
           <button type="button" id="aiRefreshStatus">Refresh status</button>
         </div>
@@ -1046,13 +1046,21 @@ $('loadMetricsCards').onclick=function(){withLoading('loadMetricsCards',loadMetr
 
 /* ── Webhook traces with client-side filter/search (#4, #9) ── */
 var _traceData=[];
-// Map of repo -> bool (true = user has read access). Populated after loading traces.
-// In token mode, every repo is true. In github mode, only repos the user has access to.
+// Map of repo -> {allowed:boolean, error?:string}. Populated after loading traces.
+// The error field (if present) lets tooltips distinguish "user genuinely can't
+// read this repo" from transient GitHub API failures.
 var _repoPerm={};
 function traceOutcomeClass(o){if(!o)return'';if(o==='processed_ok')return'ok';if(o==='duplicate_delivery'||o==='skipped_not_merged_pr'||o==='ignored_non_pull_request')return'warn';return'fail';}
 function canReplayRepo(repo){
-  // If we haven't checked yet (undefined), assume yes. If checked and false, disable.
-  return _repoPerm[repo]!==false;
+  // If we haven't checked yet (undefined), assume yes. If checked and not allowed, disable.
+  var p=_repoPerm[repo];
+  if(p===undefined)return true;
+  return !!p.allowed;
+}
+function replayDisabledReason(repo){
+  var p=_repoPerm[repo];
+  if(!p||p.allowed)return '';
+  return p.error||('You do not have GitHub access to '+repo);
 }
 function renderTraces(){
   var outcomeF=$('traceOutcome').value,searchF=$('traceSearch').value.toLowerCase().trim();
@@ -1066,7 +1074,7 @@ function renderTraces(){
     var replayBtn='';
     if(row.repo&&row.pr_number&&row.base_branch){
       var allowed=canReplayRepo(row.repo);
-      var disAttrs=allowed?'':' disabled title="You do not have GitHub access to '+escapeHtml(row.repo)+'"';
+      var disAttrs=allowed?'':' disabled title="'+escapeHtml(replayDisabledReason(row.repo))+'"';
       var onClick=allowed?'event.stopPropagation();confirmReplay('+escapeHtml(JSON.stringify(row.repo))+','+row.pr_number+','+escapeHtml(JSON.stringify(row.base_branch))+','+escapeHtml(JSON.stringify(row.commit_sha||''))+')':'event.stopPropagation()';
       replayBtn='<button class="btn-sm operator-only" onclick="'+onClick+'"'+disAttrs+'>Replay</button>';
     }
@@ -1095,7 +1103,13 @@ async function fetchRepoPermissions(){
     if(!res.ok)return;
     var body=await res.json();
     var perms=body.permissions||{};
-    Object.keys(perms).forEach(function(r){_repoPerm[r]=!!perms[r];});
+    Object.keys(perms).forEach(function(r){
+      // New shape: {allowed, error?}. Fall back to boolean for compatibility
+      // with older server builds during a partial rollout.
+      var v=perms[r];
+      if(typeof v==='boolean')_repoPerm[r]={allowed:v};
+      else _repoPerm[r]=v||{allowed:false};
+    });
     renderTraces(); // Re-render to update button states
   }catch(e){}
 }

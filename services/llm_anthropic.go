@@ -22,11 +22,12 @@ const anthropicAPIVersion = "2023-06-01"
 const defaultAnthropicBaseURL = "https://api.anthropic.com"
 
 // anthropicFallbackModels is used when /v1/models returns an empty list or
-// errors; keeps the UI usable with a known-good default set.
+// errors (e.g. behind a gateway that doesn't expose it). Kept deliberately
+// minimal — listing every model here means every rotation ships dead
+// dropdown options. Aliased names route to the current dated release, so
+// this single entry stays valid across point releases.
 var anthropicFallbackModels = []LLMModel{
-	{Name: "claude-opus-4-7"},
-	{Name: "claude-sonnet-4-6"},
-	{Name: "claude-haiku-4-5-20251001"},
+	{Name: "claude-haiku-4-5"},
 }
 
 type anthropicClient struct {
@@ -42,7 +43,7 @@ func newAnthropicClient(baseURL, model, apiKey string) *anthropicClient {
 		baseURL = defaultAnthropicBaseURL
 	}
 	if strings.TrimSpace(model) == "" {
-		model = "claude-haiku-4-5-20251001"
+		model = "claude-haiku-4-5"
 	}
 	return &anthropicClient{
 		baseURL: strings.TrimSuffix(baseURL, "/"),

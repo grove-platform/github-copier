@@ -278,7 +278,7 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	// Per-provider defaults: Ollama runs locally, Anthropic is hosted.
 	if config.LLMProvider == "anthropic" {
 		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "https://api.anthropic.com")
-		config.LLMModel = getEnvWithDefault(LLMModel, "claude-haiku-4-5-20251001")
+		config.LLMModel = getEnvWithDefault(LLMModel, "claude-haiku-4-5")
 	} else {
 		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "http://localhost:11434")
 		config.LLMModel = getEnvWithDefault(LLMModel, "qwen2.5-coder:7b")

@@ -3,11 +3,14 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
@@ -244,7 +247,16 @@ func (o *operatorUI) handleRepoPermission(w http.ResponseWriter, r *http.Request
 		return
 	}
 	repos := strings.Split(reposParam, ",")
-	result := make(map[string]bool, len(repos))
+
+	// Per-repo result: Allowed + optional Error. Surfacing the error lets
+	// the frontend distinguish "user genuinely can't read this repo" from
+	// "GitHub rate limited us" so disabled replay buttons can carry an
+	// actionable tooltip instead of an opaque gray state.
+	type repoPerm struct {
+		Allowed bool   `json:"allowed"`
+		Error   string `json:"error,omitempty"`
+	}
+	result := make(map[string]repoPerm, len(repos))
 
 	user := operatorUserFromCtx(r)
 	userPAT := bearerToken(r)
@@ -261,8 +273,12 @@ func (o *operatorUI) handleRepoPermission(w http.ResponseWriter, r *http.Request
 		if repo == "" {
 			continue
 		}
-		canRead, _ := o.ghCache.CanUserReadRepo(ctx, userPAT, user.Login, repo)
-		result[repo] = canRead
+		canRead, err := o.ghCache.CanUserReadRepo(ctx, userPAT, user.Login, repo)
+		entry := repoPerm{Allowed: canRead}
+		if err != nil {
+			entry.Error = err.Error()
+		}
+		result[repo] = entry
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{"permissions": result})
 }
@@ -486,9 +502,23 @@ type OperatorDeploymentInfo struct {
 	ConfigRepo         string            `json:"config_repo,omitempty"`
 	EffectiveConfig    string            `json:"effective_config_file,omitempty"`
 	OperatorRepoSlug   string            `json:"operator_repo_slug,omitempty"`
-	ReleaseAPIMode     string            `json:"release_api_mode"`
+	ReleaseAPIMode     ReleaseAPIMode    `json:"release_api_mode"`
 	Env                map[string]string `json:"cloud_env,omitempty"`
 }
+
+// ReleaseAPIMode describes whether the operator UI can cut a release tag.
+// Typed so the set of possible values is discoverable from the type alone
+// and so the frontend can switch on a known enum instead of a free string.
+type ReleaseAPIMode string
+
+const (
+	// ReleaseAPIDisabled — neither OPERATOR_RELEASE_GITHUB_TOKEN nor
+	// OPERATOR_REPO_SLUG is configured; the UI hides the release button.
+	ReleaseAPIDisabled ReleaseAPIMode = "disabled"
+	// ReleaseAPITagCreateEnabled — both are configured; the UI shows the
+	// release flow and /api/release will attempt to create a tag ref.
+	ReleaseAPITagCreateEnabled ReleaseAPIMode = "tag_create_enabled"
+)
 
 func (o *operatorUI) handleDeployment(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -496,9 +526,9 @@ func (o *operatorUI) handleDeployment(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "method not allowed"})
 		return
 	}
-	releaseMode := "disabled"
+	releaseMode := ReleaseAPIDisabled
 	if o.cfg.OperatorReleaseGitHubToken != "" && o.cfg.OperatorRepoSlug != "" {
-		releaseMode = "tag_create_enabled"
+		releaseMode = ReleaseAPITagCreateEnabled
 	}
 	info := OperatorDeploymentInfo{
 		Version:            o.version,
@@ -774,7 +804,12 @@ func (o *operatorUI) handleReplay(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Dispatch replay in background (same path as real webhook processing)
-	deliveryID := fmt.Sprintf("replay-%d", time.Now().UnixMilli())
+	// Millisecond timestamps alone collide when two operators replay in the
+	// same ms (rare but observed in tests). Append a short random suffix so
+	// the delivery ID is unique across concurrent replays on the same revision.
+	var rnd [3]byte
+	_, _ = rand.Read(rnd[:])
+	deliveryID := fmt.Sprintf("replay-%d-%s", time.Now().UnixMilli(), hex.EncodeToString(rnd[:]))
 	baseBranch := strings.TrimSpace(req.Branch)
 
 	LogInfo("operator replay requested",
@@ -835,14 +870,37 @@ func firstEnv(keys ...string) string {
 	return ""
 }
 
+// ghBranchNameRe matches branch names permitted by GitHub: no spaces, control
+// chars, or the handful of reserved characters (~ ^ : ? * [ \). The regex is
+// intentionally narrower than GitHub's full rules — it's a defense-in-depth
+// check before we embed the value in an API path, not a validator.
+var ghBranchNameRe = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,120}$`)
+
 func githubCreateVersionTag(ctx context.Context, pat, repoSlug, baseBranch, version string) (ref string, sha string, err error) {
 	parts := strings.SplitN(strings.TrimSpace(repoSlug), "/", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return "", "", fmt.Errorf("invalid OPERATOR_REPO_SLUG (want owner/repo)")
 	}
 	owner, repo := parts[0], parts[1]
-	baseURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/ref/heads/%s", owner, repo, baseBranch)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil)
+	// Defense-in-depth: even though these come from env vars and not user
+	// input, validate them against the same whitelists ghAPIGetRepoPermission
+	// uses before embedding in API paths. Apply url.PathEscape for the same
+	// reason. Keeps the gosec story consistent across the package.
+	if !ghUsernameRe.MatchString(owner) {
+		return "", "", fmt.Errorf("invalid owner in OPERATOR_REPO_SLUG %q", repoSlug)
+	}
+	if !ghRepoNameRe.MatchString(repo) {
+		return "", "", fmt.Errorf("invalid repo name in OPERATOR_REPO_SLUG %q", repoSlug)
+	}
+	if !ghBranchNameRe.MatchString(baseBranch) {
+		return "", "", fmt.Errorf("invalid OPERATOR_RELEASE_TARGET_BRANCH %q", baseBranch)
+	}
+	baseURL := fmt.Sprintf(
+		"%s/repos/%s/%s/git/ref/heads/%s",
+		githubAPIBaseURL,
+		url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(baseBranch),
+	)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL, nil) // #nosec G107 -- githubAPIBaseURL is binary-controlled; path components validated above
 	if err != nil {
 		return "", "", err
 	}
@@ -850,7 +908,7 @@ func githubCreateVersionTag(ctx context.Context, pat, repoSlug, baseBranch, vers
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	resp, err := githubHTTPClient().Do(req)
+	resp, err := sharedGithubHTTPClient.Do(req)
 	if err != nil {
 		return "", "", err
 	}
@@ -878,8 +936,8 @@ func githubCreateVersionTag(ctx context.Context, pat, repoSlug, baseBranch, vers
 	if err != nil {
 		return "", "", err
 	}
-	postURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/refs", owner, repo)
-	postReq, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, bytes.NewReader(buf))
+	postURL := fmt.Sprintf("%s/repos/%s/%s/git/refs", githubAPIBaseURL, url.PathEscape(owner), url.PathEscape(repo))
+	postReq, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, bytes.NewReader(buf)) // #nosec G107 -- githubAPIBaseURL is binary-controlled; path components validated above
 	if err != nil {
 		return "", "", err
 	}
@@ -888,7 +946,7 @@ func githubCreateVersionTag(ctx context.Context, pat, repoSlug, baseBranch, vers
 	postReq.Header.Set("Content-Type", "application/json")
 	postReq.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
-	postResp, err := githubHTTPClient().Do(postReq)
+	postResp, err := sharedGithubHTTPClient.Do(postReq)
 	if err != nil {
 		return "", "", err
 	}
@@ -909,6 +967,7 @@ func githubCreateVersionTag(ctx context.Context, pat, repoSlug, baseBranch, vers
 	return created.Ref, created.Object.SHA, nil
 }
 
-func githubHTTPClient() *http.Client {
-	return &http.Client{Timeout: 25 * time.Second}
-}
+// sharedGithubHTTPClient is reused for all operator-originated GitHub API
+// calls (release tagging, etc.). Reusing one *http.Client amortizes the
+// underlying transport's connection pool.
+var sharedGithubHTTPClient = &http.Client{Timeout: 25 * time.Second}
