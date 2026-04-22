@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -74,10 +75,11 @@ func TestNewLLMClient_Dispatch(t *testing.T) {
 
 func TestAnthropicClient_ModelManagementNotSupported(t *testing.T) {
 	c := newAnthropicClient("", "", "sk-test")
-	if err := c.PullModel(nil, "anything", nil); !errors.Is(err, ErrModelManagementNotSupported) {
+	ctx := context.Background()
+	if err := c.PullModel(ctx, "anything", nil); !errors.Is(err, ErrModelManagementNotSupported) {
 		t.Errorf("PullModel: want ErrModelManagementNotSupported, got %v", err)
 	}
-	if err := c.DeleteModel(nil, "anything"); !errors.Is(err, ErrModelManagementNotSupported) {
+	if err := c.DeleteModel(ctx, "anything"); !errors.Is(err, ErrModelManagementNotSupported) {
 		t.Errorf("DeleteModel: want ErrModelManagementNotSupported, got %v", err)
 	}
 }
