@@ -357,9 +357,13 @@ func defaultIfEmpty(s, def string) string {
 	return s
 }
 
+// truncate shortens s to at most n runes, appending an ellipsis when cut.
+// Rune-aware (not byte-aware) so multi-byte glyphs in LLM output aren't
+// cut in half when we truncate for logging.
 func truncate(s string, n int) string {
-	if len(s) <= n {
+	runes := []rune(s)
+	if len(runes) <= n {
 		return s
 	}
-	return s[:n] + "…"
+	return string(runes[:n]) + "…"
 }
