@@ -437,8 +437,10 @@ func loadAndMatchWorkflows(ctx context.Context, config *configs.Config, containe
 		"matching_count": len(matching),
 	})
 
-	yamlConfig.Workflows = matching
-	return yamlConfig, nil
+	// Return a shallow copy with only matching workflows to avoid mutating the cached config
+	filteredConfig := *yamlConfig
+	filteredConfig.Workflows = matching
+	return &filteredConfig, nil
 }
 
 // fetchChangedFiles retrieves the files changed in a PR, logging and notifying on error.

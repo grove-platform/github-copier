@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api:*)",
+      "Bash(go build *)",
+      "Bash(go vet *)",
+      "Bash(go test *)",
+      "Bash(go env *)",
+      "Bash(grep -r \"ObjectIDAsHexString\" \"$\\(go env GOMODCACHE\\)/go.mongodb.org/mongo-driver/v2@\"*)",
+      "Bash(grep -n \"BSONOptions\\\\|SetBSONOptions\" \"$\\(go env GOMODCACHE\\)/go.mongodb.org/mongo-driver/v2@v2.2.0/mongo/options/clientoptions.go\")",
+      "mcp__github__get_file_contents",
+      "mcp__github__create_branch",
+      "mcp__github__push_files",
+      "mcp__github__create_pull_request",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}
