@@ -7,9 +7,95 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 )
+
+// llmBaseURLAllowedHostsEnv lets deployments pin the set of hosts an operator
+// can route the LLM client at (comma-separated, host[:port], case-insensitive).
+// Unset = no host pinning; scheme rules below still apply.
+const llmBaseURLAllowedHostsEnv = "LLM_BASE_URL_ALLOWED_HOSTS"
+
+// validateLLMBaseURL enforces scheme + host rules on operator-supplied LLM base
+// URLs. Hosted providers (anthropic) ship a bearer credential to whatever host
+// the client points at, so we require https and reject userinfo / opaque URIs;
+// otherwise a malicious operator could exfiltrate the API key by setting the
+// base URL to a host they control. Ollama is exempt from the https requirement
+// because the legitimate default is http://localhost:11434 for local dev.
+//
+// Returns the cleaned URL (trailing slash trimmed) or an error suitable for a
+// 400 response. allowedHosts may be empty to skip host pinning.
+func validateLLMBaseURL(provider, raw string, allowedHosts []string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("base_url is required")
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", fmt.Errorf("base_url is not a valid URL: %w", err)
+	}
+	if u.Scheme == "" || u.Host == "" {
+		return "", fmt.Errorf("base_url must be an absolute URL with scheme and host")
+	}
+	// Reject userinfo (https://attacker@victim.com/) and opaque forms — both
+	// confuse host-based allowlisting and have no legitimate use here.
+	if u.User != nil {
+		return "", fmt.Errorf("base_url must not contain userinfo")
+	}
+	if u.Opaque != "" {
+		return "", fmt.Errorf("base_url must not be opaque")
+	}
+	scheme := strings.ToLower(u.Scheme)
+	prov := strings.ToLower(strings.TrimSpace(provider))
+	switch prov {
+	case "anthropic":
+		if scheme != "https" {
+			return "", fmt.Errorf("base_url for anthropic must use https (got %q)", scheme)
+		}
+	case "", "ollama":
+		// Local dev commonly uses http://localhost:11434.
+		if scheme != "http" && scheme != "https" {
+			return "", fmt.Errorf("base_url must use http or https (got %q)", scheme)
+		}
+	default:
+		if scheme != "https" {
+			return "", fmt.Errorf("base_url must use https (got %q)", scheme)
+		}
+	}
+	if len(allowedHosts) > 0 {
+		host := strings.ToLower(u.Host)
+		ok := false
+		for _, h := range allowedHosts {
+			if strings.EqualFold(strings.TrimSpace(h), host) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return "", fmt.Errorf("base_url host %q is not in the allowlist", u.Host)
+		}
+	}
+	return strings.TrimSuffix(raw, "/"), nil
+}
+
+// llmBaseURLAllowedHosts reads and parses LLM_BASE_URL_ALLOWED_HOSTS. Returns
+// nil when unset so callers know to skip host pinning.
+func llmBaseURLAllowedHosts() []string {
+	raw := strings.TrimSpace(os.Getenv(llmBaseURLAllowedHostsEnv))
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
 
 // handleLLMStatus returns the current LLM settings, reachability, and installed models.
 func (o *operatorUI) handleLLMStatus(w http.ResponseWriter, r *http.Request) {
@@ -91,25 +177,89 @@ func (o *operatorUI) handleLLMSettings(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid json"})
 		return
 	}
+	// Capture pre-change state for the audit record. This must happen before
+	// any setter call so the "before" value reflects what the operator changed
+	// from, not what they changed to.
+	oldModel := o.llm.GetActiveModel()
+	oldBaseURL := o.llm.GetBaseURL()
 	changed := false
-	if m := strings.TrimSpace(req.ActiveModel); m != "" {
+	newModel := oldModel
+	newBaseURL := oldBaseURL
+	if m := strings.TrimSpace(req.ActiveModel); m != "" && m != oldModel {
 		o.llm.SetActiveModel(m)
+		newModel = o.llm.GetActiveModel()
 		changed = true
 	}
 	if u := strings.TrimSpace(req.BaseURL); u != "" {
-		o.llm.SetBaseURL(u)
-		changed = true
+		// Validate before applying. The Anthropic client ships the bearer
+		// credential to whatever host the base URL points at — without
+		// scheme/host validation, an operator could redirect the credential
+		// to a host they control.
+		cleaned, err := validateLLMBaseURL(o.cfg.LLMProvider, u, llmBaseURLAllowedHosts())
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		if cleaned != oldBaseURL {
+			o.llm.SetBaseURL(cleaned)
+			newBaseURL = o.llm.GetBaseURL()
+			changed = true
+		}
 	}
 	// Invalidate the ping cache on mutation so the next /llm/status call
 	// re-checks liveness against the new config — otherwise an operator
 	// flipping the URL sees a stale "connected" line for up to 30s.
 	if changed {
 		o.llmPing.invalidate()
+		o.recordLLMSettingsAudit(r, oldBaseURL, newBaseURL, oldModel, newModel)
 	}
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"active_model": o.llm.GetActiveModel(),
 		"base_url":     o.llm.GetBaseURL(),
 	})
+}
+
+// recordLLMSettingsAudit emits a structured log line and (when MongoDB audit
+// logging is enabled) persists a config_change event capturing who changed
+// what. This is the detection backstop for the SetBaseURL credential-exfil
+// risk: scheme/host validation blocks the obvious cases, but a persisted
+// trail of every successful change lets responders spot abuse after the fact.
+func (o *operatorUI) recordLLMSettingsAudit(r *http.Request, oldBaseURL, newBaseURL, oldModel, newModel string) {
+	actor := ""
+	if u := operatorUserFromCtx(r); u != nil {
+		actor = u.Login
+	}
+	LogInfo("operator changed LLM settings",
+		"actor", actor,
+		"provider", o.cfg.LLMProvider,
+		"old_base_url", oldBaseURL,
+		"new_base_url", newBaseURL,
+		"old_model", oldModel,
+		"new_model", newModel,
+	)
+	if o.container == nil || o.container.AuditLogger == nil {
+		return
+	}
+	// Use a detached short-timeout context: writing the audit row must not
+	// fail just because the client disconnected after receiving the 200.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ev := &AuditEvent{
+		Actor:   actor,
+		Success: true,
+		AdditionalData: map[string]any{
+			"setting":      "llm",
+			"provider":     o.cfg.LLMProvider,
+			"old_base_url": oldBaseURL,
+			"new_base_url": newBaseURL,
+			"old_model":    oldModel,
+			"new_model":    newModel,
+		},
+	}
+	if err := o.container.AuditLogger.LogConfigChangeEvent(ctx, ev); err != nil {
+		LogWarning("audit LogConfigChangeEvent failed", "error", err)
+	}
 }
 
 // handleLLMDeleteModel deletes a model from the LLM server.
