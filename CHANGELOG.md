@@ -35,6 +35,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Token auth removed** — the operator UI no longer accepts a shared bearer token; all access is per-user via GitHub PAT with repo-scoped permission checks.
 
+## [v0.3.1] - 2026-04-30
+
+### Fixed
+
+- **Config cache corruption** — `CachedConfigLoader` no longer returns stale entries when filtering workflows by source repo.
+
+### Security
+
+- **Removed unneeded config files** from the repository.
+
 ## [v0.3.0] - 2026-04-14
 
 ### Changed
