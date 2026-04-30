@@ -14,27 +14,31 @@ import (
 type AuditEventType string
 
 const (
-	AuditEventCopy        AuditEventType = "copy"
-	AuditEventDeprecation AuditEventType = "deprecation"
-	AuditEventError       AuditEventType = "error"
+	AuditEventCopy         AuditEventType = "copy"
+	AuditEventDeprecation  AuditEventType = "deprecation"
+	AuditEventError        AuditEventType = "error"
+	AuditEventConfigChange AuditEventType = "config_change"
 )
 
 // AuditEvent represents an audit log entry
 type AuditEvent struct {
-	ID             string         `bson:"_id,omitempty" json:"id,omitempty"`
-	Timestamp      time.Time      `bson:"timestamp" json:"timestamp"`
-	EventType      AuditEventType `bson:"event_type" json:"event_type"`
-	RuleName       string         `bson:"rule_name,omitempty" json:"rule_name,omitempty"`
-	SourceRepo     string         `bson:"source_repo" json:"source_repo"`
-	SourcePath     string         `bson:"source_path" json:"source_path"`
-	TargetRepo     string         `bson:"target_repo,omitempty" json:"target_repo,omitempty"`
-	TargetPath     string         `bson:"target_path,omitempty" json:"target_path,omitempty"`
-	CommitSHA      string         `bson:"commit_sha,omitempty" json:"commit_sha,omitempty"`
-	PRNumber       int            `bson:"pr_number,omitempty" json:"pr_number,omitempty"`
-	Success        bool           `bson:"success" json:"success"`
-	ErrorMessage   string         `bson:"error_message,omitempty" json:"error_message,omitempty"`
-	DurationMs     int64          `bson:"duration_ms,omitempty" json:"duration_ms,omitempty"`
-	FileSize       int64          `bson:"file_size,omitempty" json:"file_size,omitempty"`
+	ID           string         `bson:"_id,omitempty" json:"id,omitempty"`
+	Timestamp    time.Time      `bson:"timestamp" json:"timestamp"`
+	EventType    AuditEventType `bson:"event_type" json:"event_type"`
+	RuleName     string         `bson:"rule_name,omitempty" json:"rule_name,omitempty"`
+	SourceRepo   string         `bson:"source_repo" json:"source_repo"`
+	SourcePath   string         `bson:"source_path" json:"source_path"`
+	TargetRepo   string         `bson:"target_repo,omitempty" json:"target_repo,omitempty"`
+	TargetPath   string         `bson:"target_path,omitempty" json:"target_path,omitempty"`
+	CommitSHA    string         `bson:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+	PRNumber     int            `bson:"pr_number,omitempty" json:"pr_number,omitempty"`
+	Success      bool           `bson:"success" json:"success"`
+	ErrorMessage string         `bson:"error_message,omitempty" json:"error_message,omitempty"`
+	DurationMs   int64          `bson:"duration_ms,omitempty" json:"duration_ms,omitempty"`
+	FileSize     int64          `bson:"file_size,omitempty" json:"file_size,omitempty"`
+	// Actor identifies the GitHub login responsible for an operator-initiated
+	// event (e.g. an LLM settings change). Empty for webhook-driven copies.
+	Actor          string         `bson:"actor,omitempty" json:"actor,omitempty"`
 	AdditionalData map[string]any `bson:"additional_data,omitempty" json:"additional_data,omitempty"`
 }
 
@@ -43,6 +47,10 @@ type AuditLogger interface {
 	LogCopyEvent(ctx context.Context, event *AuditEvent) error
 	LogDeprecationEvent(ctx context.Context, event *AuditEvent) error
 	LogErrorEvent(ctx context.Context, event *AuditEvent) error
+	// LogConfigChangeEvent records an operator-initiated configuration change
+	// (e.g. LLM base URL or active model). Used for after-the-fact detection
+	// of suspicious changes — the event captures who, what, and old→new value.
+	LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error
 	GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error)
 	GetFailedEvents(ctx context.Context, limit int) ([]AuditEvent, error)
 	GetEventsByRule(ctx context.Context, ruleName string, limit int) ([]AuditEvent, error)
@@ -179,6 +187,14 @@ func (mal *MongoAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEven
 	event.EventType = AuditEventError
 	event.Timestamp = time.Now()
 	event.Success = false
+	_, err := mal.collection.InsertOne(ctx, event)
+	return err
+}
+
+// LogConfigChangeEvent logs an operator-initiated configuration change.
+func (mal *MongoAuditLogger) LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error {
+	event.EventType = AuditEventConfigChange
+	event.Timestamp = time.Now()
 	_, err := mal.collection.InsertOne(ctx, event)
 	return err
 }
@@ -362,6 +378,9 @@ func (nal *NoOpAuditLogger) LogDeprecationEvent(ctx context.Context, event *Audi
 	return nil
 }
 func (nal *NoOpAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEvent) error { return nil }
+func (nal *NoOpAuditLogger) LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error {
+	return nil
+}
 func (nal *NoOpAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
 	return []AuditEvent{}, nil
 }
