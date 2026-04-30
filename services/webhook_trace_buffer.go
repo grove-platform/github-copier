@@ -95,3 +95,24 @@ func AppendWebhookTrace(c *ServiceContainer, e WebhookTraceEntry) {
 	}
 	c.WebhookTraces.Append(e)
 }
+
+// RepoForDelivery returns the most recent recorded repo for a delivery ID,
+// or "" if no trace with that ID is buffered. The operator UI uses this to
+// scope per-delivery log access by the caller's GitHub repo permissions —
+// without a repo we can't safely show the logs to a writer, so callers that
+// fail to resolve here should treat the delivery as not visible.
+func (b *WebhookTraceBuffer) RepoForDelivery(deliveryID string) string {
+	if b == nil || deliveryID == "" {
+		return ""
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	// Newest first — a delivery occasionally produces multiple trace rows
+	// (e.g. retries) and the latest carries the canonical repo attribution.
+	for i := len(b.buf) - 1; i >= 0; i-- {
+		if b.buf[i].DeliveryID == deliveryID && b.buf[i].Repo != "" {
+			return b.buf[i].Repo
+		}
+	}
+	return ""
+}
