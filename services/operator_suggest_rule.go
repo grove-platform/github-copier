@@ -229,7 +229,16 @@ func verifySuggestedRule(s *llmSuggestedRule, sourcePath, targetPath string) (bo
 		if !strings.HasPrefix(sourcePath, from) {
 			return false, "", fmt.Errorf("source path does not start with %q", from)
 		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(sourcePath, from), "/")
+		// Boundary check: the prefix must end at a path separator (or be the
+		// whole path). Without this, from="agg/py" would falsely "match"
+		// sourcePath="agg/python/foo.py" and produce a bogus rel of
+		// "thon/foo.py" — verification would pass for a rule that means
+		// something entirely different from what the LLM intended.
+		rest := sourcePath[len(from):]
+		if rest != "" && !strings.HasPrefix(rest, "/") {
+			return false, "", fmt.Errorf("source path %q does not match move from %q at a path boundary", sourcePath, from)
+		}
+		rel := strings.TrimPrefix(rest, "/")
 		computed := strings.TrimSuffix(s.TransformTo, "/") + "/" + rel
 		computed = strings.TrimSuffix(computed, "/")
 		return computed == targetPath, computed, nil
