@@ -58,9 +58,16 @@ var ghRepoNameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,100}$`)
 type OperatorRole string
 
 const (
-	// RoleOperator has full access: view, replay, release.
+	// RoleOperator has full access: view, replay, release. Operators are
+	// trusted with the full repo topology and bypass per-repo scoping in
+	// the read-only views (audit events, webhook traces, delivery logs,
+	// workflow config).
 	RoleOperator OperatorRole = "operator"
 	// RoleWriter has read-only access: view workflows, audit, recent copies.
+	// Read-only views are post-filtered by repoFilter so writers only see
+	// rows that reference repos they can read on GitHub — without this they
+	// could enumerate every source→target pairing and audit row in the
+	// system, regardless of whether they have GitHub access to those repos.
 	RoleWriter OperatorRole = "writer"
 	// RoleDenied means the user has no access.
 	RoleDenied OperatorRole = "denied"

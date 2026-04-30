@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/grove-platform/github-copier/configs"
+	"github.com/grove-platform/github-copier/types"
 )
 
 //go:embed web/operator/index.html
@@ -329,6 +330,13 @@ func (o *operatorUI) handleAuditEvents(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 		return
 	}
+	// Scope rows to repos the caller can read on GitHub. Operators see
+	// everything; writers only see rows whose source_repo and target_repo
+	// they have read access to. Without this, a writer with read on the
+	// auth repo would learn the names + paths of every other repo the
+	// copier has touched.
+	filter := newRepoFilter(ctx, o.ghCache, bearerToken(r), operatorUserFromCtx(r))
+	events = filter.filterAuditEvents(events)
 	_ = json.NewEncoder(w).Encode(map[string]any{"events": events})
 }
 
@@ -477,6 +485,14 @@ func (o *operatorUI) handleObservabilityWebhookTraces(w http.ResponseWriter, r *
 		return
 	}
 	tr := o.container.WebhookTraces.Recent(max)
+	// Same per-repo scoping as /audit/events: writers shouldn't see traces
+	// (or the free-form Detail field) for repos they can't read on GitHub.
+	// "total" stays as the unfiltered count so operators can tell whether
+	// the buffer is being trimmed by retention vs by their own visibility.
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+	filter := newRepoFilter(ctx, o.ghCache, bearerToken(r), operatorUserFromCtx(r))
+	tr = filter.filterWebhookTraces(tr)
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"traces": tr,
 		"total":  o.container.WebhookTraces.Len(),
@@ -643,6 +659,30 @@ func (o *operatorUI) handleDeliveryLogs(w http.ResponseWriter, r *http.Request) 
 		_ = json.NewEncoder(w).Encode(map[string]any{"logs": []LogEntry{}, "delivery_id": deliveryID})
 		return
 	}
+	// Scope by repo permission for writers. We resolve the repo from the
+	// matching webhook trace; if no trace is buffered (e.g. it aged out
+	// while logs are still around) we have no repo to authorise against
+	// and fail closed for writers. Operators bypass this check.
+	user := operatorUserFromCtx(r)
+	if user != nil && user.Role != RoleOperator {
+		repo := ""
+		if o.container.WebhookTraces != nil {
+			repo = o.container.WebhookTraces.RepoForDelivery(deliveryID)
+		}
+		if repo == "" {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "delivery not visible"})
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
+		canRead, _ := o.ghCache.CanUserReadRepo(ctx, bearerToken(r), user.Login, repo)
+		if !canRead {
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "delivery not visible"})
+			return
+		}
+	}
 	logs := o.container.DeliveryLogs.Get(deliveryID)
 	if logs == nil {
 		logs = []LogEntry{}
@@ -674,12 +714,38 @@ func (o *operatorUI) handleWorkflows(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"workflows":   yamlCfg.Workflows,
+	// Scope topology to repos the caller can read. Without this a writer
+	// learns every source→target pairing the copier knows about, which
+	// (per code review) is the largest single repo-topology leak in the
+	// operator UI. Operators see the full config; writers see only rows
+	// where they can read both source and destination.
+	user := operatorUserFromCtx(r)
+	workflows := yamlCfg.Workflows
+	hiddenCount := 0
+	if user != nil && user.Role != RoleOperator {
+		filter := newRepoFilter(ctx, o.ghCache, bearerToken(r), user)
+		visible := make([]types.Workflow, 0, len(workflows))
+		for _, wf := range workflows {
+			if filter.canRead(wf.Source.Repo) && filter.canRead(wf.Destination.Repo) {
+				visible = append(visible, wf)
+			}
+		}
+		hiddenCount = len(workflows) - len(visible)
+		workflows = visible
+	}
+	resp := map[string]any{
+		"workflows":   workflows,
 		"defaults":    yamlCfg.Defaults,
 		"config_file": o.cfg.EffectiveConfigFile(),
 		"config_repo": o.cfg.ConfigRepoOwner + "/" + o.cfg.ConfigRepoName,
-	})
+	}
+	if hiddenCount > 0 {
+		// Surface the count (but not the names) so the UI can show a
+		// "N workflows hidden — request access on GitHub" hint instead of
+		// a confusingly-empty list.
+		resp["hidden_count"] = hiddenCount
+	}
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // ── Webhook replay ──
