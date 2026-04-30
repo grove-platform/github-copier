@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.3.1] - 2026-04-30
+
+### Fixed
+
+- **Config cache corruption** — `CachedConfigLoader` no longer returns stale entries when filtering workflows by source repo.
+
+### Security
+
+- **Removed accidentally committed secrets and config files** from the repository.
+
 ## [v0.3.0] - 2026-04-14
 
 ### Changed
