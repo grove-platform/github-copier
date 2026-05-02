@@ -19,7 +19,17 @@ import (
 //	go build -ldflags "-X main.version=v1.0.0"
 //
 // When not set (local dev builds), it defaults to "dev".
+// Cloud Run: pass APP_VERSION in --set-env-vars as a runtime fallback since
+// --set-build-env-vars does not automatically reach Docker ARG values.
 var version = "dev"
+
+func init() {
+	if version == "dev" {
+		if v := os.Getenv("APP_VERSION"); v != "" {
+			version = v
+		}
+	}
+}
 
 func main() {
 	// Parse command line flags

@@ -912,7 +912,7 @@ function updateTBLastWH(iso){if(!iso)return;var el=$('tbLastWH');el.hidden=false
 
 /* Heartbeat (#6) */
 var _connected=true;
-function startHeartbeat(){if(!COP_ORIGIN)return;setInterval(function(){fetch(appURL('/operator/api/status')).then(function(r){if(!_connected){_connected=true;$('tbConn').hidden=true;toast('Reconnected to server','info');}}).catch(function(){if(_connected){_connected=false;$('tbConn').hidden=false;toast('Connection lost to server','error');}});},60000);}
+function startHeartbeat(){if(!COP_ORIGIN)return;setInterval(function(){fetch(appURL('/operator/api/status')).then(function(r){if(!_connected){_connected=true;$('tbConn').hidden=true;toast('Reconnected to server','info');}}).catch(function(e){console.error('[heartbeat] fetch failed:',e);if(_connected){_connected=false;$('tbConn').hidden=false;toast('Connection lost to server','error');}});},60000);}
 
 /* Server status */
 function checkServerStatus(){
