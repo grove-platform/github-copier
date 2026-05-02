@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.4.3] - 2026-05-02
+
 ### Fixed
 
 - **"Disconnected" chip always visible** — `.chip{display:inline-flex}` in the author stylesheet overrode the browser's `[hidden]{display:none}` UA rule; added `[hidden]{display:none!important}` globally so all hidden elements are correctly concealed.
