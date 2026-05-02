@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.4.0] - 2026-05-02
+
 ### Added
 
 - **Operator UI — comprehensive writer + operator dashboard** at `/operator/` (`OPERATOR_UI_ENABLED=true`). Five tabs (Overview, Webhooks, Audit, Workflows, System), sticky status bar, dark mode, keyboard shortcuts, shareable URLs, and a writer/operator mode toggle persisted to localStorage.
