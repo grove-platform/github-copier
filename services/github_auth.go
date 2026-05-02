@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -124,7 +125,7 @@ func getWebhookSecretFromSecretManager(ctx context.Context, secretName string) (
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrSecretAccess, err)
 	}
-	return string(result.Payload.Data), nil
+	return strings.TrimSpace(string(result.Payload.Data)), nil
 }
 
 // LoadWebhookSecret loads the webhook secret from Secret Manager or environment variable
@@ -200,7 +201,7 @@ func getSecretFromSecretManager(ctx context.Context, secretName, envVarName stri
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrSecretAccess, err)
 	}
-	return string(result.Payload.Data), nil
+	return strings.TrimSpace(string(result.Payload.Data)), nil
 }
 
 // getInstallationAccessToken exchanges a JWT for a GitHub App installation access token.
