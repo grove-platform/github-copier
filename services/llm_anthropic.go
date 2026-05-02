@@ -48,7 +48,7 @@ func newAnthropicClient(baseURL, model, apiKey string) *anthropicClient {
 	return &anthropicClient{
 		baseURL: strings.TrimSuffix(baseURL, "/"),
 		model:   model,
-		apiKey:  apiKey,
+		apiKey:  strings.TrimSpace(apiKey),
 		http:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
