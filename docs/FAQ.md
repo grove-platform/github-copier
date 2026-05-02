@@ -30,6 +30,48 @@ The GitHub copier is a GitHub app that automatically copies code examples and fi
 - Health and metrics endpoints
 - Slack notifications
 - Dry-run mode for testing
+- **[Operator UI](../README.md#operator-ui)** — Web dashboard at `/operator/` for replay, audit browsing, workflow inspection, and AI-assisted rule generation
+
+## Operator UI
+
+### What is the operator UI?
+
+A web dashboard served from `/operator/` when `OPERATOR_UI_ENABLED=true`. Five tabs:
+
+- **Overview** — live metrics, recent activity, health of dependent services
+- **Webhooks** — recent webhook traces with filter/search and one-click replay
+- **Audit** — searchable audit event history with a per-event drawer (trace + logs + replay)
+- **Workflows** — browse the loaded copier config; test path matches with the built-in file match tester
+- **System** — deployment metadata, AI settings, release tagging
+
+### Who can access the operator UI?
+
+Anyone with a GitHub PAT that has access to `OPERATOR_AUTH_REPO`. The user's permission on that repo determines their UI role:
+
+- `admin` / `maintain` → **operator**: full access including replay, release, AI settings
+- `write` / `triage` / `read` → **writer**: view audit, workflows, recent copies, run the AI rule suggester and file match tester, but no replay / release
+- No access → 401 Unauthorized
+
+`write` is deliberately mapped to **writer** (not operator) so typical docs contributors can't replay deliveries or cut releases just by having repo write access. Operator capability requires an explicit `admin` / `maintain` grant.
+
+### How does the AI rule suggester work?
+
+Paste a source file path and the target file path you want; optionally name the target repo. The server sends the pair plus a structured prompt to the configured LLM, parses the returned JSON, and runs the generated rule through the in-process pattern matcher to verify it actually produces your target from your source. If it doesn't match, the UI shows a "not verified" warning next to the YAML so you can review before copying it into your config.
+
+Two providers are supported:
+
+- **Anthropic** (default in Cloud Run) — calls the hosted Messages API. In this repo's deploy it routes through the Grove Foundry APIM gateway so no infrastructure needs to be stood up.
+- **Ollama** (local dev) — runs against a local model server. The UI can pull models, switch the active one, and delete models without a redeploy.
+
+To cap cost, the suggester is rate-limited to 30 requests/hour per authenticated user.
+
+### The AI settings panel says "not connected" — how do I fix it?
+
+Check the banner at startup — it prints the active `AI Provider`, `AI Model`, and `AI URL`. Then:
+
+- **Anthropic**: make sure `ANTHROPIC_API_KEY` (local) or `ANTHROPIC_API_KEY_SECRET_NAME` (Cloud Run) is set. In Cloud Run, the runtime service account also needs `roles/secretmanager.secretAccessor` on the secret.
+- **Ollama**: confirm `ollama serve` is running on the host at `LLM_BASE_URL` (default `http://localhost:11434`) and that you've pulled a model.
+- Use [`cmd/test-llm`](../cmd/test-llm/README.md) to exercise the full path outside the UI — it reports Ping, ListModels, and a real GenerateJSON call.
 
 ## Configuration
 

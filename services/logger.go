@@ -208,12 +208,14 @@ func LogCritical(message string, args ...any) {
 func LogInfoCtx(ctx context.Context, message string, fields map[string]interface{}) {
 	slog.InfoContext(ctx, message, mapToAttrs(fields)...)
 	logToGCP(slog.LevelInfo, message, mapToAttrs(fields)...)
+	appendToCtxBuffer(ctx, "info", message, fieldsToAny(fields))
 }
 
 // LogWarningCtx writes a warning-level log with context.
 func LogWarningCtx(ctx context.Context, message string, fields map[string]interface{}) {
 	slog.WarnContext(ctx, message, mapToAttrs(fields)...)
 	logToGCP(slog.LevelWarn, message, mapToAttrs(fields)...)
+	appendToCtxBuffer(ctx, "warn", message, fieldsToAny(fields))
 }
 
 // LogErrorCtx writes an error-level log with context and an optional error.
@@ -224,6 +226,22 @@ func LogErrorCtx(ctx context.Context, message string, err error, fields map[stri
 	}
 	slog.ErrorContext(ctx, message, attrs...)
 	logToGCP(slog.LevelError, message, attrs...)
+	f := fieldsToAny(fields)
+	if err != nil {
+		f["error"] = err.Error()
+	}
+	appendToCtxBuffer(ctx, "error", message, f)
+}
+
+func fieldsToAny(fields map[string]interface{}) map[string]any {
+	if fields == nil {
+		return nil
+	}
+	out := make(map[string]any, len(fields))
+	for k, v := range fields {
+		out[k] = v
+	}
+	return out
 }
 
 // LogWebhookOperation logs webhook-related operations.

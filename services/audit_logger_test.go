@@ -173,6 +173,18 @@ func TestNoOpAuditLogger_GetStatsByRule(t *testing.T) {
 	}
 }
 
+func TestNoOpAuditLogger_QueryAuditEvents(t *testing.T) {
+	ctx := context.Background()
+	logger := &NoOpAuditLogger{}
+	got, err := logger.QueryAuditEvents(ctx, AuditListQuery{Limit: 10, EventType: string(AuditEventCopy)})
+	if err != nil {
+		t.Fatalf("QueryAuditEvents: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected empty slice, got %d events", len(got))
+	}
+}
+
 func TestNoOpAuditLogger_GetDailyVolume(t *testing.T) {
 	logger := &NoOpAuditLogger{}
 	ctx := context.Background()

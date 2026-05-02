@@ -63,6 +63,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Anthropic API key is only needed when the operator UI's AI suggester uses
+	// the anthropic provider. Failure to load is non-fatal — the UI will show
+	// "not configured" and writers can still use every other feature.
+	if config.OperatorUIEnabled && config.LLMProvider == "anthropic" {
+		if err := services.LoadAnthropicAPIKey(ctx, config); err != nil {
+			fmt.Printf("⚠️  Anthropic API key not loaded: %v (AI suggester will be disabled)\n", err)
+		}
+	}
+
 	// Override dry-run from command line
 	if dryRun {
 		config.DryRun = true
@@ -136,13 +145,33 @@ func printBanner(config *configs.Config, container *services.ServiceContainer) {
 	fmt.Printf("║  Version:      %-48s║\n", version)
 	fmt.Printf("║  Port:         %-48s║\n", config.Port)
 	fmt.Printf("║  Webhook Path: %-48s║\n", config.WebserverPath)
-	fmt.Printf("║  Config File:  %-48s║\n", config.EffectiveConfigFile())
+	fmt.Printf("║  Config File:  %-48s║\n", truncMiddle(config.EffectiveConfigFile(), 48))
 	fmt.Printf("║  Dry Run:      %-48v║\n", config.DryRun)
 	fmt.Printf("║  Audit Log:    %-48v║\n", config.AuditEnabled)
 	fmt.Printf("║  Metrics:      %-48v║\n", config.MetricsEnabled)
 	fmt.Printf("║  Slack:        %-48v║\n", config.SlackEnabled)
+	fmt.Printf("║  Operator UI:  %-48v║\n", config.OperatorUIEnabled)
+	if config.OperatorUIEnabled {
+		fmt.Printf("║    Auth Repo:  %-48s║\n", truncMiddle(config.OperatorAuthRepo, 48))
+		fmt.Printf("║    AI Provider:%-48s║\n", truncMiddle(config.LLMProvider, 48))
+		fmt.Printf("║    AI Model:   %-48s║\n", truncMiddle(config.LLMModel, 48))
+		fmt.Printf("║    AI URL:     %-48s║\n", truncMiddle(config.LLMBaseURL, 48))
+	}
 	fmt.Println("╚════════════════════════════════════════════════════════════════╝")
 	fmt.Println()
+}
+
+// truncMiddle shortens s to max bytes, replacing the middle with "..." when
+// too long. Uses ASCII so Go's byte-count-based %-Ns padding stays aligned.
+func truncMiddle(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max < 6 {
+		return s[:max]
+	}
+	keep := (max - 3) / 2
+	return s[:keep] + "..." + s[len(s)-(max-3-keep):]
 }
 
 func validateConfiguration(container *services.ServiceContainer) error {
@@ -155,24 +184,22 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 	// Create HTTP handler with all routes
 	mux := http.NewServeMux()
 
-	// Webhook endpoint
-	mux.HandleFunc(config.WebserverPath, func(w http.ResponseWriter, r *http.Request) {
-		handleWebhook(w, r, config, container)
-	})
-
-	// Liveness probe — lightweight, always 200 if process is running
+	// Register built-in paths before the configurable webhook route so a mis-set
+	// WEBSERVER_PATH can never shadow /health, /ready, /metrics, /config, or /operator.
 	mux.HandleFunc("/health", services.HealthHandler(container.StartTime, version))
-
-	// Readiness probe — checks GitHub auth, MongoDB connectivity
 	mux.HandleFunc("/ready", services.ReadinessHandler(container))
-
-	// Metrics endpoint (if enabled)
 	if config.MetricsEnabled {
 		mux.HandleFunc("/metrics", services.MetricsHandler(container.MetricsCollector, container.FileStateService))
 	}
-
-	// Config diagnostic endpoint — shows resolved config with secrets redacted
 	mux.HandleFunc("/config", services.ConfigDiagnosticHandler(container, version))
+	if config.OperatorUIEnabled {
+		services.RegisterOperatorRoutes(mux, config, container, version)
+	}
+
+	// GitHub webhook (configurable path, typically /events)
+	mux.HandleFunc(config.WebserverPath, func(w http.ResponseWriter, r *http.Request) {
+		handleWebhook(w, r, config, container)
+	})
 
 	// Info endpoint
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -188,6 +215,9 @@ func startWebServer(config *configs.Config, container *services.ServiceContainer
 		_, _ = fmt.Fprintf(w, "Config diagnostic: /config\n")
 		if config.MetricsEnabled {
 			_, _ = fmt.Fprintf(w, "Metrics: /metrics\n")
+		}
+		if config.OperatorUIEnabled {
+			_, _ = fmt.Fprintf(w, "Operator UI: /operator/ (authenticate with a GitHub PAT; role from %s)\n", config.OperatorAuthRepo)
 		}
 	})
 

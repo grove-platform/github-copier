@@ -14,28 +14,32 @@ import (
 type AuditEventType string
 
 const (
-	AuditEventCopy        AuditEventType = "copy"
-	AuditEventDeprecation AuditEventType = "deprecation"
-	AuditEventError       AuditEventType = "error"
+	AuditEventCopy         AuditEventType = "copy"
+	AuditEventDeprecation  AuditEventType = "deprecation"
+	AuditEventError        AuditEventType = "error"
+	AuditEventConfigChange AuditEventType = "config_change"
 )
 
 // AuditEvent represents an audit log entry
 type AuditEvent struct {
-	ID             string         `bson:"_id,omitempty"`
-	Timestamp      time.Time      `bson:"timestamp"`
-	EventType      AuditEventType `bson:"event_type"`
-	RuleName       string         `bson:"rule_name,omitempty"`
-	SourceRepo     string         `bson:"source_repo"`
-	SourcePath     string         `bson:"source_path"`
-	TargetRepo     string         `bson:"target_repo,omitempty"`
-	TargetPath     string         `bson:"target_path,omitempty"`
-	CommitSHA      string         `bson:"commit_sha,omitempty"`
-	PRNumber       int            `bson:"pr_number,omitempty"`
-	Success        bool           `bson:"success"`
-	ErrorMessage   string         `bson:"error_message,omitempty"`
-	DurationMs     int64          `bson:"duration_ms,omitempty"`
-	FileSize       int64          `bson:"file_size,omitempty"`
-	AdditionalData map[string]any `bson:"additional_data,omitempty"`
+	ID           string         `bson:"_id,omitempty" json:"id,omitempty"`
+	Timestamp    time.Time      `bson:"timestamp" json:"timestamp"`
+	EventType    AuditEventType `bson:"event_type" json:"event_type"`
+	RuleName     string         `bson:"rule_name,omitempty" json:"rule_name,omitempty"`
+	SourceRepo   string         `bson:"source_repo" json:"source_repo"`
+	SourcePath   string         `bson:"source_path" json:"source_path"`
+	TargetRepo   string         `bson:"target_repo,omitempty" json:"target_repo,omitempty"`
+	TargetPath   string         `bson:"target_path,omitempty" json:"target_path,omitempty"`
+	CommitSHA    string         `bson:"commit_sha,omitempty" json:"commit_sha,omitempty"`
+	PRNumber     int            `bson:"pr_number,omitempty" json:"pr_number,omitempty"`
+	Success      bool           `bson:"success" json:"success"`
+	ErrorMessage string         `bson:"error_message,omitempty" json:"error_message,omitempty"`
+	DurationMs   int64          `bson:"duration_ms,omitempty" json:"duration_ms,omitempty"`
+	FileSize     int64          `bson:"file_size,omitempty" json:"file_size,omitempty"`
+	// Actor identifies the GitHub login responsible for an operator-initiated
+	// event (e.g. an LLM settings change). Empty for webhook-driven copies.
+	Actor          string         `bson:"actor,omitempty" json:"actor,omitempty"`
+	AdditionalData map[string]any `bson:"additional_data,omitempty" json:"additional_data,omitempty"`
 }
 
 // AuditLogger handles audit logging to MongoDB
@@ -43,30 +47,46 @@ type AuditLogger interface {
 	LogCopyEvent(ctx context.Context, event *AuditEvent) error
 	LogDeprecationEvent(ctx context.Context, event *AuditEvent) error
 	LogErrorEvent(ctx context.Context, event *AuditEvent) error
+	// LogConfigChangeEvent records an operator-initiated configuration change
+	// (e.g. LLM base URL or active model). Used for after-the-fact detection
+	// of suspicious changes — the event captures who, what, and old→new value.
+	LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error
 	GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error)
 	GetFailedEvents(ctx context.Context, limit int) ([]AuditEvent, error)
 	GetEventsByRule(ctx context.Context, ruleName string, limit int) ([]AuditEvent, error)
 	GetStatsByRule(ctx context.Context) (map[string]RuleStats, error)
 	GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error)
+	QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error)
 	Ping(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
+// AuditListQuery filters audit rows for operator dashboards and APIs.
+type AuditListQuery struct {
+	Limit      int
+	EventType  string     // empty = any; otherwise copy | deprecation | error
+	Success    *bool      // nil = any
+	RuleName   string     // exact match when non-empty
+	PRNumber   *int       // nil = any; exact match when set
+	PathSearch string     // substring match on source_path OR target_path when non-empty
+	Since      *time.Time // inclusive lower bound on timestamp when set
+}
+
 // RuleStats represents statistics for a specific rule
 type RuleStats struct {
-	RuleName     string  `bson:"_id"`
-	TotalCopies  int     `bson:"total_copies"`
-	SuccessCount int     `bson:"success_count"`
-	FailureCount int     `bson:"failure_count"`
-	AvgDuration  float64 `bson:"avg_duration"`
+	RuleName     string  `bson:"_id" json:"rule_name"`
+	TotalCopies  int     `bson:"total_copies" json:"total_copies"`
+	SuccessCount int     `bson:"success_count" json:"success_count"`
+	FailureCount int     `bson:"failure_count" json:"failure_count"`
+	AvgDuration  float64 `bson:"avg_duration" json:"avg_duration_ms"`
 }
 
 // DailyStats represents daily copy volume statistics
 type DailyStats struct {
-	Date         string `bson:"_id"`
-	TotalCopies  int    `bson:"total_copies"`
-	SuccessCount int    `bson:"success_count"`
-	FailureCount int    `bson:"failure_count"`
+	Date         string `bson:"_id" json:"date"`
+	TotalCopies  int    `bson:"total_copies" json:"total_copies"`
+	SuccessCount int    `bson:"success_count" json:"success_count"`
+	FailureCount int    `bson:"failure_count" json:"failure_count"`
 }
 
 // MongoAuditLogger implements AuditLogger using MongoDB
@@ -92,7 +112,10 @@ func NewMongoAuditLogger(ctx context.Context, mongoURI, database, collection str
 		SetConnectTimeout(5 * time.Second).
 		SetTimeout(10 * time.Second).
 		SetMaxPoolSize(10).
-		SetRetryWrites(true)
+		SetRetryWrites(true).
+		SetBSONOptions(&options.BSONOptions{
+			ObjectIDAsHexString: true,
+		})
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MongoDB: %w", err)
@@ -168,7 +191,59 @@ func (mal *MongoAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEven
 	return err
 }
 
-// GetRecentEvents retrieves recent audit events
+// LogConfigChangeEvent logs an operator-initiated configuration change.
+func (mal *MongoAuditLogger) LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error {
+	event.EventType = AuditEventConfigChange
+	event.Timestamp = time.Now()
+	_, err := mal.collection.InsertOne(ctx, event)
+	return err
+}
+
+// QueryAuditEvents retrieves audit events matching the given filter criteria.
+func (mal *MongoAuditLogger) QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error) {
+	limit := q.Limit
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	filter := bson.M{}
+	if q.EventType != "" {
+		filter["event_type"] = AuditEventType(q.EventType)
+	}
+	if q.Success != nil {
+		filter["success"] = *q.Success
+	}
+	if q.RuleName != "" {
+		filter["rule_name"] = q.RuleName
+	}
+	if q.PRNumber != nil {
+		filter["pr_number"] = *q.PRNumber
+	}
+	if q.PathSearch != "" {
+		filter["$or"] = bson.A{
+			bson.M{"source_path": bson.M{"$regex": q.PathSearch, "$options": "i"}},
+			bson.M{"target_path": bson.M{"$regex": q.PathSearch, "$options": "i"}},
+		}
+	}
+	if q.Since != nil {
+		filter["timestamp"] = bson.M{"$gte": *q.Since}
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(int64(limit))
+	cursor, err := mal.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = cursor.Close(ctx) }()
+
+	var events []AuditEvent
+	if err := cursor.All(ctx, &events); err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 func (mal *MongoAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
 	opts := options.Find().SetSort(bson.D{{Key: "timestamp", Value: -1}}).SetLimit(int64(limit))
 	cursor, err := mal.collection.Find(ctx, bson.M{}, opts)
@@ -303,6 +378,9 @@ func (nal *NoOpAuditLogger) LogDeprecationEvent(ctx context.Context, event *Audi
 	return nil
 }
 func (nal *NoOpAuditLogger) LogErrorEvent(ctx context.Context, event *AuditEvent) error { return nil }
+func (nal *NoOpAuditLogger) LogConfigChangeEvent(ctx context.Context, event *AuditEvent) error {
+	return nil
+}
 func (nal *NoOpAuditLogger) GetRecentEvents(ctx context.Context, limit int) ([]AuditEvent, error) {
 	return []AuditEvent{}, nil
 }
@@ -317,6 +395,9 @@ func (nal *NoOpAuditLogger) GetStatsByRule(ctx context.Context) (map[string]Rule
 }
 func (nal *NoOpAuditLogger) GetDailyVolume(ctx context.Context, days int) ([]DailyStats, error) {
 	return []DailyStats{}, nil
+}
+func (nal *NoOpAuditLogger) QueryAuditEvents(ctx context.Context, q AuditListQuery) ([]AuditEvent, error) {
+	return []AuditEvent{}, nil
 }
 func (nal *NoOpAuditLogger) Ping(ctx context.Context) error  { return nil }
 func (nal *NoOpAuditLogger) Close(ctx context.Context) error { return nil }

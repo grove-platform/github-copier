@@ -164,6 +164,22 @@ echo -n "mongodb+srv://user:pass@cluster.mongodb.net/dbname" | \
   --replication-policy="automatic"
 ```
 
+#### 4. Anthropic API Key (Optional - for the AI rule suggester)
+
+Required only when the operator UI is enabled and `LLM_PROVIDER=anthropic` (the default in the committed CI deploy). Skip if you're using Ollama or don't plan to use the AI rule suggester.
+
+```bash
+# For the Grove Foundry APIM gateway, the value is the gateway key you were
+# issued — not a raw Anthropic sk-... key. The app sends it as both the
+# x-api-key (Anthropic) and api-key (APIM) header, so one key works either way.
+echo -n "$GATEWAY_KEY" | \
+  gcloud secrets create anthropic-api-key \
+  --data-file=- \
+  --replication-policy="automatic"
+```
+
+The env-var that points at this secret is `ANTHROPIC_API_KEY_SECRET_NAME=anthropic-api-key` (already set in `.github/workflows/ci.yml` and `env-cloudrun.yaml`). Missing key is non-fatal — the operator UI shows "not configured" and every other feature still works.
+
 ### Grant Cloud Run Access
 
 ```bash
@@ -183,6 +199,11 @@ gcloud secrets add-iam-policy-binding webhook-secret \
   --role="roles/secretmanager.secretAccessor"
 
 gcloud secrets add-iam-policy-binding mongo-uri \
+  --member="serviceAccount:${SERVICE_ACCOUNT}" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Only if using the AI rule suggester with LLM_PROVIDER=anthropic
+gcloud secrets add-iam-policy-binding anthropic-api-key \
   --member="serviceAccount:${SERVICE_ACCOUNT}" \
   --role="roles/secretmanager.secretAccessor"
 ```
@@ -322,11 +343,12 @@ services.LoadMongoURI(config)       // Loads from Secret Manager
 
 ### Pre-Deployment Checklist
 
-- [ ] Secrets created in Secret Manager
-- [ ] IAM permissions granted to Cloud Run service account
+- [ ] Secrets created in Secret Manager (`CODE_COPIER_PEM`, `webhook-secret`, `mongo-uri`, and `anthropic-api-key` if using the AI rule suggester)
+- [ ] IAM permissions granted to Cloud Run service account on each secret
 - [ ] `env-cloudrun.yaml` created and configured
 - [ ] `env-cloudrun.yaml` in `.gitignore`
 - [ ] `Dockerfile` exists in project root
+- [ ] (Operator UI) `OPERATOR_AUTH_REPO` points at a repo you own and can manage collaborators on — its permission list decides who gets operator vs writer access
 
 ### Deploy to Cloud Run
 
@@ -479,6 +501,16 @@ gcloud run services logs read github-copier --limit=50
 # ❌ "failed to load MongoDB URI"
 # ❌ "webhook signature verification failed"
 ```
+
+### Smoke-Test the Operator UI (if enabled)
+
+Only applicable when `OPERATOR_UI_ENABLED=true`:
+
+1. Open `https://<service-url>/operator/` in a browser.
+2. Generate a GitHub PAT with `repo` scope, paste it into the sign-in prompt.
+3. Confirm the user chip in the header shows your GitHub avatar and the correct role (`operator` if you're `admin`/`maintain` on `OPERATOR_AUTH_REPO`, `writer` if you're `write`/`triage`/`read`).
+4. Click the **System** tab → **AI settings** → **Refresh status**. You should see the provider connected (e.g. "Anthropic connected at https://grove-gateway-prod.azure-api.net/…").
+5. If AI settings shows "unreachable", the `anthropic-api-key` secret wasn't granted to the Cloud Run service account, or the deploy is pointing at a URL the gateway doesn't accept. Check the Cloud Run revision logs for `Anthropic API key not loaded` or a 401/403 from the gateway.
 
 ## Monitoring
 

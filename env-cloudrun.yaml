@@ -33,3 +33,30 @@ COPIER_LOG_NAME: "code-copier-log"
 # Feature Flags
 AUDIT_ENABLED: "true"
 METRICS_ENABLED: "true"
+
+# Operator dashboard at https://<service>/operator/
+# Access is gated by each user's GitHub PAT: they authenticate with their
+# personal token, and their permission on OPERATOR_AUTH_REPO determines role
+# (admin/maintain → operator, write/triage/read → writer).
+OPERATOR_UI_ENABLED: "true"
+OPERATOR_AUTH_REPO: "grove-platform/github-copier"
+OPERATOR_REPO_SLUG: "grove-platform/github-copier"
+#
+# Optional: OPERATOR_RELEASE_GITHUB_TOKEN, OPERATOR_RELEASE_TARGET_BRANCH
+#
+# AI rule suggester — calls Anthropic via the Grove Foundry APIM gateway so
+# Cloud Run can reach it without standing up a model-serving VM. The gateway
+# key is loaded from Secret Manager via ANTHROPIC_API_KEY_SECRET_NAME (create
+# the secret once with `gcloud secrets create anthropic-api-key --data-file=...`).
+# Operators can still switch the active model (haiku / sonnet / opus) from
+# the UI without a redeploy.
+LLM_PROVIDER: "anthropic"
+LLM_BASE_URL: "https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic"
+LLM_MODEL: "claude-haiku-4-5"
+ANTHROPIC_API_KEY_SECRET_NAME: "anthropic-api-key"
+#
+# To use a local Ollama instance instead (e.g. in a dev environment with a
+# reachable Ollama VM), comment out the three lines above and use:
+# LLM_PROVIDER: "ollama"
+# LLM_BASE_URL: "http://ollama.internal:11434"
+# LLM_MODEL: "qwen2.5-coder:7b"
