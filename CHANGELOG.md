@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.4.1] - 2026-05-02
+
 ### Fixed
 
 - **Anthropic API key trailing newline** — secrets loaded from Secret Manager are now trimmed of surrounding whitespace before use, preventing `invalid header field value` errors when the secret was stored with a trailing newline.
