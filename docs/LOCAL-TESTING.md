@@ -343,6 +343,43 @@ AUDIT_DATABASE=code_copier_dev
 AUDIT_COLLECTION=audit_events
 ```
 
+### Optional (for Operator UI + AI rule suggester)
+
+```bash
+# Mount the operator dashboard at http://localhost:8080/operator/
+OPERATOR_UI_ENABLED=true
+OPERATOR_AUTH_REPO=your-org/some-repo     # your GitHub permission here decides your UI role
+OPERATOR_REPO_SLUG=your-org/some-repo     # optional; enables clickable audit-row deep links
+
+# AI rule suggester — pick ONE provider:
+#
+# Option A: Ollama (local, no cloud calls, no API key needed)
+#   1. Install Ollama: https://ollama.com/download
+#   2. Leave LLM_PROVIDER unset — it defaults to ollama with http://localhost:11434
+#   3. From the UI's System → AI settings panel, pull a model (e.g. qwen2.5-coder:7b)
+#
+# Option B: Anthropic via Grove Foundry APIM gateway
+LLM_PROVIDER=anthropic
+LLM_BASE_URL=https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic
+LLM_MODEL=claude-haiku-4-5
+ANTHROPIC_API_KEY=<your-gateway-key>      # never commit this; use a local-only env file
+```
+
+### Testing the Operator UI Locally
+
+1. Start the app with the env vars above. The startup banner will confirm `Operator UI: true` and show the configured auth repo, AI provider, model, and base URL.
+2. Open `http://localhost:8080/operator/` in a browser.
+3. Generate a [GitHub Personal Access Token](https://github.com/settings/tokens) with `repo` scope. Paste it into the sign-in prompt. The UI caches it in `localStorage` so you only paste once.
+4. If you own `OPERATOR_AUTH_REPO`, grant yourself `admin` for the operator role, or `read`/`write` for the writer role — the header chip will show which one you got.
+5. Smoke-test the LLM connection end-to-end with `cmd/test-llm` before hitting the UI:
+
+   ```bash
+   go build -o test-llm ./cmd/test-llm
+   ./test-llm -env .env.test
+   ```
+
+   A successful run pings the provider, lists models, and issues a real rule-suggester prompt. See [cmd/test-llm/README.md](../cmd/test-llm/README.md) for details.
+
 ## Troubleshooting
 
 ### Error: "A JSON web token could not be decoded" / "Failed to configure GitHub permissions"

@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Operator UI — comprehensive writer + operator dashboard** at `/operator/` (`OPERATOR_UI_ENABLED=true`). Five tabs (Overview, Webhooks, Audit, Workflows, System), sticky status bar, dark mode, keyboard shortcuts, shareable URLs, and a writer/operator mode toggle persisted to localStorage.
+- **GitHub PAT authentication** — users sign in with their personal access token; role is derived from their permission on `OPERATOR_AUTH_REPO` (admin/maintain → operator, write/triage/read → writer). Operator actions (replay, release, AI settings) require an explicit admin or maintain grant, since most writers have `write` on the auth repo. Replay additionally enforces read access on the source repo for that specific delivery.
+- **AI rule suggester** — paste a source path and desired target state, receive a suggested workflow rule with self-verification via the in-process `PatternMatcher`. Two providers supported:
+  - **Anthropic (hosted)** — default for Cloud Run. API key loaded from Secret Manager via `ANTHROPIC_API_KEY_SECRET_NAME`. No infra required; operators switch between Haiku / Sonnet / Opus from the UI.
+  - **Ollama (local)** — for dev or self-hosted deployments. UI manages connection, model pulls, deletes, and active-model switching without a redeploy.
+- **Writer-facing features** — workflow browser with per-rule coverage, PR lookup by URL, recent copies feed, file match tester (with clear button and Python-style `(?P<name>)` regex translation for in-browser use), PR timeline, and in-app help overlay.
+- **Per-delivery log viewer** — context-tagged ring buffer captures logs per webhook delivery, surfaced in an audit drawer alongside the trace and outcome summary.
+- **Audit event enrichment** — `processed_ok` traces now include destination repo(s), files matched / uploaded / failed, and commit SHA.
+- **Startup banner** — Operator UI, auth repo, AI model, and AI base URL are now surfaced when the app boots (local and Cloud Run).
+
+### Changed
+
+- **MongoDB audit logging enabled in production** — the Cloud Run deploy previously forced `AUDIT_ENABLED=false`; it is now `true`, aligning with the v0.3.0 "enabled by default" change.
+- **Operator auth hardened** — token-based auth (`OPERATOR_UI_TOKEN`) removed entirely; GitHub PAT is the only supported mechanism. `OPERATOR_UI_ENABLED=true` now requires `OPERATOR_AUTH_REPO` at config load (validated in `validateOperatorAuth`).
+- **`createPullRequest` skipped for empty commits** — `commitFilesToBranch` now returns an `errTreeUnchanged` sentinel so `addFilesViaPR` no longer calls the GitHub PR API with an unchanged tree (previously 422'd).
+- **MongoDB driver v2 ObjectID decoding** — audit reads set `ObjectIDAsHexString: true` to avoid "error decoding key `_id`" on queries.
+
+### Fixed
+
+- **gosec G107 / G704 SSRF findings** — GitHub API URL construction in `services/operator_auth.go` now validates path components against strict RE2-compatible whitelists (`ghUsernameRe`, `ghRepoNameRe`) and escapes them with `url.PathEscape` before request construction; `slack_notifier.go` `#nosec` annotation extended to cover `NewRequestWithContext`.
+- **Keyboard-shortcut overlay wouldn't close** — `.help-bg[hidden]` now wins over the base `display:flex`.
+- **File match tester returned no matches for Java files** — JavaScript `RegExp` does not support Python-style `(?P<name>)` named groups; the tester now rewrites `(?P<` → `(?<` before compilation.
+
+### Security
+
+- **Token auth removed** — the operator UI no longer accepts a shared bearer token; all access is per-user via GitHub PAT with repo-scoped permission checks.
+
 ## [v0.3.1] - 2026-04-30
 
 ### Fixed
@@ -14,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Security
 
-- **Removed accidentally committed secrets and config files** from the repository.
+- **Removed unneeded config files** from the repository.
 
 ## [v0.3.0] - 2026-04-14
 

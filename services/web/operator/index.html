@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F4CB;</text></svg>" />
+  <title>GitHub Copier — Operator</title>
+  <style>
+    :root {
+      --bg:#f6f7f9; --surface:#fff; --surface-alt:#f8fafc; --pre-bg:#f1f5f9;
+      --text:#0f172a; --text-2:#475569; --text-3:#64748b;
+      --border:#e2e8f0; --border-light:#f1f5f9;
+      --blue:#2563eb; --blue-light:#dbeafe;
+      --green:#16a34a; --green-light:#dcfce7;
+      --red:#dc2626; --red-light:#fee2e2;
+      --amber:#d97706; --amber-light:#fef3c7;
+      --topbar-bg:#fff; --topbar-border:#e2e8f0;
+      --hover:rgba(0,0,0,.025); --link:#2563eb;
+      --shadow:0 1px 3px rgba(0,0,0,.06);
+    }
+    [data-theme="dark"] {
+      --bg:#0f172a; --surface:#1e293b; --surface-alt:#1e293b; --pre-bg:#0f172a;
+      --text:#e2e8f0; --text-2:#94a3b8; --text-3:#64748b;
+      --border:#334155; --border-light:#1e293b;
+      --blue:#3b82f6; --blue-light:#1e3a5f;
+      --green:#22c55e; --green-light:#052e16;
+      --red:#ef4444; --red-light:#450a0a;
+      --amber:#f59e0b; --amber-light:#451a03;
+      --topbar-bg:#1e293b; --topbar-border:#334155;
+      --hover:rgba(255,255,255,.03); --link:#60a5fa;
+      --shadow:0 1px 3px rgba(0,0,0,.3);
+      color-scheme: dark;
+    }
+    *,*::before,*::after{box-sizing:border-box;}
+    body{font-family:system-ui,sans-serif;line-height:1.45;color:var(--text);background:var(--bg);margin:0;padding:0;}
+    a{color:var(--link);text-decoration:none;} a:hover{text-decoration:underline;}
+
+    .topbar{position:sticky;top:0;z-index:50;background:var(--topbar-bg);border-bottom:1px solid var(--topbar-border);padding:0.45rem 1.25rem;display:flex;justify-content:space-between;align-items:center;gap:0.75rem;backdrop-filter:blur(8px);}
+    .topbar-left{display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;font-size:0.85rem;}
+    .topbar-left strong{font-size:0.95rem;}
+    .topbar-right{display:flex;align-items:center;gap:0.45rem;}
+    .chip{display:inline-flex;align-items:center;gap:3px;padding:0.15rem 0.5rem;border-radius:9999px;font-size:0.75rem;font-weight:500;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-2);white-space:nowrap;}
+    .chip-ok{background:var(--green-light);color:var(--green);border-color:var(--green);}
+    .chip-err{background:var(--red-light);color:var(--red);border-color:var(--red);}
+    .dot{width:7px;height:7px;border-radius:50%;display:inline-block;}
+    .dot-green{background:var(--green);} .dot-red{background:var(--red);} .dot-gray{background:var(--text-3);}
+    .tb-btn{padding:0.2rem 0.55rem;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text-2);font-size:0.8rem;cursor:pointer;}
+    .tb-btn:hover{background:var(--hover);}
+
+    main{max-width:1200px;margin:0 auto;padding:1rem 1.25rem 3rem;}
+    .banner{background:var(--amber-light);border:1px solid var(--amber);color:var(--amber);padding:0.6rem 0.85rem;border-radius:8px;font-size:0.88rem;margin:0.75rem 1.25rem 0;max-width:1200px;margin-inline:auto;}
+
+    section{background:var(--surface);border-radius:10px;padding:0;margin-bottom:1rem;box-shadow:var(--shadow);overflow:hidden;}
+    .sh{cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1.15rem;user-select:none;border-bottom:1px solid transparent;}
+    .sh:hover{background:var(--hover);}
+    section:not(.collapsed) .sh{border-bottom-color:var(--border-light);}
+    .sh-left{display:flex;align-items:center;gap:0.5rem;}
+    .sh h2{font-size:1rem;margin:0;}
+    .chev::before{content:'\25BE';display:inline-block;transition:transform 0.15s;font-size:0.7rem;color:var(--text-3);width:0.8rem;text-align:center;}
+    .collapsed .chev::before{transform:rotate(-90deg);}
+    .collapsed .sb{display:none;}
+    .sb{padding:0.75rem 1.15rem 1rem;}
+    .badge{font-size:0.72rem;font-weight:600;padding:0.1rem 0.45rem;border-radius:9999px;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-3);}
+    .refreshed{font-size:0.72rem;color:var(--text-3);}
+
+    label{display:block;font-size:0.82rem;color:var(--text-2);margin-bottom:0.3rem;}
+    input[type="password"],input[type="text"]{padding:0.4rem 0.55rem;border:1px solid var(--border);border-radius:6px;font-size:0.9rem;background:var(--surface);color:var(--text);}
+    select{padding:0.4rem 0.5rem;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:0.88rem;}
+    button{padding:0.4rem 0.8rem;border-radius:6px;border:1px solid var(--blue);background:var(--blue);color:#fff;font-size:0.85rem;cursor:pointer;transition:opacity 0.15s;}
+    button:hover:not(:disabled){opacity:0.88;}
+    button:disabled{opacity:0.5;cursor:not-allowed;}
+    button.secondary{background:var(--surface);color:var(--blue);}
+    .row{display:flex;flex-wrap:wrap;gap:0.65rem;align-items:flex-end;margin-top:0.4rem;}
+    .hint{font-size:0.8rem;color:var(--text-3);margin:0.4rem 0 0;}
+    .err{color:var(--red);font-size:0.88rem;margin:0.4rem 0 0;}
+    .mono{font-family:ui-monospace,monospace;font-size:0.78rem;}
+    .small{font-size:0.8rem;}
+    .qchip{padding:0.15rem 0.45rem;border-radius:9999px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text-2);font-size:0.75rem;cursor:pointer;}
+    .qchip:hover{background:var(--blue-light);color:var(--blue);border-color:var(--blue);}
+
+    table{width:100%;border-collapse:collapse;font-size:0.84rem;}
+    th,td{text-align:left;padding:0.4rem 0.35rem;border-bottom:1px solid var(--border-light);vertical-align:top;}
+    th{color:var(--text-3);font-weight:600;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.03em;position:sticky;top:0;background:var(--surface);z-index:1;}
+    tbody tr:hover{background:var(--hover);}
+    .ok{color:var(--green);font-weight:600;}
+    .fail{color:var(--red);font-weight:600;}
+    .warn{color:var(--amber);font-weight:600;}
+    .err-trunc{cursor:pointer;} .err-more{color:var(--link);margin-left:2px;font-size:0.78rem;}
+    tr.clickable{cursor:pointer;}
+    .btn-sm{padding:0.15rem 0.45rem;font-size:0.75rem;border-radius:4px;border:1px solid var(--border);background:var(--surface-alt);color:var(--text-2);cursor:pointer;}
+    .btn-sm:hover:not(:disabled){background:var(--blue-light);color:var(--blue);border-color:var(--blue);}
+    .btn-sm:disabled{opacity:0.4;cursor:not-allowed;}
+
+    pre{background:var(--pre-bg);padding:0.65rem;border-radius:8px;overflow:auto;font-size:0.78rem;max-height:260px;color:var(--text);border:1px solid var(--border-light);}
+    /* Metric groups */
+    .mg-group{margin-top:0.7rem;}
+    .mg-group+.mg-group{margin-top:0.85rem;}
+    .mg-label{font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:0.35rem;padding-left:0.1rem;}
+    .metric-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:0.5rem;}
+    .metric-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:0.5rem 0.65rem;border-left:3px solid var(--border);transition:border-color 0.2s;}
+    .metric-card .mk{font-size:0.66rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.03em;}
+    .metric-card .mv-row{display:flex;align-items:baseline;gap:0.3rem;margin-top:0.15rem;}
+    .metric-card .mv{font-size:1.1rem;font-weight:700;color:var(--text);word-break:break-all;}
+    .metric-card .mv.mv-red{color:var(--red);}
+    .metric-card .delta{font-size:0.68rem;font-weight:500;}
+    .metric-card .delta-up{color:var(--green);}
+    .metric-card .delta-down{color:var(--red);}
+    .metric-card .delta-zero{color:var(--text-3);}
+    .metric-card.mc-ok{border-left-color:var(--green);}
+    .metric-card.mc-warn{border-left-color:var(--amber);}
+    .metric-card.mc-danger{border-left-color:var(--red);}
+    .spark{display:flex;align-items:flex-end;gap:1px;height:18px;margin-top:0.25rem;}
+    .spark-bar{width:4px;border-radius:1px;background:var(--blue);min-height:1px;transition:height 0.15s;opacity:0.55;}
+    .spark-bar:last-child{opacity:1;}
+    .deploy-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.5rem;}
+    .deploy-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:0.45rem 0.65rem;border-left:3px solid var(--border);transition:border-color 0.2s;}
+    .deploy-card.mc-ok{border-left-color:var(--green);}
+    .deploy-card.mc-warn{border-left-color:var(--amber);}
+    .deploy-card.mc-danger{border-left-color:var(--red);}
+    .deploy-card .dk{font-size:0.68rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.03em;}
+    .deploy-card .dv{font-size:0.9rem;font-weight:500;color:var(--text);margin-top:0.08rem;word-break:break-all;}
+    .vol-bar{display:flex;height:13px;border-radius:3px;overflow:hidden;background:var(--border);min-width:50px;max-width:140px;}
+    .vb-ok{background:var(--green);} .vb-fail{background:var(--red);}
+    .status-line{font-size:0.85rem;margin:0.4rem 0 0.15rem;color:var(--text-2);}
+    .http-ok{color:var(--green);font-weight:600;} .http-warn{color:var(--amber);font-weight:600;} .http-err{color:var(--red);font-weight:600;}
+    .toggle-raw{font-size:0.78rem;color:var(--link);cursor:pointer;background:none;border:none;padding:0;margin-top:0.4rem;}
+
+    /* Toast */
+    .toast-box{position:fixed;bottom:1rem;right:1rem;z-index:200;display:flex;flex-direction:column;gap:0.45rem;max-width:380px;pointer-events:none;}
+    .toast{pointer-events:auto;padding:0.55rem 0.85rem;border-radius:8px;font-size:0.84rem;display:flex;align-items:flex-start;gap:0.45rem;animation:toastin 0.2s ease;box-shadow:0 4px 14px rgba(0,0,0,.18);}
+    .toast-error{background:var(--red-light);color:var(--red);border:1px solid var(--red);}
+    .toast-info{background:var(--blue-light);color:var(--blue);border:1px solid var(--blue);}
+    .toast-x{background:none;border:none;color:inherit;cursor:pointer;font-size:1.1rem;line-height:1;padding:0;opacity:0.6;}
+    .toast-x:hover{opacity:1;}
+    @keyframes toastin{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+    /* Drawer */
+    .drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100;}
+    .drawer-panel{position:fixed;top:0;right:0;bottom:0;width:min(440px,90vw);background:var(--surface);z-index:101;box-shadow:-4px 0 20px rgba(0,0,0,.12);display:flex;flex-direction:column;animation:slidein 0.2s ease;}
+    @keyframes slidein{from{transform:translateX(100%);}to{transform:translateX(0);}}
+    .drawer-hd{display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;border-bottom:1px solid var(--border);}
+    .drawer-hd h3{margin:0;font-size:1rem;}
+    .drawer-cx{background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-3);line-height:1;padding:0;}
+    .drawer-bd{flex:1;overflow:auto;padding:0.75rem 1rem;}
+    .detail-tbl{width:100%;border-collapse:collapse;font-size:0.84rem;}
+    .detail-tbl th{text-align:right;padding:0.35rem 0.65rem 0.35rem 0;color:var(--text-3);font-weight:500;white-space:nowrap;width:110px;vertical-align:top;text-transform:none;letter-spacing:0;position:static;}
+    .detail-tbl td{padding:0.35rem 0;word-break:break-all;}
+
+    /* Help overlay */
+    .help-bg{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:150;display:flex;align-items:center;justify-content:center;}
+    .help-bg[hidden]{display:none;}
+    .help-card{background:var(--surface);border-radius:12px;padding:1.25rem 1.5rem;max-width:360px;width:90vw;box-shadow:0 8px 30px rgba(0,0,0,.18);}
+    .help-card h3{margin:0 0 0.75rem;}
+    .help-card table{width:100%;font-size:0.88rem;}
+    .help-card td{padding:0.25rem 0;}
+    .help-card kbd{background:var(--surface-alt);border:1px solid var(--border);border-radius:4px;padding:0.1rem 0.4rem;font-family:ui-monospace,monospace;font-size:0.82rem;}
+
+    /* Empty state */
+    .empty-state{text-align:center;padding:1.5rem 1rem;color:var(--text-3);font-size:0.88rem;}
+    .empty-state .es-icon{font-size:1.6rem;margin-bottom:0.3rem;opacity:0.5;}
+
+    /* Tabs */
+    .tab-bar{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:1rem;overflow-x:auto;}
+    .tab-btn{padding:0.55rem 1.1rem;border:none;background:none;color:var(--text-3);font-size:0.88rem;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;display:inline-flex;align-items:center;gap:0.4rem;transition:color 0.15s,border-color 0.15s;}
+    .tab-btn:hover{color:var(--text);}
+    .tab-btn.tab-active{color:var(--blue);border-bottom-color:var(--blue);}
+    .tab-badge{font-size:0.65rem;font-weight:700;min-width:16px;height:16px;line-height:16px;text-align:center;border-radius:9999px;padding:0 4px;display:none;}
+    .tab-badge.tb-warn{display:inline-block;background:var(--amber-light);color:var(--amber);}
+    .tab-badge.tb-err{display:inline-block;background:var(--red-light);color:var(--red);}
+    .tab-badge.tb-info{display:inline-block;background:var(--blue-light);color:var(--blue);}
+    .tab-panel{display:none;}
+    .tab-panel.tab-visible{display:block;}
+
+    /* Detail badges for trace detail column */
+    .dbadge{display:inline-block;padding:0.08rem 0.35rem;border-radius:4px;font-size:0.72rem;font-weight:500;margin:0 2px;white-space:nowrap;}
+    .dbadge-ok{background:var(--green-light);color:var(--green);}
+    .dbadge-fail{background:var(--red-light);color:var(--red);}
+    .dbadge-neutral{background:var(--surface-alt);border:1px solid var(--border);color:var(--text-2);}
+    .dbadge-target{background:var(--blue-light);color:var(--blue);}
+
+    /* Replay highlight */
+    tr.trace-replay{background:var(--blue-light);}
+    tr.trace-replay:hover{background:var(--blue-light);}
+
+    /* Copy tooltip */
+    .copy-card{cursor:pointer;position:relative;}
+    .copy-card:hover{border-color:var(--blue);}
+    .copy-tip{position:absolute;top:-1.6rem;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:0.15rem 0.45rem;border-radius:4px;font-size:0.7rem;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity 0.2s;}
+    .copy-card.copied .copy-tip{opacity:1;}
+
+    /* Token reveal */
+    .token-wrap{position:relative;display:flex;flex:1;min-width:200px;max-width:28rem;}
+    .token-wrap input{flex:1;padding-right:2.2rem;}
+    .token-eye{position:absolute;right:0.45rem;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--text-3);font-size:1rem;padding:0;line-height:1;}
+
+    /* Workflow cards */
+    .wf-card{background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;padding:0.75rem 0.9rem;border-left:3px solid var(--blue);}
+    .wf-card+.wf-card{margin-top:0.65rem;}
+    .wf-name{font-size:0.95rem;font-weight:600;color:var(--text);margin-bottom:0.4rem;}
+    .wf-flow{display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.35rem;font-size:0.84rem;}
+    .wf-repo{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:0.2rem 0.55rem;font-family:ui-monospace,monospace;font-size:0.8rem;}
+    .wf-arrow{color:var(--text-3);font-size:0.9rem;}
+    .wf-meta{display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.3rem;}
+    .wf-tag{display:inline-block;padding:0.1rem 0.4rem;border-radius:4px;font-size:0.72rem;font-weight:500;background:var(--surface);border:1px solid var(--border);color:var(--text-2);}
+    .wf-tag-pr{background:var(--blue-light);color:var(--blue);border-color:var(--blue);}
+    .wf-tag-direct{background:var(--green-light);color:var(--green);border-color:var(--green);}
+    .wf-transforms{margin-top:0.35rem;font-size:0.8rem;color:var(--text-2);}
+
+    /* Recent copies feed */
+    .copy-feed{display:flex;flex-direction:column;gap:0.5rem;margin-top:0.5rem;}
+    .copy-item{background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;padding:0.55rem 0.75rem;display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem;border-left:3px solid var(--green);}
+    .copy-item.copy-fail{border-left-color:var(--red);}
+    .copy-paths{flex:1;min-width:0;}
+    .copy-path{font-family:ui-monospace,monospace;font-size:0.82rem;word-break:break-all;}
+    .copy-path-arrow{color:var(--text-3);margin:0 0.3rem;font-size:0.75rem;}
+    .copy-right{text-align:right;white-space:nowrap;font-size:0.78rem;color:var(--text-3);}
+
+    /* PR search bar */
+    .pr-search{display:flex;gap:0.5rem;align-items:flex-end;margin-bottom:0.65rem;padding:0.55rem 0.75rem;background:var(--surface-alt);border:1px solid var(--border);border-radius:8px;}
+    .pr-search input{flex:1;max-width:14rem;}
+
+    /* AI settings panel */
+    .ai-status-line{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.7rem;border-radius:6px;background:var(--surface-alt);border:1px solid var(--border);margin-bottom:0.6rem;}
+    .ai-status-line.ai-ok{background:var(--green-light);border-color:var(--green);}
+    .ai-status-line.ai-fail{background:var(--red-light);border-color:var(--red);}
+    .ai-status-line .dot{flex-shrink:0;}
+    .ai-model-list{display:flex;flex-direction:column;gap:0.35rem;margin-top:0.5rem;}
+    .ai-model-row{display:flex;align-items:center;gap:0.5rem;padding:0.4rem 0.6rem;background:var(--surface-alt);border:1px solid var(--border);border-radius:6px;font-size:0.85rem;}
+    .ai-model-row.active{border-color:var(--blue);background:var(--blue-light);}
+    .ai-model-name{flex:1;font-family:ui-monospace,monospace;font-size:0.8rem;word-break:break-all;}
+    .ai-model-size{font-size:0.72rem;color:var(--text-3);white-space:nowrap;}
+    .ai-progress{margin-top:0.5rem;padding:0.5rem 0.7rem;border-radius:6px;background:var(--surface-alt);border:1px solid var(--border);font-size:0.82rem;}
+    .ai-progress-bar{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:0.3rem;}
+    .ai-progress-fill{height:100%;background:var(--blue);transition:width 0.2s;}
+    .ai-progress-status{display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-3);margin-top:0.25rem;}
+    .ai-install-steps{font-size:0.82rem;color:var(--text-2);line-height:1.6;margin-top:0.4rem;}
+    .ai-install-steps ol{margin:0.3rem 0;padding-left:1.4rem;}
+    .ai-install-steps code{background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:0.08rem 0.3rem;font-size:0.78rem;}
+
+    /* AI rule suggester */
+    .ai-badge{display:inline-block;font-size:0.65rem;font-weight:700;padding:0.1rem 0.4rem;border-radius:3px;background:linear-gradient(135deg,#8b5cf6,#6366f1);color:#fff;letter-spacing:.05em;margin-left:0.4rem;vertical-align:middle;}
+    .ai-result{margin-top:0.65rem;padding:0.75rem;border:1px solid var(--border);border-radius:8px;background:var(--surface-alt);}
+    .ai-verify{display:inline-flex;align-items:center;gap:4px;padding:0.15rem 0.5rem;border-radius:9999px;font-size:0.75rem;font-weight:600;margin-bottom:0.5rem;}
+    .ai-verify-ok{background:var(--green-light);color:var(--green);border:1px solid var(--green);}
+    .ai-verify-fail{background:var(--red-light);color:var(--red);border:1px solid var(--red);}
+    .ai-yaml{background:var(--pre-bg);border:1px solid var(--border-light);border-radius:6px;padding:0.6rem;font-family:ui-monospace,monospace;font-size:0.78rem;color:var(--text);white-space:pre;overflow:auto;max-height:260px;margin:0.3rem 0;}
+    .ai-explain{font-size:0.84rem;color:var(--text-2);margin-top:0.4rem;line-height:1.5;}
+    .ai-disabled{padding:0.75rem;color:var(--text-3);font-size:0.85rem;background:var(--surface-alt);border:1px dashed var(--border);border-radius:6px;}
+
+    /* File match tester */
+    .fmt-result{margin-top:0.5rem;padding:0.5rem 0.7rem;border-radius:8px;font-size:0.84rem;}
+    .fmt-match{background:var(--green-light);border:1px solid var(--green);color:var(--green);}
+    .fmt-no{background:var(--surface-alt);border:1px solid var(--border);color:var(--text-3);}
+    .fmt-target{font-family:ui-monospace,monospace;font-size:0.8rem;margin-top:0.15rem;}
+    .wf-card.wf-match{border-left-color:var(--green);background:color-mix(in srgb,var(--green-light) 30%,var(--surface-alt));}
+    .wf-card.wf-nomatch{opacity:0.45;}
+
+    /* Timeline */
+    .timeline{margin-top:0.5rem;}
+    .tl-item{display:flex;gap:0.65rem;padding:0.45rem 0;border-bottom:1px solid var(--border-light);font-size:0.84rem;}
+    .tl-dot{width:10px;height:10px;border-radius:50%;margin-top:0.25rem;flex-shrink:0;}
+    .tl-dot-ok{background:var(--green);} .tl-dot-fail{background:var(--red);} .tl-dot-info{background:var(--blue);} .tl-dot-warn{background:var(--amber);}
+    .tl-body{flex:1;min-width:0;}
+    .tl-title{font-weight:500;} .tl-detail{font-size:0.8rem;color:var(--text-2);margin-top:0.1rem;}
+
+    /* Help content */
+    .help-content{font-size:0.88rem;line-height:1.6;color:var(--text-2);}
+    .help-content h3{font-size:0.95rem;color:var(--text);margin:1rem 0 0.3rem;}
+    .help-content h3:first-child{margin-top:0;}
+    .help-content code{background:var(--surface-alt);border:1px solid var(--border);border-radius:3px;padding:0.1rem 0.3rem;font-size:0.82rem;}
+    .help-content ol,.help-content ul{padding-left:1.4rem;margin:0.3rem 0;}
+    .help-content li{margin:0.2rem 0;}
+
+    /* User avatar */
+    .tb-avatar{width:16px;height:16px;border-radius:50%;vertical-align:middle;}
+    /* Writer role: hide operator-only actions */
+    body.role-writer .operator-only{display:none !important;}
+
+    /* Mode toggle */
+    .mode-toggle{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;font-size:0.78rem;}
+    .mode-toggle button{padding:0.18rem 0.55rem;border:none;background:var(--surface);color:var(--text-3);cursor:pointer;font-size:0.78rem;font-weight:500;transition:all 0.15s;}
+    .mode-toggle button.mode-active{background:var(--blue);color:#fff;}
+    .mode-toggle button:not(.mode-active):hover{background:var(--hover);color:var(--text);}
+    /* Writer mode: hide operator-only tabs */
+    body.writer-mode .tab-btn[data-tab="overview"],
+    body.writer-mode .tab-btn[data-tab="webhooks"],
+    body.writer-mode .tab-btn[data-tab="system"]{display:none;}
+
+    /* Log viewer */
+    .log-entry{padding:0.25rem 0;border-bottom:1px solid var(--border-light);font-size:0.8rem;font-family:ui-monospace,monospace;display:flex;gap:0.5rem;}
+    .log-entry .log-time{color:var(--text-3);white-space:nowrap;min-width:5rem;}
+    .log-entry .log-level{font-weight:600;min-width:3.5rem;text-transform:uppercase;}
+    .log-entry .log-level-info{color:var(--blue);}
+    .log-entry .log-level-warn{color:var(--amber);}
+    .log-entry .log-level-error{color:var(--red);}
+    .log-entry .log-msg{flex:1;word-break:break-all;}
+    .log-fields{color:var(--text-3);font-size:0.75rem;margin-left:8.5rem;}
+
+    /* Responsive: hide less-critical audit columns on narrow screens */
+    @media(max-width:900px){
+      .audit-hide-narrow{display:none;}
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <strong>GitHub Copier</strong>
+    <span class="chip" id="tbVersion">...</span>
+    <span class="chip" id="tbUptime" hidden></span>
+    <span class="chip" id="tbMongo" hidden></span>
+    <span class="chip" id="tbLastWH" hidden></span>
+    <span class="chip chip-err" id="tbConn" hidden><span class="dot dot-red"></span> Disconnected</span>
+    <span class="chip" id="tbUser" hidden></span>
+  </div>
+  <div class="topbar-right">
+    <div class="mode-toggle" id="modeToggle"><button data-mode="writer" title="Writer view: Workflows + Audit">Writer</button><button data-mode="operator" title="Operator view: all tabs">Operator</button></div>
+    <button class="tb-btn" id="timeToggle" title="Toggle absolute/relative times (T)">REL</button>
+    <button class="tb-btn" id="refreshAll" title="Refresh all sections (R)">&#8635; Refresh all</button>
+    <button class="tb-btn" id="darkToggle" title="Toggle dark mode (D)">&#9788;</button>
+    <button class="tb-btn" id="helpBtn" title="Keyboard shortcuts (?)">?</button>
+  </div>
+</div>
+
+<div id="serverStatusBanner" class="banner" hidden></div>
+
+<main>
+
+  <section>
+    <div class="sb" style="padding-top:0.85rem">
+      <label for="token"><strong>GitHub Personal Access Token</strong> (read access to <code id="authRepoLabel">the configured auth repo</code>)</label>
+      <div class="row">
+        <div class="token-wrap"><input id="token" type="password" autocomplete="off" placeholder="ghp_... or github_pat_..." /><button type="button" class="token-eye" id="tokenEye" title="Show/hide token">&#x1F441;</button></div>
+        <button type="button" id="saveToken">Save in session</button>
+        <button type="button" class="secondary" id="clearToken">Clear</button>
+      </div>
+      <p class="hint">Stored in <code>sessionStorage</code> (this tab only). Your permission on the auth repo determines your role (operator or writer).</p>
+    </div>
+  </section>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab-btn tab-active" data-tab="overview" onclick="switchTab('overview')">Overview<span class="tab-badge" id="tabBadgeOverview"></span></button>
+    <button class="tab-btn" data-tab="webhooks" onclick="switchTab('webhooks')">Webhooks<span class="tab-badge" id="tabBadgeWebhooks"></span></button>
+    <button class="tab-btn" data-tab="audit" onclick="switchTab('audit')">Audit<span class="tab-badge" id="tabBadgeAudit"></span></button>
+    <button class="tab-btn" data-tab="workflows" onclick="switchTab('workflows')">Workflows<span class="tab-badge" id="tabBadgeWorkflows"></span></button>
+    <button class="tab-btn" data-tab="system" onclick="switchTab('system')">System<span class="tab-badge" id="tabBadgeSystem"></span></button>
+  </div>
+
+  <!-- ── Overview tab ── -->
+  <div class="tab-panel tab-visible" data-tab="overview">
+    <section data-section="metrics">
+      <div class="sh" onclick="toggleSection('metrics')">
+        <div class="sh-left"><span class="chev"></span><h2>Live metrics</h2><span class="badge" id="metricsCount"></span></div>
+        <span class="refreshed" id="metricsRefreshed"></span>
+      </div>
+      <div class="sb">
+        <div class="row">
+          <button type="button" id="loadMetricsCards">Refresh</button>
+          <label class="small" style="display:flex;align-items:center;gap:0.3rem;margin:0"><input type="checkbox" id="metricsAuto" /> Auto 10s</label>
+        </div>
+        <p id="metricsCardErr" class="err" hidden></p>
+        <div id="metricsCards" class="metric-grid"></div>
+      </div>
+    </section>
+
+    <section data-section="deployment">
+      <div class="sh" onclick="toggleSection('deployment')"><div class="sh-left"><span class="chev"></span><h2>Deployment</h2></div></div>
+      <div class="sb">
+        <button type="button" id="loadDeploy">Load</button>
+        <p id="deployErr" class="err" hidden></p>
+        <div id="deployCards" class="deploy-grid" hidden></div>
+        <button type="button" class="toggle-raw" id="deployToggleRaw" hidden>Show raw JSON</button>
+        <pre id="deployJson" hidden></pre>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Webhooks tab ── -->
+  <div class="tab-panel" data-tab="webhooks">
+    <section data-section="traces">
+      <div class="sh" onclick="toggleSection('traces')">
+        <div class="sh-left"><span class="chev"></span><h2>Recent webhook activity</h2><span class="badge" id="tracesCount"></span></div>
+        <span class="refreshed" id="tracesRefreshed"></span>
+      </div>
+      <div class="sb">
+        <div class="row">
+          <div><label for="traceLimit">Limit</label><input id="traceLimit" type="text" value="50" style="width:3.5rem" /></div>
+          <div><label for="traceOutcome">Outcome</label><select id="traceOutcome"><option value="">all</option><option value="processed_ok">processed_ok</option><option value="skipped_not_merged_pr">skipped</option><option value="duplicate_delivery">duplicate</option><option value="processing_failed">failed</option></select></div>
+          <div style="flex:1;min-width:120px;max-width:220px"><label for="traceSearch">Search</label><input id="traceSearch" type="text" placeholder="repo, delivery, detail..." style="width:100%" /></div>
+          <button type="button" id="loadTraces">Refresh</button>
+          <label class="small" style="display:flex;align-items:center;gap:0.3rem;margin:0"><input type="checkbox" id="tracesAuto" /> Auto 30s</label>
+        </div>
+        <p id="traceErr" class="err" hidden></p>
+        <div style="overflow:auto;margin-top:0.5rem;max-height:520px">
+          <table><thead><tr><th>Time</th><th>Outcome</th><th>Repo</th><th>PR</th><th>Base</th><th>Event</th><th>Action</th><th>Delivery</th><th>Detail</th><th></th></tr></thead><tbody id="traceBody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section data-section="deliveries">
+      <div class="sh" onclick="toggleSection('deliveries')"><div class="sh-left"><span class="chev"></span><h2>Webhook deliveries (dedup)</h2><span class="badge" id="delCount"></span></div></div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Recent <code>X-GitHub-Delivery</code> IDs. In-memory; resets on restart.</p>
+        <div class="row">
+          <div><label for="delLimit">Limit</label><input id="delLimit" type="text" value="50" style="width:3.5rem" /></div>
+          <button type="button" id="loadDeliveries">Refresh</button>
+        </div>
+        <p id="delErr" class="err" hidden></p>
+        <div style="overflow:auto;margin-top:0.5rem;max-height:320px"><table><thead><tr><th>Seen</th><th>Delivery ID</th><th>Duplicate</th></tr></thead><tbody id="delBody"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Audit tab ── -->
+  <div class="tab-panel" data-tab="audit">
+    <!-- PR lookup -->
+    <div class="pr-search">
+      <div><label for="prLookup">PR lookup</label><input id="prLookup" type="text" placeholder="PR # or repo/PR" style="width:10rem" /></div>
+      <div style="flex:1;max-width:14rem"><label for="pathLookup">File path search</label><input id="pathLookup" type="text" placeholder="docs/setup.md" style="width:100%" /></div>
+      <button type="button" id="prLookupBtn">Search</button>
+      <button type="button" class="secondary" id="prLookupClear">Clear</button>
+    </div>
+
+    <!-- PR timeline (shown when PR lookup is active) -->
+    <section data-section="pr-timeline" id="prTimelineSection" hidden>
+      <div class="sh" onclick="toggleSection('pr-timeline')">
+        <div class="sh-left"><span class="chev"></span><h2>PR timeline</h2><span class="badge" id="prTimelineBadge"></span></div>
+      </div>
+      <div class="sb">
+        <div id="prTimeline" class="timeline"></div>
+      </div>
+    </section>
+
+    <!-- Recent copies feed -->
+    <section data-section="recent-copies">
+      <div class="sh" onclick="toggleSection('recent-copies')">
+        <div class="sh-left"><span class="chev"></span><h2>Recent copies</h2><span class="badge" id="recentCopiesCount"></span></div>
+      </div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Latest file copies at a glance. Click any item to see full details.</p>
+        <div id="recentCopiesFeed" class="copy-feed"></div>
+      </div>
+    </section>
+
+    <section data-section="audit-events">
+      <div class="sh" onclick="toggleSection('audit-events')">
+        <div class="sh-left"><span class="chev"></span><h2>Audit events</h2><span class="badge" id="auditCount"></span></div>
+        <span class="refreshed" id="auditRefreshed"></span>
+      </div>
+      <div class="sb">
+        <div class="row">
+          <div><label for="limit">Limit</label><input id="limit" type="text" value="50" style="width:3.5rem" /></div>
+          <div><label for="fltEvent">Event type</label><select id="fltEvent"><option value="">any</option><option value="copy">copy</option><option value="deprecation">deprecation</option><option value="error">error</option></select></div>
+          <div><label for="fltSuccess">Status</label><select id="fltSuccess"><option value="">any</option><option value="true">ok</option><option value="false">failed</option></select></div>
+          <div><label for="fltRule">Rule name</label><input id="fltRule" type="text" placeholder="exact match" style="max-width:9rem" /></div>
+          <div style="min-width:11rem"><label for="fltSince">Since</label><input id="fltSince" type="text" placeholder="RFC3339 or use presets" class="mono" style="width:100%" /></div>
+          <button type="button" id="loadAudit">Apply</button>
+          <button type="button" class="secondary" id="exportCSV" title="Export displayed rows as CSV">CSV</button>
+          <label class="small" style="display:flex;align-items:center;gap:0.3rem;margin:0"><input type="checkbox" id="auditAuto" /> Auto 30s</label>
+        </div>
+        <div class="row" style="gap:0.3rem;margin-top:0.3rem">
+          <span class="small" style="color:var(--text-3)">Quick:</span>
+          <button class="qchip" type="button" onclick="setSince(1)">1h</button>
+          <button class="qchip" type="button" onclick="setSince(24)">24h</button>
+          <button class="qchip" type="button" onclick="setSince(168)">7d</button>
+          <button class="qchip" type="button" onclick="setSince(720)">30d</button>
+          <button class="qchip" type="button" onclick="document.getElementById('fltSince').value='';loadAuditBtn()">clear</button>
+        </div>
+        <p id="auditErr" class="err" hidden></p>
+        <p id="auditEmptyHint" class="hint" hidden>No rows for this query. Check <code>AUDIT_ENABLED</code>, Mongo connectivity, and that <code>DRY_RUN</code> is off.</p>
+        <div style="overflow:auto;margin-top:0.5rem;max-height:520px">
+          <table><thead><tr><th>Time</th><th class="audit-hide-narrow">Type</th><th>Status</th><th>Rule</th><th>Source</th><th>Target</th><th class="audit-hide-narrow">SHA</th><th>PR</th><th>Error</th></tr></thead><tbody id="auditBody"></tbody></table>
+        </div>
+      </div>
+    </section>
+
+    <section data-section="aggregates">
+      <div class="sh" onclick="toggleSection('aggregates')">
+        <div class="sh-left"><span class="chev"></span><h2>Audit aggregates</h2></div>
+      </div>
+      <div class="sb">
+        <div class="row">
+          <div><label for="ovDays">Days</label><input id="ovDays" type="text" value="14" style="width:3rem" /></div>
+          <button type="button" id="loadOverview">Load</button>
+        </div>
+        <p id="ovErr" class="err" hidden></p>
+        <h3 class="small" style="margin:0.65rem 0 0.3rem">Daily copy volume</h3>
+        <div style="overflow:auto"><table><thead><tr><th>Date</th><th>Total</th><th>OK</th><th>Failed</th><th style="min-width:80px"></th></tr></thead><tbody id="ovDailyBody"></tbody></table></div>
+        <h3 class="small" style="margin:0.65rem 0 0.3rem">By rule</h3>
+        <div style="overflow:auto"><table><thead><tr><th>Rule</th><th>Total</th><th>OK</th><th>Failed</th><th>Avg ms</th><th style="min-width:80px">Success</th></tr></thead><tbody id="ovRuleBody"></tbody></table></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── Workflows tab ── -->
+  <div class="tab-panel" data-tab="workflows">
+    <!-- File match tester -->
+    <section data-section="file-tester">
+      <div class="sh" onclick="toggleSection('file-tester')">
+        <div class="sh-left"><span class="chev"></span><h2>File match tester</h2></div>
+      </div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Enter a source file path to see which workflow rules would match it and where the file would be copied.</p>
+        <div class="row">
+          <div style="flex:1;max-width:24rem"><label for="fmtPath">Source file path</label><input id="fmtPath" type="text" placeholder="docs/api/endpoints.md" style="width:100%" /></div>
+          <button type="button" id="fmtTest">Test</button>
+          <button type="button" class="secondary" id="fmtClear">Clear</button>
+        </div>
+        <div id="fmtResults" style="margin-top:0.5rem"></div>
+      </div>
+    </section>
+
+    <!-- AI settings (operator-only admin panel) -->
+    <section data-section="ai-settings" class="operator-only">
+      <div class="sh" onclick="toggleSection('ai-settings')">
+        <div class="sh-left"><span class="chev"></span><h2>AI settings<span class="ai-badge">AI</span></h2></div>
+        <span class="refreshed" id="aiSettingsRefreshed"></span>
+      </div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0" id="aiSettingsHint">Configure the LLM provider for the AI rule suggester. <strong>Settings are process-global:</strong> changes affect every operator using this revision, apply immediately, and revert to env-var defaults on restart. Coordinate with other operators before changing the active model or base URL.</p>
+        <div class="row">
+          <button type="button" id="aiRefreshStatus">Refresh status</button>
+        </div>
+        <div id="aiStatusLine"></div>
+        <div id="aiConnectedUI" hidden>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><label for="aiActiveModelSel">Active model</label><select id="aiActiveModelSel" style="width:100%"></select></div>
+            <button type="button" id="aiSetActive">Set active</button>
+          </div>
+          <div id="aiOllamaOnly">
+            <h3 class="small" style="margin:0.75rem 0 0.3rem">Installed models</h3>
+            <div id="aiModelList" class="ai-model-list"></div>
+            <h3 class="small" style="margin:0.75rem 0 0.3rem">Pull a new model</h3>
+            <div class="row">
+              <div style="flex:1;min-width:200px;max-width:20rem"><input id="aiPullName" type="text" placeholder="qwen2.5-coder:7b" style="width:100%" /></div>
+              <button type="button" id="aiPullStart">Pull</button>
+            </div>
+            <div id="aiPullProgress" hidden></div>
+          </div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><input id="aiBaseURL" type="text" placeholder="http://localhost:11434" class="mono" style="width:100%" /></div>
+            <button type="button" id="aiSaveBaseURL">Save</button>
+          </div>
+        </div>
+        <div id="aiNotConnectedUI" hidden>
+          <div class="ai-install-steps" id="aiInstallStepsOllama">
+            <strong>To enable the AI rule suggester (Ollama):</strong>
+            <ol>
+              <li>Install Ollama from <a href="https://ollama.com/download" target="_blank" rel="noopener">ollama.com/download</a></li>
+              <li>Start it (on macOS the Ollama app runs automatically after install)</li>
+              <li>Click <strong>Refresh status</strong> above</li>
+              <li>Then pull a model from the section that will appear below</li>
+            </ol>
+            Base URL used for detection: <code id="aiNotConnectedURL">http://localhost:11434</code>. If Ollama is running on a different host/port, update the base URL below.
+          </div>
+          <div class="ai-install-steps" id="aiInstallStepsAnthropic" hidden>
+            <strong>Anthropic AI is not reachable.</strong> The server needs a valid <code>ANTHROPIC_API_KEY</code>.
+            <ul>
+              <li>Set <code>ANTHROPIC_API_KEY</code> directly (local dev) or <code>ANTHROPIC_API_KEY_SECRET_NAME</code> pointing at a Secret Manager secret (Cloud Run).</li>
+              <li>Restart the service so the key is picked up at boot.</li>
+              <li>Click <strong>Refresh status</strong> above.</li>
+            </ul>
+            The base URL is <code>https://api.anthropic.com</code> by default; override only to route through an internal gateway.
+          </div>
+          <h3 class="small" style="margin:0.75rem 0 0.3rem">Base URL</h3>
+          <div class="row">
+            <div style="flex:1;min-width:200px;max-width:24rem"><input id="aiBaseURLDisc" type="text" placeholder="http://localhost:11434" class="mono" style="width:100%" /></div>
+            <button type="button" id="aiSaveBaseURLDisc">Save &amp; retry</button>
+          </div>
+        </div>
+        <p id="aiSettingsErr" class="err" hidden></p>
+      </div>
+    </section>
+
+    <!-- AI rule suggester -->
+    <section data-section="ai-suggester">
+      <div class="sh" onclick="toggleSection('ai-suggester')">
+        <div class="sh-left"><span class="chev"></span><h2>AI rule suggester<span class="ai-badge">AI</span></h2></div>
+      </div>
+      <div class="sb">
+        <div id="aiDisabledNote" class="ai-disabled" hidden>
+          The AI rule suggester is unavailable. An operator can configure it from <strong>System → AI settings</strong> (choose a provider via <code>LLM_PROVIDER</code>: <code>ollama</code> for local or <code>anthropic</code> for hosted).
+        </div>
+        <div id="aiEnabledUI" hidden>
+          <p class="hint" style="margin-top:0">Describe a source→target transformation and have the LLM propose a workflow rule. The generated rule is verified against your example before display.</p>
+          <div class="row">
+            <div style="flex:1;min-width:220px;max-width:24rem"><label for="aiSource">Source file path</label><input id="aiSource" type="text" placeholder="agg/python/models/user.py" style="width:100%" /></div>
+            <div style="flex:1;min-width:220px;max-width:24rem"><label for="aiTarget">Desired target path</label><input id="aiTarget" type="text" placeholder="shared/python/models/user.py" style="width:100%" /></div>
+          </div>
+          <div class="row">
+            <div style="flex:1;min-width:180px;max-width:18rem"><label for="aiTargetRepo">Target repo <span style="color:var(--text-3)">(optional)</span></label><input id="aiTargetRepo" type="text" placeholder="org/dest-repo" style="width:100%" /></div>
+            <div style="flex:1;min-width:180px;max-width:18rem"><label for="aiSourceRepo">Source repo <span style="color:var(--text-3)">(optional)</span></label><input id="aiSourceRepo" type="text" placeholder="org/source-repo" style="width:100%" /></div>
+            <button type="button" id="aiGenerate">Generate rule</button>
+            <button type="button" class="secondary" id="aiClear">Clear</button>
+          </div>
+          <p id="aiErr" class="err" hidden></p>
+          <div id="aiResult" style="margin-top:0.5rem"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Workflow browser -->
+    <section data-section="wf-browser">
+      <div class="sh" onclick="toggleSection('wf-browser')">
+        <div class="sh-left"><span class="chev"></span><h2>Active workflows</h2><span class="badge" id="wfCount"></span></div>
+      </div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Source &rarr; target mappings loaded from the copier config. Shows file patterns, commit strategy, and transformation rules.</p>
+        <div class="row">
+          <div style="flex:1;max-width:16rem"><label for="wfSearch">Search workflows</label><input id="wfSearch" type="text" placeholder="rule name, repo, path..." style="width:100%" /></div>
+          <button type="button" id="loadWorkflows">Refresh</button>
+        </div>
+        <p id="wfErr" class="err" hidden></p>
+        <div id="wfCards" style="margin-top:0.65rem"></div>
+      </div>
+    </section>
+
+    <!-- Getting started / help -->
+    <section data-section="wf-help">
+      <div class="sh" onclick="toggleSection('wf-help')">
+        <div class="sh-left"><span class="chev"></span><h2>How it works</h2></div>
+      </div>
+      <div class="sb">
+        <div class="help-content">
+          <h3>What is GitHub Copier?</h3>
+          <p>GitHub Copier automatically copies files between repositories when pull requests are merged. It listens for GitHub webhook events and runs <strong>workflow rules</strong> that define which files to copy and where.</p>
+
+          <h3>When does a copy happen?</h3>
+          <ol>
+            <li>You merge a PR in a <strong>source repository</strong></li>
+            <li>GitHub sends a webhook to the copier service</li>
+            <li>The copier loads its config and checks which <strong>workflows</strong> match the source repo and branch</li>
+            <li>For each matching workflow, it checks which <strong>changed files</strong> match the transformation rules</li>
+            <li>Matched files are copied to the <strong>target repository</strong> (via direct commit or pull request)</li>
+          </ol>
+
+          <h3>How do I check if my file is covered?</h3>
+          <ol>
+            <li>Go to the <strong>File match tester</strong> above</li>
+            <li>Enter your file path (e.g., <code>docs/api/endpoints.md</code>)</li>
+            <li>Click <strong>Test</strong> to see which workflows match and where the file would be copied</li>
+          </ol>
+
+          <h3>My file wasn't copied &mdash; why?</h3>
+          <ul>
+            <li>The PR must be <strong>merged</strong> (not just closed) to trigger a copy</li>
+            <li>The source repo and branch must match a workflow's <code>source</code> setting</li>
+            <li>The file path must match at least one <strong>transformation rule</strong> (move, copy, glob, or regex)</li>
+            <li>The file must not be in an <strong>exclude</strong> pattern</li>
+            <li>Check the <strong>Audit</strong> tab &rarr; PR lookup to see if the webhook was received and what happened</li>
+          </ul>
+
+          <h3>Keyboard shortcuts</h3>
+          <p>Press <kbd>?</kbd> anywhere to see all shortcuts, or <kbd>1</kbd>&ndash;<kbd>5</kbd> to switch tabs.</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ── System tab ── -->
+  <div class="tab-panel" data-tab="system">
+    <section data-section="probes">
+      <div class="sh" onclick="toggleSection('probes')"><div class="sh-left"><span class="chev"></span><h2>Liveness, readiness &amp; metrics</h2></div></div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Public probe routes. No token required.</p>
+        <div class="row"><button type="button" id="loadProbes">Refresh</button></div>
+        <div style="margin-top:0.5rem">
+          <p class="status-line"><strong>GET /health</strong> <span id="healthStatus"></span></p><pre id="healthJson" hidden></pre>
+          <p class="status-line"><strong>GET /ready</strong> <span id="readyStatus"></span></p><pre id="readyJson" hidden></pre>
+          <p class="status-line"><strong>GET /metrics</strong> <span id="metricsStatus"></span></p><pre id="metricsJson" hidden></pre>
+        </div>
+        <p id="probesErr" class="err" hidden></p>
+      </div>
+    </section>
+
+    <section data-section="release">
+      <div class="sh" onclick="toggleSection('release')"><div class="sh-left"><span class="chev"></span><h2>Release (tag &rarr; deploy)</h2></div></div>
+      <div class="sb">
+        <p class="hint" style="margin-top:0">Pushes a <code>vMAJOR.MINOR.PATCH</code> tag. Changelog requires <code>scripts/release.sh</code>.</p>
+        <label for="version">Version tag</label>
+        <div class="row operator-only"><input id="version" type="text" placeholder="v0.4.0" style="max-width:10rem" /><button type="button" id="doRelease">Create tag via API</button></div>
+        <p id="relErr" class="err" hidden></p><pre id="relJson" hidden></pre>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<!-- Toast container -->
+<div id="toasts" class="toast-box"></div>
+
+<!-- Help overlay -->
+<div id="helpOverlay" class="help-bg" hidden onclick="if(event.target===this)this.hidden=true">
+  <div class="help-card">
+    <h3>Keyboard shortcuts</h3>
+    <table>
+      <tr><td><kbd>1</kbd>-<kbd>5</kbd></td><td>Switch tab (Overview, Webhooks, Audit, Workflows, System)</td></tr>
+      <tr><td><kbd>R</kbd></td><td>Refresh all sections</td></tr>
+      <tr><td><kbd>D</kbd></td><td>Toggle dark mode</td></tr>
+      <tr><td><kbd>T</kbd></td><td>Toggle absolute / relative times</td></tr>
+      <tr><td><kbd>W</kbd></td><td>Toggle Writer / Operator mode</td></tr>
+      <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Close drawer or overlay</td></tr>
+    </table>
+    <div style="margin-top:0.75rem;text-align:right"><button type="button" onclick="$('helpOverlay').hidden=true">Close</button></div>
+  </div>
+</div>
+
+<script>
+/* ── Utilities ── */
+var TKEY='github-copier-operator-token', SKEY='operator-sections', DKEY='operator-dark', TMKEY='operator-time-mode';
+var COP_ORIGIN=(location.protocol==='file:'||!location.origin)?'':location.origin;
+function appURL(p){return COP_ORIGIN?COP_ORIGIN+(p[0]==='/'?p:'/'+p):p;}
+function authHeaders(){var t=sessionStorage.getItem(TKEY)||'',h={Accept:'application/json'};if(t)h['Authorization']='Bearer '+t;return h;}
+function hasToken(){return!!sessionStorage.getItem(TKEY);}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function showErr(id,msg){var el=$(id);if(!msg){el.hidden=true;el.textContent='';return;}el.hidden=false;el.textContent=msg;}
+function $(id){return document.getElementById(id);}
+function fmtNum(n){return(n===undefined||n===null||n===''||(typeof n==='number'&&!isFinite(n)))?'\u2014':String(n);}
+function p2(n){return String(n).padStart(2,'0');}
+function fmtUptime(s){if(s==null||s<0)return'\u2014';var d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60);if(d>0)return d+'d '+h+'h '+m+'m';if(h>0)return h+'h '+m+'m';return m+'m '+(s%60|0)+'s';}
+
+/* Time formatting with mode toggle (#7) */
+var timeMode=localStorage.getItem(TMKEY)||'abs';
+function fmtAbsTime(raw){try{var d=new Date(raw);if(isNaN(d.getTime()))return escapeHtml(raw);var mo=d.toLocaleString('en-US',{month:'short'});return escapeHtml(mo+' '+d.getDate()+', '+p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds()));}catch(e){return escapeHtml(raw);}}
+function fmtRelTime(raw){try{var ago=Math.round((Date.now()-new Date(raw).getTime())/1000);if(ago<0)return'future';if(ago<60)return ago+'s ago';if(ago<3600)return Math.floor(ago/60)+'m ago';if(ago<86400)return Math.floor(ago/3600)+'h ago';return Math.floor(ago/86400)+'d ago';}catch(e){return escapeHtml(raw);}}
+function fmtTimeVal(raw){return timeMode==='rel'?fmtRelTime(raw):fmtAbsTime(raw);}
+function fmtTime(raw){if(!raw)return'';try{if(isNaN(new Date(raw).getTime()))return escapeHtml(raw);}catch(e){return escapeHtml(raw);}return'<span data-ts="'+escapeHtml(String(raw))+'" title="'+escapeHtml(String(raw))+'">'+fmtTimeVal(raw)+'</span>';}
+function syncTimeBtn(){$('timeToggle').textContent=timeMode==='abs'?'REL':'ABS';$('timeToggle').title=timeMode==='abs'?'Switch to relative times (T)':'Switch to absolute times (T)';}
+function toggleTimeMode(){timeMode=timeMode==='abs'?'rel':'abs';localStorage.setItem(TMKEY,timeMode);syncTimeBtn();document.querySelectorAll('[data-ts]').forEach(function(el){el.textContent=fmtTimeVal(el.dataset.ts);});}
+$('timeToggle').onclick=toggleTimeMode;
+
+/* GitHub links */
+function ghLink(repo,text){if(!repo)return escapeHtml(text||'');return'<a href="https://github.com/'+encodeURI(repo)+'" target="_blank" rel="noopener">'+escapeHtml(text||repo)+'</a>';}
+function ghPR(repo,num){if(!num)return'';if(!repo)return'#'+num;return'<a href="https://github.com/'+encodeURI(repo)+'/pull/'+num+'" target="_blank" rel="noopener">#'+num+'</a>';}
+function ghCommit(repo,sha){if(!sha)return'';var short=sha.slice(0,8);if(!repo)return'<span class="mono">'+escapeHtml(short)+'</span>';return'<a href="https://github.com/'+encodeURI(repo)+'/commit/'+encodeURI(sha)+'" target="_blank" rel="noopener" class="mono">'+escapeHtml(short)+'</a>';}
+
+/* Loading state */
+async function withLoading(btnId,fn){var btn=$(btnId);if(!btn||btn.disabled)return;var orig=btn.textContent;btn.disabled=true;btn.textContent='Loading\u2026';try{await fn();}finally{btn.disabled=false;btn.textContent=orig;}}
+function setBadge(id,text){var el=$(id);if(el)el.textContent=text;}
+function setRefreshed(id){var el=$(id);if(el)el.dataset.refreshedAt=String(Date.now());}
+
+/* Toast notifications (#1) */
+function toast(msg,type){type=type||'info';var c=$('toasts'),t=document.createElement('div');t.className='toast toast-'+type;t.innerHTML='<span style="flex:1">'+escapeHtml(msg)+'</span><button class="toast-x" onclick="this.parentNode.remove()">&times;</button>';c.appendChild(t);setTimeout(function(){if(t.parentNode)t.remove();},5000);}
+var _lastAutoErr={};
+function checkAutoToast(section,errId){var el=$(errId);if(!el)return;var has=!el.hidden,msg=has?el.textContent:'';if(has&&_lastAutoErr[section]!==msg){_lastAutoErr[section]=msg;toast(section+': '+msg,'error');}else if(!has){delete _lastAutoErr[section];}}
+
+/* Empty state helper */
+function emptyState(tbodyId,cols,icon,msg){
+  var tb=$(tbodyId);if(!tb)return;
+  if(tb.rows.length===0){
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td colspan="'+cols+'" class="empty-state"><div class="es-icon">'+(icon||'')+'</div>'+escapeHtml(msg||'No data')+'</td>';
+    tb.appendChild(tr);
+  }
+}
+
+/* Parse trace detail into badges */
+function parseDetailBadges(detail){
+  if(!detail)return'';
+  // Pattern: "attempt N | X matched, Y uploaded, Z failed | targets: repo1, repo2"
+  var m=detail.match(/^attempt (\d+) \| (\d+) matched, (\d+) uploaded, (\d+) failed \| targets: (.+)$/);
+  if(m){
+    var badges='<span class="dbadge dbadge-neutral">attempt '+escapeHtml(m[1])+'</span>';
+    badges+='<span class="dbadge dbadge-neutral">'+escapeHtml(m[2])+' matched</span>';
+    var up=parseInt(m[3],10); badges+='<span class="dbadge '+(up>0?'dbadge-ok':'dbadge-neutral')+'">'+up+' uploaded</span>';
+    var fl=parseInt(m[4],10); if(fl>0)badges+='<span class="dbadge dbadge-fail">'+fl+' failed</span>';
+    m[5].split(', ').forEach(function(t){t=t.trim();if(t&&t!=='(none)')badges+='<span class="dbadge dbadge-target">'+escapeHtml(t)+'</span>';});
+    return badges;
+  }
+  // Fallback: plain text (truncated)
+  return escapeHtml(detail.slice(0,260));
+}
+
+/* Copy to clipboard helper */
+function copyToClip(text,el){
+  navigator.clipboard.writeText(text).then(function(){
+    el.classList.add('copied');
+    setTimeout(function(){el.classList.remove('copied');},1200);
+  }).catch(function(){});
+}
+
+/* Dynamic tab title */
+var _failCount=0;
+function updateTabTitle(){
+  document.title=_failCount>0?'GitHub Copier \u2014 '+_failCount+' failed':'GitHub Copier \u2014 Operator';
+}
+
+/* Token reveal toggle */
+$('tokenEye').onclick=function(){
+  var inp=$('token');
+  var isPassword=inp.type==='password';
+  inp.type=isPassword?'text':'password';
+  this.textContent=isPassword?'\u{1F648}':'\u{1F441}';
+};
+
+/* Periodic tick: refreshed timestamps + relative time update */
+setInterval(function(){
+  document.querySelectorAll('[data-refreshed-at]').forEach(function(el){var ago=Math.round((Date.now()-Number(el.dataset.refreshedAt))/1000);el.textContent=ago<5?'just now':ago<60?ago+'s ago':Math.floor(ago/60)+'m ago';});
+  if(timeMode==='rel')document.querySelectorAll('[data-ts]').forEach(function(el){el.textContent=fmtRelTime(el.dataset.ts);});
+},3000);
+
+/* ── Shareable URL state ── */
+function updateURL(){
+  var p=new URLSearchParams();
+  var tab=localStorage.getItem(TABKEY);if(tab&&tab!=='overview')p.set('tab',tab);
+  var mode=localStorage.getItem(MKEY);if(mode==='writer')p.set('mode','writer');
+  var pr=$('auditBody').dataset.prFilter;if(pr)p.set('pr',pr);
+  var path=$('auditBody').dataset.pathFilter;if(path)p.set('path',path);
+  var et=$('fltEvent').value;if(et)p.set('event_type',et);
+  var su=$('fltSuccess').value;if(su)p.set('success',su);
+  var rn=$('fltRule').value.trim();if(rn)p.set('rule_name',rn);
+  var since=$('fltSince').value.trim();if(since)p.set('since',since);
+  var qs=p.toString();
+  var url=location.pathname+(qs?'?'+qs:'');
+  history.replaceState(null,'',url);
+}
+
+/* ── Sections ── */
+function getSectState(){try{return JSON.parse(localStorage.getItem(SKEY))||{};}catch(e){return{};}}
+function toggleSection(id){var sec=document.querySelector('[data-section="'+id+'"]');if(!sec)return;var close=!sec.classList.contains('collapsed');sec.classList.toggle('collapsed',close);var st=getSectState();st[id]=!close;localStorage.setItem(SKEY,JSON.stringify(st));}
+function initSections(){var st=getSectState(),defaults={probes:false};document.querySelectorAll('[data-section]').forEach(function(sec){var id=sec.dataset.section,open=st[id]!==undefined?st[id]:(defaults[id]!==undefined?defaults[id]:true);sec.classList.toggle('collapsed',!open);});}
+
+/* ── Tabs ── */
+var TABKEY='operator-active-tab';
+function switchTab(tabId){
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('tab-active',b.dataset.tab===tabId);});
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.classList.toggle('tab-visible',p.dataset.tab===tabId);});
+  localStorage.setItem(TABKEY,tabId);
+  updateURL();
+}
+function initTabs(){
+  var saved=localStorage.getItem(TABKEY)||'overview';
+  switchTab(saved);
+}
+function updateTabBadges(){
+  // Webhooks tab: show trace count if on another tab
+  var traceN=_traceData.length;
+  var tbw=$('tabBadgeWebhooks');
+  var failedTraces=_traceData.filter(function(r){return r.outcome==='processing_failed';}).length;
+  if(failedTraces>0){tbw.textContent=failedTraces;tbw.className='tab-badge tb-err';}
+  else if(traceN>0){tbw.textContent=traceN;tbw.className='tab-badge tb-info';}
+  else{tbw.className='tab-badge';}
+
+  // Audit tab: show failure count
+  var tba=$('tabBadgeAudit');
+  if(_failCount>0){tba.textContent=_failCount;tba.className='tab-badge tb-err';}
+  else if(_auditData.length>0){tba.textContent=_auditData.length;tba.className='tab-badge tb-info';}
+  else{tba.className='tab-badge';}
+}
+
+/* ── Dark mode ── */
+function initDarkMode(){var dark=localStorage.getItem(DKEY)==='true';document.documentElement.dataset.theme=dark?'dark':'light';$('darkToggle').textContent=dark?'\u263E':'\u2600';}
+$('darkToggle').onclick=function(){var next=document.documentElement.dataset.theme!=='dark';document.documentElement.dataset.theme=next?'dark':'light';localStorage.setItem(DKEY,String(next));this.textContent=next?'\u263E':'\u2600';};
+
+/* ── Writer / Operator mode ── */
+var MKEY='operator-view-mode';
+function setMode(mode){
+  document.body.classList.toggle('writer-mode',mode==='writer');
+  document.querySelectorAll('#modeToggle button').forEach(function(b){b.classList.toggle('mode-active',b.dataset.mode===mode);});
+  localStorage.setItem(MKEY,mode);
+  // If writer mode and current tab is hidden, switch to a visible tab
+  if(mode==='writer'){
+    var cur=localStorage.getItem(TABKEY)||'overview';
+    if(cur==='overview'||cur==='webhooks'||cur==='system') switchTab('workflows');
+  }
+  updateURL();
+}
+function initMode(){setMode(localStorage.getItem(MKEY)||'operator');}
+$('modeToggle').onclick=function(e){var btn=e.target.closest('button');if(btn&&btn.dataset.mode)setMode(btn.dataset.mode);};
+
+/* ── Token ── */
+$('token').value=sessionStorage.getItem(TKEY)||'';
+$('saveToken').onclick=function(){var v=$('token').value.trim();if(!v)return;sessionStorage.setItem(TKEY,v);var btn=$('saveToken');btn.textContent='Saved!';btn.style.background='var(--green)';btn.style.borderColor='var(--green)';setTimeout(function(){btn.textContent='Save in session';btn.style.background='';btn.style.borderColor='';},1200);fetchMe();loadAllSecured();};
+$('clearToken').onclick=function(){
+  sessionStorage.removeItem(TKEY);$('token').value='';
+  $('tbUser').hidden=true;
+  document.body.classList.remove('role-writer');
+  _repoPerm={};_currentUser=null;
+};
+
+/* ── Authenticated user ── */
+var _currentUser=null;
+function fetchMe(){
+  if(!hasToken())return;
+  fetch(appURL('/operator/api/me'),{headers:authHeaders()}).then(function(r){
+    if(!r.ok)return null;
+    return r.json();
+  }).then(function(user){
+    if(!user)return;
+    _currentUser=user;
+    var el=$('tbUser');
+    el.hidden=false;
+    var inner='';
+    if(user.avatar_url)inner+='<img class="tb-avatar" src="'+escapeHtml(user.avatar_url)+'&s=32" alt=""> ';
+    inner+=escapeHtml(user.login||'operator');
+    if(user.role&&user.role!=='operator')inner+=' <span style="opacity:0.6">('+escapeHtml(user.role)+')</span>';
+    el.innerHTML=inner;
+    // Apply role-based visibility
+    document.body.classList.toggle('role-writer',user.role==='writer');
+  }).catch(function(){});
+}
+
+/* ── Status bar ── */
+function updateTBVersion(v){$('tbVersion').textContent=v||'...';}
+function updateTBUptime(s){if(s==null)return;var el=$('tbUptime');el.hidden=false;el.textContent='\u23F1 '+fmtUptime(s);}
+function updateTBMongo(ok){var el=$('tbMongo');el.hidden=false;el.className='chip '+(ok?'chip-ok':'chip-err');el.innerHTML='<span class="dot '+(ok?'dot-green':'dot-red')+'"></span> Mongo';}
+function updateTBLastWH(iso){if(!iso)return;var el=$('tbLastWH');el.hidden=false;var ago=Math.round((Date.now()-new Date(iso).getTime())/1000);el.textContent='Last WH: '+(ago<60?ago+'s ago':ago<3600?Math.floor(ago/60)+'m ago':Math.floor(ago/3600)+'h ago');}
+
+/* Heartbeat (#6) */
+var _connected=true;
+function startHeartbeat(){if(!COP_ORIGIN)return;setInterval(function(){fetch(appURL('/operator/api/status')).then(function(r){if(!_connected){_connected=true;$('tbConn').hidden=true;toast('Reconnected to server','info');}}).catch(function(){if(_connected){_connected=false;$('tbConn').hidden=false;toast('Connection lost to server','error');}});},60000);}
+
+/* Server status */
+function checkServerStatus(){
+  if(!COP_ORIGIN){
+    $('serverStatusBanner').hidden=false;
+    $('serverStatusBanner').textContent='Open this page at http://127.0.0.1:<PORT>/operator/.';
+    return;
+  }
+  fetch(appURL('/operator/api/status')).then(function(r){
+    if(r.status===404){$('serverStatusBanner').hidden=false;$('serverStatusBanner').textContent='Operator routes not enabled (OPERATOR_UI_ENABLED=false).';return null;}
+    return r.json();
+  }).then(function(d){
+    if(!d)return;
+    updateTBVersion(d.version);
+    if(d.auth_repo){
+      var lbl=$('authRepoLabel');
+      if(lbl){lbl.textContent=d.auth_repo;}
+    }
+    setLLMAvailable(!!d.llm_available);
+  }).catch(function(){});
+}
+
+/* ── Metrics with groups, deltas, sparklines, health accents ── */
+var _prevMetrics={}, _metricHistory={};
+var SPARK_MAX=12; // 12 samples = 2 min at 10s interval
+
+function metricDelta(key,val){
+  if(val==null||val===''||typeof val!=='number') return '';
+  // Store history
+  if(!_metricHistory[key]) _metricHistory[key]=[];
+  _metricHistory[key].push(val);
+  if(_metricHistory[key].length>SPARK_MAX) _metricHistory[key]=_metricHistory[key].slice(-SPARK_MAX);
+  // Compute delta
+  var prev=_prevMetrics[key];
+  _prevMetrics[key]=val;
+  if(prev===undefined) return '';
+  var d=val-prev;
+  if(d===0) return '<span class="delta delta-zero">\u00b70</span>';
+  if(d>0) return '<span class="delta delta-up">+'+d+'</span>';
+  return '<span class="delta delta-down">'+d+'</span>';
+}
+
+function sparkHtml(key){
+  var hist=_metricHistory[key];
+  if(!hist||hist.length<2) return '';
+  var max=Math.max.apply(null,hist);
+  if(max===0) return '';
+  var html='<div class="spark">';
+  hist.forEach(function(v){
+    var pct=Math.max(1,Math.round(v/max*100));
+    html+='<div class="spark-bar" style="height:'+pct+'%"></div>';
+  });
+  html+='</div>';
+  return html;
+}
+
+function metricAccent(key,val){
+  // Health-based left border color
+  if(key==='wh_success_pct'&&typeof val==='number'){
+    if(val<80) return 'mc-danger';
+    if(val<95) return 'mc-warn';
+    return 'mc-ok';
+  }
+  if((key==='wh_failed'||key==='upload_failed'||key==='api_errors')&&val>0) return 'mc-danger';
+  if((key==='wh_processed'||key==='files_uploaded')&&val>0) return 'mc-ok';
+  return '';
+}
+
+async function loadMetricsCards(){
+  showErr('metricsCardErr','');var root=$('metricsCards');root.innerHTML='';
+  var res;try{res=await fetch(appURL('/metrics'),{headers:{Accept:'application/json'}});}catch(e){showErr('metricsCardErr',String(e));return;}
+  if(res.status===404){showErr('metricsCardErr','METRICS_ENABLED=false');return;}
+  var m;try{m=JSON.parse(await res.text());}catch(e){showErr('metricsCardErr','Invalid JSON');return;}
+  var w=m.webhooks||{},f=m.files||{},g=m.github_api||{},q=m.queues||{},s=m.system||{},rl=g.rate_limit||{};
+
+  var whPct=w.success_rate!=null?Math.round(w.success_rate*1000)/10:null;
+
+  var groups=[
+    {label:'Webhooks', cards:[
+      {key:'wh_received',name:'Received',val:w.received},
+      {key:'wh_processed',name:'Processed',val:w.processed},
+      {key:'wh_failed',name:'Failed',val:w.failed,red:true},
+      {key:'wh_ignored',name:'Ignored',val:w.ignored},
+      {key:'wh_success_pct',name:'Success %',val:whPct,fmt:whPct!=null?whPct+'%':'\u2014'}
+    ]},
+    {label:'Files', cards:[
+      {key:'files_matched',name:'Matched',val:f.matched},
+      {key:'files_uploaded',name:'Uploaded',val:f.uploaded},
+      {key:'upload_failed',name:'Upload Failed',val:f.upload_failed,red:true},
+      {key:'files_deprecated',name:'Deprecated',val:f.deprecated}
+    ]},
+    {label:'GitHub API', cards:[
+      {key:'api_calls',name:'Calls',val:g.calls},
+      {key:'api_errors',name:'Errors',val:g.errors,red:true},
+      {key:'rate_left',name:'Rate Limit Left',val:rl.remaining}
+    ]},
+    {label:'Queues', cards:[
+      {key:'q_upload',name:'Upload',val:q.upload_queue_size},
+      {key:'q_retry',name:'Retry',val:q.retry_queue_size}
+    ]}
+  ];
+
+  var total=0;
+  groups.forEach(function(grp){
+    var wrap=document.createElement('div');wrap.className='mg-group';
+    var lbl=document.createElement('div');lbl.className='mg-label';lbl.textContent=grp.label;
+    wrap.appendChild(lbl);
+    var grid=document.createElement('div');grid.className='metric-grid';
+    grp.cards.forEach(function(c){
+      var d=document.createElement('div');
+      var accent=metricAccent(c.key,c.val);
+      d.className='metric-card'+(accent?' '+accent:'');
+      var display=c.fmt||fmtNum(c.val);
+      var deltaHtml=metricDelta(c.key,c.val);
+      var sparkStr=sparkHtml(c.key);
+      d.innerHTML='<div class="mk">'+escapeHtml(c.name)+'</div>'
+        +'<div class="mv-row"><span class="mv'+(c.red&&c.val?' mv-red':'')+'">'+escapeHtml(display)+'</span>'+deltaHtml+'</div>'
+        +sparkStr;
+      grid.appendChild(d);total++;
+    });
+    wrap.appendChild(grid);root.appendChild(wrap);
+  });
+
+  setBadge('metricsCount',total+' metrics');setRefreshed('metricsRefreshed');
+  if(s.uptime_seconds!=null)updateTBUptime(s.uptime_seconds);
+}
+var metricsTimer=null;
+function syncMetricsAuto(){if(metricsTimer){clearInterval(metricsTimer);metricsTimer=null;}localStorage.setItem('op-auto-metrics',$('metricsAuto').checked?'1':'0');if(!$('metricsAuto').checked)return;metricsTimer=setInterval(async function(){if(document.hidden)return;await loadMetricsCards();checkAutoToast('Metrics','metricsCardErr');},10000);}
+$('metricsAuto').addEventListener('change',syncMetricsAuto);
+$('loadMetricsCards').onclick=function(){withLoading('loadMetricsCards',loadMetricsCards);};
+
+/* ── Webhook traces with client-side filter/search (#4, #9) ── */
+var _traceData=[];
+// Map of repo -> {allowed:boolean, error?:string}. Populated after loading traces.
+// The error field (if present) lets tooltips distinguish "user genuinely can't
+// read this repo" from transient GitHub API failures.
+var _repoPerm={};
+function traceOutcomeClass(o){if(!o)return'';if(o==='processed_ok')return'ok';if(o==='duplicate_delivery'||o==='skipped_not_merged_pr'||o==='ignored_non_pull_request')return'warn';return'fail';}
+function canReplayRepo(repo){
+  // If we haven't checked yet (undefined), assume yes. If checked and not allowed, disable.
+  var p=_repoPerm[repo];
+  if(p===undefined)return true;
+  return !!p.allowed;
+}
+function replayDisabledReason(repo){
+  var p=_repoPerm[repo];
+  if(!p||p.allowed)return '';
+  return p.error||('You do not have GitHub access to '+repo);
+}
+function renderTraces(){
+  var outcomeF=$('traceOutcome').value,searchF=$('traceSearch').value.toLowerCase().trim();
+  var filtered=_traceData;
+  if(outcomeF)filtered=filtered.filter(function(r){return r.outcome===outcomeF;});
+  if(searchF)filtered=filtered.filter(function(r){return((r.repo||'')+' '+(r.delivery_id||'')+' '+(r.outcome||'')+' '+(r.detail||'')+' '+String(r.pr_number||'')).toLowerCase().indexOf(searchF)>=0;});
+  var tb=$('traceBody');tb.innerHTML='';
+  filtered.forEach(function(row){
+    var tr=document.createElement('tr'),oc=row.outcome||'';
+    if(row.event_type==='operator_replay')tr.className='trace-replay';
+    var replayBtn='';
+    if(row.repo&&row.pr_number&&row.base_branch){
+      var allowed=canReplayRepo(row.repo);
+      var disAttrs=allowed?'':' disabled title="'+escapeHtml(replayDisabledReason(row.repo))+'"';
+      var onClick=allowed?'event.stopPropagation();confirmReplay('+escapeHtml(JSON.stringify(row.repo))+','+row.pr_number+','+escapeHtml(JSON.stringify(row.base_branch))+','+escapeHtml(JSON.stringify(row.commit_sha||''))+')':'event.stopPropagation()';
+      replayBtn='<button class="btn-sm operator-only" onclick="'+onClick+'"'+disAttrs+'>Replay</button>';
+    }
+    if(row.delivery_id){replayBtn+=' <button class="btn-sm" onclick="event.stopPropagation();viewDeliveryLogs(\''+escapeHtml(row.delivery_id)+'\')">Logs</button>';}
+    var detailHtml=parseDetailBadges(row.detail||'');
+    tr.innerHTML='<td class="mono">'+fmtTime(row.at)+'</td><td><span class="'+traceOutcomeClass(oc)+'">'+escapeHtml(oc)+'</span></td><td>'+ghLink(row.repo)+'</td><td>'+ghPR(row.repo,row.pr_number)+'</td><td class="mono">'+escapeHtml(row.base_branch||'')+'</td><td class="mono">'+escapeHtml(row.event_type||'')+'</td><td class="mono">'+escapeHtml(row.action||'')+'</td><td class="mono">'+escapeHtml(row.delivery_id||'')+'</td><td>'+detailHtml+'</td><td>'+replayBtn+'</td>';
+    tb.appendChild(tr);
+  });
+  setBadge('tracesCount',filtered.length+(_traceData.length>filtered.length?' / '+_traceData.length:''));
+  emptyState('traceBody',10,'\u{1F4E1}','No webhook activity yet');
+}
+
+// Fetch repo read-permission for each unique source repo in _traceData.
+// Only relevant in github auth mode; in token mode the backend returns true for all.
+async function fetchRepoPermissions(){
+  if(!_currentUser||!hasToken())return;
+  var uniqueRepos={};
+  _traceData.forEach(function(r){if(r.repo)uniqueRepos[r.repo]=true;});
+  // Also include audit data source repos so replay from the drawer works
+  _auditData.forEach(function(e){if(e.source_repo)uniqueRepos[e.source_repo]=true;});
+  // Skip repos we've already checked
+  var toCheck=Object.keys(uniqueRepos).filter(function(r){return _repoPerm[r]===undefined;});
+  if(toCheck.length===0)return;
+  try{
+    var res=await fetch(appURL('/operator/api/repo-permission?repos='+encodeURIComponent(toCheck.join(','))),{headers:authHeaders()});
+    if(!res.ok)return;
+    var body=await res.json();
+    var perms=body.permissions||{};
+    Object.keys(perms).forEach(function(r){
+      // New shape: {allowed, error?}. Fall back to boolean for compatibility
+      // with older server builds during a partial rollout.
+      var v=perms[r];
+      if(typeof v==='boolean')_repoPerm[r]={allowed:v};
+      else _repoPerm[r]=v||{allowed:false};
+    });
+    renderTraces(); // Re-render to update button states
+  }catch(e){}
+}
+async function loadWebhookTraces(){
+  showErr('traceErr','');
+  var lim=parseInt($('traceLimit').value,10)||50;
+  var res=await fetch(appURL('/operator/api/observability/webhook-traces?limit='+encodeURIComponent(Math.min(120,Math.max(1,lim)))),{headers:authHeaders()});
+  var body=await res.json().catch(function(){return{};});
+  if(!res.ok){showErr('traceErr',body.error||res.statusText);return;}
+  _traceData=body.traces||[];
+  renderTraces();setRefreshed('tracesRefreshed');
+  if(_traceData.length>0&&_traceData[_traceData.length-1].at)updateTBLastWH(_traceData[_traceData.length-1].at);
+  updateTabBadges();
+  fetchRepoPermissions();
+}
+$('traceOutcome').addEventListener('change',renderTraces);
+$('traceSearch').addEventListener('input',renderTraces);
+var tracesTimer=null;
+function syncTracesAuto(){if(tracesTimer){clearInterval(tracesTimer);tracesTimer=null;}localStorage.setItem('op-auto-traces',$('tracesAuto').checked?'1':'0');if(!$('tracesAuto').checked)return;tracesTimer=setInterval(async function(){if(document.hidden)return;await loadWebhookTraces();checkAutoToast('Traces','traceErr');},30000);}
+$('tracesAuto').addEventListener('change',syncTracesAuto);
+$('loadTraces').onclick=function(){withLoading('loadTraces',loadWebhookTraces);};
+
+/* ── Audit events with detail drawer (#2) and CSV export (#3) ── */
+var _auditData=[];
+function buildAuditQuery(){
+  var p=new URLSearchParams(),lim=parseInt($('limit').value,10)||50;
+  p.set('limit',String(Math.min(200,Math.max(1,lim))));
+  var et=$('fltEvent').value;if(et)p.set('event_type',et);
+  var su=$('fltSuccess').value;if(su)p.set('success',su);
+  var rn=$('fltRule').value.trim();if(rn)p.set('rule_name',rn);
+  var since=$('fltSince').value.trim();if(since)p.set('since',since);
+  // PR lookup and path search from the search bar
+  var prF=$('auditBody').dataset.prFilter;if(prF)p.set('pr_number',prF);
+  var pathF=$('auditBody').dataset.pathFilter;if(pathF)p.set('path',pathF);
+  return p.toString();
+}
+function setSince(hours){$('fltSince').value=new Date(Date.now()-hours*3600000).toISOString();loadAuditBtn();}
+async function loadAudit(){
+  showErr('auditErr','');var qs=buildAuditQuery(),lim=parseInt($('limit').value,10)||50;
+  var res=await fetch(appURL('/operator/api/audit/events?'+qs),{headers:authHeaders()});
+  var body=await res.json().catch(function(){return{};});
+  if(!res.ok){showErr('auditErr',body.error||res.statusText);$('auditEmptyHint').hidden=true;return;}
+  _auditData=body.events||[];
+  var tb=$('auditBody');tb.innerHTML='';
+  $('auditEmptyHint').hidden=_auditData.length>0;
+  _auditData.forEach(function(ev,idx){
+    var tr=document.createElement('tr');tr.className='clickable';tr.dataset.idx=String(idx);
+    tr.onclick=function(){openAuditDetail(Number(this.dataset.idx));};
+    var st=ev.success?'<span class="ok">ok</span>':'<span class="fail">fail</span>';
+    var srcRepo=ev.source_repo||'',errText=ev.error_message||'',errHtml='';
+    if(errText.length>120){errHtml='<span class="err-trunc" title="Click row for full detail">'+escapeHtml(errText.slice(0,120))+'<span class="err-more">\u2026</span></span>';}else{errHtml=escapeHtml(errText);}
+    tr.innerHTML='<td class="mono">'+fmtTime(ev.timestamp)+'</td><td class="audit-hide-narrow">'+escapeHtml(ev.event_type||'')+'</td><td>'+st+'</td><td>'+escapeHtml(ev.rule_name||'')+'</td><td>'+ghLink(srcRepo,srcRepo+(ev.source_path?':'+ev.source_path:''))+'</td><td>'+ghLink(ev.target_repo,(ev.target_repo||'')+(ev.target_path?':'+ev.target_path:''))+'</td><td class="audit-hide-narrow">'+ghCommit(srcRepo,ev.commit_sha)+'</td><td>'+ghPR(srcRepo,ev.pr_number)+'</td><td>'+errHtml+'</td>';
+    tb.appendChild(tr);
+  });
+  emptyState('auditBody',9,'\u{1F4C4}','No audit events match this filter');
+  _failCount=_auditData.filter(function(e){return!e.success;}).length;
+  updateTabTitle();
+  var limitHit=_auditData.length>=Math.min(200,lim);
+  setBadge('auditCount',_auditData.length+(limitHit?' (limit)':''));setRefreshed('auditRefreshed');
+  updateTabBadges();
+  renderRecentCopies();
+  renderPRTimeline();
+  updateURL();
+}
+function loadAuditBtn(){withLoading('loadAudit',loadAudit);}
+$('loadAudit').onclick=loadAuditBtn;
+var auditTimer=null;
+function syncAuditAuto(){if(auditTimer){clearInterval(auditTimer);auditTimer=null;}localStorage.setItem('op-auto-audit',$('auditAuto').checked?'1':'0');if(!$('auditAuto').checked)return;auditTimer=setInterval(async function(){if(document.hidden)return;await loadAudit();checkAutoToast('Audit','auditErr');},30000);}
+$('auditAuto').addEventListener('change',syncAuditAuto);
+
+/* Audit detail drawer (#2) */
+function openAuditDetail(idx){
+  var ev=_auditData[idx];if(!ev)return;
+  var rows=[['Timestamp',ev.timestamp],['Event Type',ev.event_type],['Status',ev.success?'Success':'Failed'],['Rule',ev.rule_name],['Source Repo',ev.source_repo],['Source Path',ev.source_path],['Target Repo',ev.target_repo],['Target Path',ev.target_path],['Commit SHA',ev.commit_sha],['PR Number',ev.pr_number],['Duration',ev.duration_ms?ev.duration_ms+' ms':''],['File Size',ev.file_size?ev.file_size+' bytes':''],['Error',ev.error_message]];
+  if(ev.additional_data&&Object.keys(ev.additional_data).length>0)rows.push(['Additional Data',JSON.stringify(ev.additional_data,null,2)]);
+  var html='<table class="detail-tbl">';
+  rows.forEach(function(r){var v=r[1];if(v===undefined||v===null||v==='')return;html+='<tr><th>'+escapeHtml(r[0])+'</th><td>'+escapeHtml(String(v))+'</td></tr>';});
+  html+='</table>';
+  if(ev.source_repo&&ev.pr_number){
+    var rpAllowed=canReplayRepo(ev.source_repo);
+    var rpDis=rpAllowed?'':' disabled title="You do not have GitHub access to '+escapeHtml(ev.source_repo)+'"';
+    html+='<div style="margin-top:0.75rem" class="operator-only"><button class="btn-sm" onclick="confirmReplay(\''+escapeHtml(ev.source_repo)+'\','+ev.pr_number+',\'\',\''+escapeHtml(ev.commit_sha||'')+'\')"'+rpDis+'>Replay this PR</button></div>';
+  }
+  $('drawerBody').innerHTML=html;$('drawer').hidden=false;
+}
+function closeDrawer(){$('drawer').hidden=true;}
+
+/* Webhook replay */
+function confirmReplay(repo,pr,branch,sha){
+  var msg='Replay processing for '+repo+' PR #'+pr;
+  if(branch)msg+=' on branch '+branch;
+  msg+='?\n\nThis will re-run the full copy workflow as if the webhook just arrived.';
+  if(!confirm(msg))return;
+  doReplay(repo,pr,branch,sha);
+}
+async function doReplay(repo,pr,branch,sha){
+  try{
+    var res=await fetch(appURL('/operator/api/replay'),{
+      method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify({repo:repo,pr_number:pr,branch:branch||'main',commit_sha:sha||''})
+    });
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){toast('Replay failed: '+(body.error||res.statusText),'error');return;}
+    toast(body.message||'Replay started','info');
+    closeDrawer();
+    setTimeout(function(){loadWebhookTraces();},2000);
+  }catch(e){toast('Replay error: '+e,'error');}
+}
+
+/* Per-delivery log viewer */
+async function viewDeliveryLogs(deliveryID){
+  $('drawerBody').innerHTML='<div style="text-align:center;padding:1rem;color:var(--text-3)">Loading logs\u2026</div>';
+  $('drawer').hidden=false;
+  try{
+    var res=await fetch(appURL('/operator/api/logs?delivery_id='+encodeURIComponent(deliveryID)),{headers:authHeaders()});
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){$('drawerBody').innerHTML='<div class="err">'+escapeHtml(body.error||res.statusText)+'</div>';return;}
+    var logs=body.logs||[];
+    var html='<h3 style="margin:0 0 0.5rem;font-size:0.95rem">Logs for <code>'+escapeHtml(deliveryID)+'</code></h3>';
+    if(logs.length===0){
+      html+='<div class="empty-state"><div class="es-icon">\u{1F4DD}</div>No log entries captured for this delivery.<br>Logs are captured for webhooks processed after this feature was enabled.</div>';
+    }else{
+      html+='<div style="font-size:0.78rem;color:var(--text-3);margin-bottom:0.5rem">'+logs.length+' entries</div>';
+      logs.forEach(function(entry){
+        var lvlClass='log-level-info';
+        if(entry.level==='warn')lvlClass='log-level-warn';
+        if(entry.level==='error')lvlClass='log-level-error';
+        var timeStr='';
+        if(entry.time){try{var d=new Date(entry.time);timeStr=p2(d.getHours())+':'+p2(d.getMinutes())+':'+p2(d.getSeconds())+'.'+String(d.getMilliseconds()).padStart(3,'0');}catch(e){}}
+        html+='<div class="log-entry"><span class="log-time">'+escapeHtml(timeStr)+'</span><span class="log-level '+lvlClass+'">'+escapeHtml(entry.level||'info')+'</span><span class="log-msg">'+escapeHtml(entry.message||'')+'</span></div>';
+        if(entry.fields&&Object.keys(entry.fields).length>0){
+          var parts=[];for(var k in entry.fields)parts.push(k+'='+JSON.stringify(entry.fields[k]));
+          html+='<div class="log-fields">'+escapeHtml(parts.join(' '))+'</div>';
+        }
+      });
+    }
+    $('drawerBody').innerHTML=html;
+  }catch(e){$('drawerBody').innerHTML='<div class="err">'+escapeHtml(String(e))+'</div>';}
+}
+
+/* CSV export (#3) */
+$('exportCSV').onclick=function(){
+  if(!_auditData.length){toast('No audit data to export','info');return;}
+  var hdr=['timestamp','event_type','success','rule_name','source_repo','source_path','target_repo','target_path','commit_sha','pr_number','duration_ms','file_size','error_message'];
+  var lines=[hdr.join(',')];
+  _auditData.forEach(function(ev){var row=hdr.map(function(h){var v=ev[h];if(v===undefined||v===null)v='';return'"'+String(v).replace(/"/g,'""')+'"';});lines.push(row.join(','));});
+  var blob=new Blob([lines.join('\n')],{type:'text/csv'});var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');a.href=url;a.download='audit-events-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(url);
+  toast('Exported '+_auditData.length+' rows','info');
+};
+
+/* ── PR lookup + file path search ── */
+$('prLookupBtn').onclick=function(){
+  var pr=$('prLookup').value.trim(), path=$('pathLookup').value.trim();
+  // Parse "repo#123" or "repo/123" or just "123"
+  var prNum='';
+  if(pr){
+    var m=pr.match(/(\d+)$/);
+    if(m) prNum=m[1];
+  }
+  if(prNum) $('limit').value='200';
+  // Set the audit filters and trigger load
+  if(prNum){ /* inject pr_number into the query by temporarily setting a data attribute */
+    $('auditBody').dataset.prFilter=prNum;
+  } else { delete $('auditBody').dataset.prFilter; }
+  if(path){ $('auditBody').dataset.pathFilter=path; } else { delete $('auditBody').dataset.pathFilter; }
+  loadAuditBtn();
+};
+$('prLookupClear').onclick=function(){
+  $('prLookup').value=''; $('pathLookup').value='';
+  delete $('auditBody').dataset.prFilter;
+  delete $('auditBody').dataset.pathFilter;
+  $('limit').value='50';
+  $('prTimelineSection').hidden=true;
+  loadAuditBtn();
+};
+
+/* ── Recent copies feed ── */
+function renderRecentCopies(){
+  var feed=$('recentCopiesFeed');feed.innerHTML='';
+  // Show last 15 copy events (most recent first) from loaded audit data
+  var copies=_auditData.filter(function(e){return e.event_type==='copy';}).slice(0,15);
+  if(copies.length===0){
+    feed.innerHTML='<div class="empty-state"><div class="es-icon">\u{1F4CB}</div>No recent copies. Merge a PR that matches a workflow to see copy events here.</div>';
+    setBadge('recentCopiesCount','');
+    return;
+  }
+  copies.forEach(function(ev,idx){
+    var d=document.createElement('div');
+    d.className='copy-item'+(ev.success?'':' copy-fail');
+    d.style.cursor='pointer';
+    d.onclick=function(){
+      var realIdx=_auditData.indexOf(ev);
+      if(realIdx>=0) openAuditDetail(realIdx);
+    };
+    var src=(ev.source_repo||'')+(ev.source_path?':'+ev.source_path:'');
+    var tgt=(ev.target_repo||'')+(ev.target_path?':'+ev.target_path:'');
+    var status=ev.success?'<span class="ok">\u2713</span>':'<span class="fail">\u2717 '+escapeHtml((ev.error_message||'').slice(0,60))+'</span>';
+    d.innerHTML='<div class="copy-paths"><div><span class="copy-path">'+escapeHtml(src)+'</span><span class="copy-path-arrow">\u2192</span><span class="copy-path">'+escapeHtml(tgt)+'</span></div><div style="margin-top:0.2rem">'+status+'</div></div><div class="copy-right"><div>'+fmtTime(ev.timestamp)+'</div><div>'+escapeHtml(ev.rule_name||'')+'</div>'+(ev.pr_number?'<div>'+ghPR(ev.source_repo,ev.pr_number)+'</div>':'')+'</div>';
+    feed.appendChild(d);
+  });
+  setBadge('recentCopiesCount',copies.length);
+}
+
+/* ── PR timeline ── */
+function renderPRTimeline(){
+  var prFilter=$('auditBody').dataset.prFilter;
+  var sec=$('prTimelineSection');
+  if(!prFilter){sec.hidden=true;return;}
+  sec.hidden=false;
+  var prNum=parseInt(prFilter,10);
+  var tl=$('prTimeline');tl.innerHTML='';
+
+  // Collect trace entries for this PR
+  var traceItems=_traceData.filter(function(t){return t.pr_number===prNum;}).map(function(t){
+    var dot='tl-dot-info';
+    if(t.outcome==='processed_ok')dot='tl-dot-ok';
+    else if(t.outcome==='processing_failed')dot='tl-dot-fail';
+    else if(t.outcome==='skipped_not_merged_pr'||t.outcome==='duplicate_delivery')dot='tl-dot-warn';
+    return{time:t.at,dot:dot,title:'Webhook: '+t.outcome,detail:(t.repo||'')+' '+escapeHtml((t.detail||'').slice(0,200)),source:'trace'};
+  });
+
+  // Collect audit events for this PR
+  var auditItems=_auditData.filter(function(e){return e.pr_number===prNum;}).map(function(e){
+    return{time:e.timestamp,dot:e.success?'tl-dot-ok':'tl-dot-fail',
+      title:(e.success?'Copied':'Failed')+': '+(e.source_path||'?')+' \u2192 '+(e.target_repo||'?')+':'+(e.target_path||'?'),
+      detail:e.rule_name+(e.error_message?' \u2014 '+escapeHtml(e.error_message.slice(0,120)):''),
+      source:'audit'};
+  });
+
+  // Merge and sort chronologically
+  var all=traceItems.concat(auditItems);
+  all.sort(function(a,b){return new Date(a.time)-new Date(b.time);});
+
+  if(all.length===0){
+    tl.innerHTML='<div class="empty-state"><div class="es-icon">\u{1F50D}</div>No webhook or audit activity found for PR #'+prNum+'</div>';
+    setBadge('prTimelineBadge','');
+    return;
+  }
+
+  all.forEach(function(item){
+    var d=document.createElement('div');d.className='tl-item';
+    d.innerHTML='<div class="tl-dot '+item.dot+'"></div><div class="tl-body"><div class="tl-title">'+escapeHtml(item.title)+'</div><div class="tl-detail">'+fmtTime(item.time)+' &mdash; '+item.detail+'</div></div>';
+    tl.appendChild(d);
+  });
+  setBadge('prTimelineBadge',all.length+' events');
+}
+
+
+/* ── File match tester ── */
+function globToRegex(pat){
+  var re='',i=0;
+  while(i<pat.length){
+    var c=pat[i];
+    if(c==='*'&&pat[i+1]==='*'){
+      if(pat[i+2]==='/'){re+='(?:.+/)?';i+=3;}
+      else{re+='.*';i+=2;}
+    }else if(c==='*'){re+='[^/]*';i++;}
+    else if(c==='?'){re+='[^/]';i++;}
+    else if('.+^${}()|[]\\'.indexOf(c)>=0){re+='\\'+c;i++;}
+    else{re+=c;i++;}
+  }
+  return new RegExp('^'+re+'$');
+}
+function builtInVars(filePath){
+  var v={path:filePath};
+  var ls=filePath.lastIndexOf('/');
+  v.filename=ls>=0?filePath.substring(ls+1):filePath;
+  v.dir=ls>=0?filePath.substring(0,ls):'';
+  var ld=v.filename.lastIndexOf('.');
+  v.ext=ld>=0?v.filename.substring(ld+1):'';
+  return v;
+}
+function applyTemplate(tmpl,vars){
+  var result=tmpl;
+  for(var k in vars){result=result.split('${'+k+'}').join(vars[k]);}
+  return result;
+}
+function testFileMatch(filePath,wf){
+  // returns {matched:bool, transform:string, targetPath:string, rule:string}
+  var transforms=wf.transformations||[];
+  for(var i=0;i<transforms.length;i++){
+    var t=transforms[i];
+    if(t.move){
+      var from=t.move.from.replace(/\/$/,'');
+      if(filePath.indexOf(from)===0){
+        var rel=filePath.substring(from.length).replace(/^\//,'');
+        var target=t.move.to.replace(/\/$/,'')+'/'+rel;
+        return{matched:true,transform:'move',targetPath:target,rule:from+' \u2192 '+t.move.to};
+      }
+    }
+    if(t.copy){
+      if(filePath===t.copy.from){
+        return{matched:true,transform:'copy',targetPath:t.copy.to,rule:t.copy.from+' \u2192 '+t.copy.to};
+      }
+    }
+    if(t.glob){
+      var gre=globToRegex(t.glob.pattern);
+      if(gre.test(filePath)){
+        var vars=builtInVars(filePath);
+        // Compute relative_path: strip the prefix before the first wildcard
+        var prefixEnd=t.glob.pattern.indexOf('*');
+        if(prefixEnd>0){var pfx=t.glob.pattern.substring(0,prefixEnd).replace(/\/$/,'');vars.relative_path=filePath.substring(pfx.length).replace(/^\//,'');}
+        else{vars.relative_path=filePath;}
+        vars.matched_pattern=t.glob.pattern;
+        var tp=applyTemplate(t.glob.transform,vars);
+        return{matched:true,transform:'glob',targetPath:tp,rule:t.glob.pattern+' \u2192 '+t.glob.transform};
+      }
+    }
+    if(t.regex){
+      try{
+        var jsPat=t.regex.pattern.replace(/\(\?P</g,'(?<');
+        var re=new RegExp(jsPat);
+        var rm=re.exec(filePath);
+        if(rm){
+          var vars=builtInVars(filePath);
+          // Add named and positional groups
+          if(re.source){
+            var names=re.source.match(/\?<(\w+)>/g);
+            if(names)names.forEach(function(n){var name=n.replace('?<','').replace('>','');if(rm.groups&&rm.groups[name])vars[name]=rm.groups[name];});
+          }
+          for(var g=1;g<rm.length;g++){if(rm[g])vars['$'+g]=rm[g];}
+          vars.matched_pattern=t.regex.pattern;
+          var tp=applyTemplate(t.regex.transform,vars);
+          return{matched:true,transform:'regex',targetPath:tp,rule:t.regex.pattern};
+        }
+      }catch(e){}
+    }
+  }
+  return{matched:false};
+}
+$('fmtTest').onclick=function(){
+  var filePath=$('fmtPath').value.trim();
+  if(!filePath){toast('Enter a file path to test','info');return;}
+  if(!_wfData.length){toast('Load workflows first (click Refresh in Active workflows)','info');return;}
+  var results=$('fmtResults');results.innerHTML='';
+  var anyMatch=false;
+  _wfData.forEach(function(wf){
+    var m=testFileMatch(filePath,wf);
+    var d=document.createElement('div');d.className='fmt-result '+(m.matched?'fmt-match':'fmt-no');
+    if(m.matched){
+      anyMatch=true;
+      var dst=wf.destination?wf.destination.repo:'?';
+      d.innerHTML='<strong>\u2713 '+escapeHtml(wf.name||'unnamed')+'</strong> \u2014 '+escapeHtml(m.transform)+': <code>'+escapeHtml(m.rule)+'</code><div class="fmt-target">\u2192 '+ghLink(dst,dst+':'+m.targetPath)+'</div>';
+    }else{
+      d.innerHTML='\u2717 '+escapeHtml(wf.name||'unnamed')+' \u2014 no matching transformation';
+    }
+    results.appendChild(d);
+  });
+  // Also highlight/dim workflow cards
+  document.querySelectorAll('.wf-card').forEach(function(card){card.classList.remove('wf-match','wf-nomatch');});
+  if(anyMatch){
+    var cardEls=document.querySelectorAll('.wf-card');
+    _wfData.forEach(function(wf,idx){
+      var m=testFileMatch(filePath,wf);
+      if(cardEls[idx]){cardEls[idx].classList.add(m.matched?'wf-match':'wf-nomatch');}
+    });
+  }
+};
+$('fmtPath').addEventListener('keydown',function(e){if(e.key==='Enter')$('fmtTest').click();});
+$('fmtClear').onclick=function(){
+  $('fmtPath').value='';
+  $('fmtResults').innerHTML='';
+  document.querySelectorAll('.wf-card').forEach(function(c){c.classList.remove('wf-match','wf-nomatch');});
+};
+
+/* ── AI rule suggester ── */
+var _llmAvailable=false;
+function setLLMAvailable(enabled){
+  _llmAvailable=enabled;
+  $('aiEnabledUI').hidden=!enabled;
+  $('aiDisabledNote').hidden=enabled;
+}
+async function generateRuleSuggestion(){
+  showErr('aiErr','');
+  var src=$('aiSource').value.trim();
+  var tgt=$('aiTarget').value.trim();
+  if(!src||!tgt){showErr('aiErr','Both source and target paths are required');return;}
+  var btn=$('aiGenerate');
+  var orig=btn.textContent;
+  btn.disabled=true;btn.textContent='Generating\u2026 (can take 10-60s)';
+  try{
+    var res=await fetch(appURL('/operator/api/suggest-rule'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify({
+        source_path:src,
+        target_path:tgt,
+        target_repo:$('aiTargetRepo').value.trim(),
+        source_repo:$('aiSourceRepo').value.trim()
+      })
+    });
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){showErr('aiErr',body.error||res.statusText);$('aiResult').innerHTML='';return;}
+    renderAIResult(body);
+  }catch(e){showErr('aiErr','Request failed: '+e);}
+  finally{btn.disabled=false;btn.textContent=orig;}
+}
+function renderAIResult(body){
+  var html='';
+  var verify=body.verified
+    ?'<div class="ai-verify ai-verify-ok">\u2713 Verified — rule produces the expected target path</div>'
+    :'<div class="ai-verify ai-verify-fail">\u2717 Not verified — rule does not produce the expected target path</div>';
+  html+=verify;
+  if(!body.verified&&body.computed_path){
+    html+='<div class="hint" style="margin:0 0 0.5rem">Rule would produce: <code>'+escapeHtml(body.computed_path)+'</code></div>';
+  }
+  if(!body.verified&&body.verify_error){
+    html+='<div class="hint" style="margin:0 0 0.5rem;color:var(--red)">Reason: '+escapeHtml(body.verify_error)+'</div>';
+  }
+  if(body.warning){
+    html+='<div class="hint" style="margin:0 0 0.5rem;color:var(--amber)">\u26A0 '+escapeHtml(body.warning)+'</div>';
+  }
+  html+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.4rem">';
+  html+='<strong style="font-size:0.82rem">Generated rule</strong>';
+  html+='<button type="button" class="btn-sm" onclick="copyAIRule()">Copy YAML</button>';
+  html+='</div>';
+  html+='<pre class="ai-yaml" id="aiYAML">'+escapeHtml(body.rule_yaml||'')+'</pre>';
+  if(body.explanation){
+    html+='<div class="ai-explain"><strong>Why:</strong> '+escapeHtml(body.explanation)+'</div>';
+  }
+  $('aiResult').innerHTML='<div class="ai-result">'+html+'</div>';
+}
+function copyAIRule(){
+  var yaml=$('aiYAML').textContent;
+  navigator.clipboard.writeText(yaml).then(function(){toast('Rule YAML copied to clipboard','info');}).catch(function(){toast('Copy failed','error');});
+}
+$('aiGenerate').onclick=generateRuleSuggestion;
+$('aiClear').onclick=function(){
+  $('aiSource').value='';$('aiTarget').value='';$('aiTargetRepo').value='';$('aiSourceRepo').value='';
+  $('aiResult').innerHTML='';showErr('aiErr','');
+};
+// Pre-fill from the file match tester if the user has already typed a source path
+$('aiSource').addEventListener('focus',function(){
+  if(!this.value){var fmt=$('fmtPath').value.trim();if(fmt)this.value=fmt;}
+});
+
+/* ── AI settings panel ── */
+var _aiLastStatus=null;
+function fmtBytes(n){
+  if(!n||n<=0)return'';
+  var units=['B','KB','MB','GB','TB'];var i=0;var v=n;
+  while(v>=1024&&i<units.length-1){v/=1024;i++;}
+  return v.toFixed(i===0?0:1)+' '+units[i];
+}
+async function loadAISettingsStatus(){
+  showErr('aiSettingsErr','');
+  try{
+    var res=await fetch(appURL('/operator/api/llm/status'),{headers:authHeaders()});
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){showErr('aiSettingsErr',body.error||res.statusText);return;}
+    _aiLastStatus=body;
+    renderAISettings(body);
+    setRefreshed('aiSettingsRefreshed');
+    // Keep the AI rule suggester's availability in sync
+    setLLMAvailable(!!body.reachable);
+  }catch(e){showErr('aiSettingsErr','Request failed: '+e);}
+}
+function renderAISettings(s){
+  var line=$('aiStatusLine');
+  var provider=(s.provider||'ollama').toLowerCase();
+  var providerLabel=provider==='anthropic'?'Anthropic':'Ollama';
+  var supportsMgmt=s.supports_model_mgmt!==false && provider!=='anthropic';
+
+  // Toggle installed-models / pull-new-model section based on provider.
+  var ollamaOnly=$('aiOllamaOnly'); if(ollamaOnly) ollamaOnly.hidden=!supportsMgmt;
+
+  // Toggle the disconnected onboarding content based on provider.
+  var stepsOllama=$('aiInstallStepsOllama');
+  var stepsAnthropic=$('aiInstallStepsAnthropic');
+  if(stepsOllama) stepsOllama.hidden=provider==='anthropic';
+  if(stepsAnthropic) stepsAnthropic.hidden=provider!=='anthropic';
+
+  if(!s.available){
+    line.className='ai-status-line ai-fail';
+    line.innerHTML='<span class="dot dot-red"></span> LLM client not initialized';
+    $('aiConnectedUI').hidden=true;$('aiNotConnectedUI').hidden=true;
+    return;
+  }
+  if(!s.reachable){
+    line.className='ai-status-line ai-fail';
+    line.innerHTML='<span class="dot dot-red"></span> '+escapeHtml(providerLabel)+' unreachable at <code>'+escapeHtml(s.base_url||'')+'</code>'+(s.error?' — '+escapeHtml(s.error):'');
+    $('aiConnectedUI').hidden=true;$('aiNotConnectedUI').hidden=false;
+    $('aiNotConnectedURL').textContent=s.base_url||'';
+    if(!$('aiBaseURLDisc').value) $('aiBaseURLDisc').value=s.base_url||'';
+    return;
+  }
+  line.className='ai-status-line ai-ok';
+  line.innerHTML='<span class="dot dot-green"></span> '+escapeHtml(providerLabel)+' connected at <code>'+escapeHtml(s.base_url||'')+'</code>';
+  $('aiConnectedUI').hidden=false;$('aiNotConnectedUI').hidden=true;
+
+  // Populate model dropdown and list
+  var sel=$('aiActiveModelSel');sel.innerHTML='';
+  var list=$('aiModelList');if(list) list.innerHTML='';
+  var models=s.models||[];
+  if(supportsMgmt && list){
+    if(models.length===0){
+      list.innerHTML='<div class="empty-state" style="padding:1rem"><div class="es-icon">\u{1F4E6}</div>No models installed. Pull one below to get started.</div>';
+    }else{
+      models.forEach(function(m){
+        var row=document.createElement('div');
+        row.className='ai-model-row'+(m.name===s.active_model?' active':'');
+        var badge=m.name===s.active_model?' <span style="font-size:0.7rem;color:var(--blue);font-weight:600">\u2713 active</span>':'';
+        row.innerHTML='<span class="ai-model-name">'+escapeHtml(m.name)+badge+'</span>'
+          +'<span class="ai-model-size">'+escapeHtml(fmtBytes(m.size))+'</span>'
+          +'<button class="btn-sm" onclick="aiDeleteModel(\''+escapeHtml(m.name)+'\')">Delete</button>';
+        list.appendChild(row);
+      });
+    }
+  }
+  // Always populate the active-model dropdown from the returned list.
+  models.forEach(function(m){
+    var opt=document.createElement('option');opt.value=m.name;opt.textContent=m.name;
+    if(m.name===s.active_model)opt.selected=true;
+    sel.appendChild(opt);
+  });
+  if(!$('aiBaseURL').value) $('aiBaseURL').value=s.base_url||'';
+}
+$('aiRefreshStatus').onclick=function(){withLoading('aiRefreshStatus',loadAISettingsStatus);};
+$('aiSetActive').onclick=async function(){
+  var m=$('aiActiveModelSel').value;
+  if(!m){toast('Pick a model first','info');return;}
+  await updateLLMSettings({active_model:m});
+};
+$('aiSaveBaseURL').onclick=async function(){
+  var u=$('aiBaseURL').value.trim();
+  if(!u){toast('Enter a base URL','info');return;}
+  await updateLLMSettings({base_url:u});
+};
+$('aiSaveBaseURLDisc').onclick=async function(){
+  var u=$('aiBaseURLDisc').value.trim();
+  if(!u){toast('Enter a base URL','info');return;}
+  await updateLLMSettings({base_url:u});
+};
+async function updateLLMSettings(settings){
+  try{
+    var res=await fetch(appURL('/operator/api/llm/settings'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify(settings)
+    });
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){toast('Update failed: '+(body.error||res.statusText),'error');return;}
+    toast('Settings updated','info');
+    loadAISettingsStatus();
+  }catch(e){toast('Request failed: '+e,'error');}
+}
+async function aiDeleteModel(name){
+  if(!confirm('Delete model "'+name+'"? This frees disk space on the Ollama server.'))return;
+  try{
+    var res=await fetch(appURL('/operator/api/llm/model?name='+encodeURIComponent(name)),{method:'DELETE',headers:authHeaders()});
+    var body=await res.json().catch(function(){return{};});
+    if(!res.ok){toast('Delete failed: '+(body.error||res.statusText),'error');return;}
+    toast('Deleted '+name,'info');
+    loadAISettingsStatus();
+  }catch(e){toast('Request failed: '+e,'error');}
+}
+// Pull with streaming NDJSON progress
+$('aiPullStart').onclick=async function(){
+  var name=$('aiPullName').value.trim();
+  if(!name){toast('Enter a model name (e.g. qwen2.5-coder:7b)','info');return;}
+  var btn=$('aiPullStart');
+  var orig=btn.textContent;
+  btn.disabled=true;btn.textContent='Pulling\u2026';
+  var prog=$('aiPullProgress');prog.hidden=false;
+  prog.innerHTML='<div class="ai-progress"><div><strong>Pulling '+escapeHtml(name)+'</strong></div><div class="ai-progress-bar"><div class="ai-progress-fill" style="width:0%"></div></div><div class="ai-progress-status"><span class="ai-status-text">starting\u2026</span><span class="ai-progress-pct">0%</span></div></div>';
+  try{
+    var res=await fetch(appURL('/operator/api/llm/pull'),{
+      method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'},authHeaders()),
+      body:JSON.stringify({name:name})
+    });
+    if(!res.ok){
+      var errBody=await res.json().catch(function(){return{};});
+      prog.querySelector('.ai-status-text').textContent='failed: '+(errBody.error||res.statusText);
+      return;
+    }
+    var reader=res.body.getReader();
+    var decoder=new TextDecoder();
+    var buf='';
+    while(true){
+      var chunk=await reader.read();
+      if(chunk.done)break;
+      buf+=decoder.decode(chunk.value,{stream:true});
+      var lines=buf.split('\n');
+      buf=lines.pop();
+      lines.forEach(function(line){
+        line=line.trim();if(!line)return;
+        try{
+          var ev=JSON.parse(line);
+          var pct=0;
+          if(ev.total&&ev.completed)pct=Math.round(ev.completed/ev.total*100);
+          prog.querySelector('.ai-status-text').textContent=(ev.status||'')+(ev.error?' ('+ev.error+')':'');
+          if(pct>0){
+            prog.querySelector('.ai-progress-fill').style.width=pct+'%';
+            prog.querySelector('.ai-progress-pct').textContent=pct+'%'+(ev.total?' · '+fmtBytes(ev.completed)+' / '+fmtBytes(ev.total):'');
+          }
+        }catch(e){}
+      });
+    }
+    toast('Pull complete: '+name,'info');
+    $('aiPullName').value='';
+    loadAISettingsStatus();
+  }catch(e){toast('Pull failed: '+e,'error');}
+  finally{btn.disabled=false;btn.textContent=orig;}
+};
+
+/* ── Workflow browser ── */
+var _wfData=[];
+async function loadWorkflows(){
+  showErr('wfErr','');
+  var res=await fetch(appURL('/operator/api/workflows'),{headers:authHeaders()});
+  var body=await res.json().catch(function(){return{};});
+  if(!res.ok){showErr('wfErr',body.error||res.statusText);return;}
+  _wfData=body.workflows||[];
+  renderWorkflows();
+  setBadge('wfCount',_wfData.length+' rules');
+  setBadge('tabBadgeWorkflows',_wfData.length);
+  $('tabBadgeWorkflows').className='tab-badge tb-info';
+}
+function renderWorkflows(){
+  var container=$('wfCards');container.innerHTML='';
+  var search=$('wfSearch').value.toLowerCase().trim();
+  var filtered=_wfData;
+  if(search) filtered=filtered.filter(function(wf){
+    return (wf.name||'').toLowerCase().indexOf(search)>=0
+      ||(wf.source&&wf.source.repo||'').toLowerCase().indexOf(search)>=0
+      ||(wf.destination&&wf.destination.repo||'').toLowerCase().indexOf(search)>=0
+      ||JSON.stringify(wf.transformations||[]).toLowerCase().indexOf(search)>=0;
+  });
+  if(filtered.length===0){
+    container.innerHTML='<div class="empty-state"><div class="es-icon">\u{1F4D6}</div>'+(search?'No workflows match "'+escapeHtml(search)+'"':'No workflows configured')+'</div>';
+    return;
+  }
+  filtered.forEach(function(wf){
+    var card=document.createElement('div');card.className='wf-card';
+    var srcRepo=wf.source?wf.source.repo:'?';
+    var srcBranch=wf.source&&wf.source.branch?wf.source.branch:'main';
+    var dstRepo=wf.destination?wf.destination.repo:'?';
+    var dstBranch=wf.destination&&wf.destination.branch?wf.destination.branch:'main';
+    var strategy=(wf.commit_strategy&&wf.commit_strategy.type)||'direct';
+    var autoMerge=wf.commit_strategy&&wf.commit_strategy.auto_merge;
+    var usePRT=wf.commit_strategy&&wf.commit_strategy.use_pr_template;
+
+    var html='<div class="wf-name">'+escapeHtml(wf.name||'unnamed')+'</div>';
+    html+='<div class="wf-flow"><span class="wf-repo">'+ghLink(srcRepo)+'<span style="color:var(--text-3);margin-left:4px">:'+escapeHtml(srcBranch)+'</span></span>';
+    html+='<span class="wf-arrow">\u2192</span>';
+    html+='<span class="wf-repo">'+ghLink(dstRepo)+'<span style="color:var(--text-3);margin-left:4px">:'+escapeHtml(dstBranch)+'</span></span></div>';
+
+    // Tags
+    html+='<div class="wf-meta">';
+    html+='<span class="wf-tag '+(strategy==='pull_request'?'wf-tag-pr':'wf-tag-direct')+'">'+escapeHtml(strategy)+'</span>';
+    if(autoMerge) html+='<span class="wf-tag wf-tag-pr">auto-merge</span>';
+    if(usePRT) html+='<span class="wf-tag">pr-template</span>';
+    if(wf.exclude&&wf.exclude.length) html+='<span class="wf-tag">'+wf.exclude.length+' excludes</span>';
+    var depEnabled=wf.deprecation_check&&wf.deprecation_check.enabled;
+    if(depEnabled) html+='<span class="wf-tag">deprecation-check</span>';
+    html+='</div>';
+
+    // Transformations
+    var transforms=wf.transformations||[];
+    if(transforms.length>0){
+      html+='<div class="wf-transforms">';
+      transforms.forEach(function(t){
+        if(t.move) html+='<div><span class="wf-tag">move</span> <code>'+escapeHtml(t.move.from)+'</code> \u2192 <code>'+escapeHtml(t.move.to)+'</code></div>';
+        if(t.copy) html+='<div><span class="wf-tag">copy</span> <code>'+escapeHtml(t.copy.from)+'</code> \u2192 <code>'+escapeHtml(t.copy.to)+'</code></div>';
+        if(t.glob) html+='<div><span class="wf-tag">glob</span> <code>'+escapeHtml(t.glob.pattern)+'</code> \u2192 <code>'+escapeHtml(t.glob.transform)+'</code></div>';
+        if(t.regex) html+='<div><span class="wf-tag">regex</span> <code>'+escapeHtml(t.regex.pattern)+'</code> \u2192 <code>'+escapeHtml(t.regex.transform)+'</code></div>';
+      });
+      html+='</div>';
+    }
+
+    card.innerHTML=html;
+    container.appendChild(card);
+  });
+}
+$('wfSearch').addEventListener('input',renderWorkflows);
+$('loadWorkflows').onclick=function(){withLoading('loadWorkflows',loadWorkflows);};
+
+/* ── Audit aggregates with rate bars (#8) ── */
+async function loadOverview(){
+  showErr('ovErr','');var d=parseInt($('ovDays').value,10)||14;
+  var res=await fetch(appURL('/operator/api/audit/overview?days='+encodeURIComponent(Math.min(366,Math.max(1,d)))),{headers:authHeaders()});
+  var body=await res.json().catch(function(){return{};});
+  if(!res.ok){showErr('ovErr',body.error||res.statusText);return;}
+  var db=$('ovDailyBody'),rb=$('ovRuleBody');db.innerHTML='';rb.innerHTML='';
+  var daily=body.daily_volume||[];var maxDay=Math.max(1,...daily.map(function(r){return r.total_copies||0;}));
+  daily.forEach(function(row){
+    var tr=document.createElement('tr'),ok=row.success_count||0,fail=row.failure_count||0;
+    tr.innerHTML='<td>'+escapeHtml(row.date||'')+'</td><td>'+fmtNum(row.total_copies)+'</td><td>'+fmtNum(ok)+'</td><td>'+fmtNum(fail)+'</td><td><div class="vol-bar"><div class="vb-ok" style="width:'+Math.round(ok/maxDay*100)+'%"></div><div class="vb-fail" style="width:'+Math.round(fail/maxDay*100)+'%"></div></div></td>';
+    db.appendChild(tr);
+  });
+  var by=body.stats_by_rule||{};
+  Object.keys(by).sort().forEach(function(k){
+    var row=by[k],tr=document.createElement('tr'),total=row.total_copies||0,ok=row.success_count||0,fail=row.failure_count||0;
+    var pct=total>0?Math.round(ok/total*100):0;
+    tr.innerHTML='<td>'+escapeHtml(row.rule_name||k)+'</td><td>'+fmtNum(total)+'</td><td>'+fmtNum(ok)+'</td><td>'+fmtNum(fail)+'</td><td>'+(row.avg_duration_ms!=null?fmtNum(Math.round(row.avg_duration_ms)):'\u2014')+'</td><td><div class="vol-bar" title="'+pct+'% success"><div class="vb-ok" style="width:'+pct+'%"></div><div class="vb-fail" style="width:'+(100-pct)+'%"></div></div> <span class="small">'+pct+'%</span></td>';
+    rb.appendChild(tr);
+  });
+}
+$('loadOverview').onclick=function(){withLoading('loadOverview',loadOverview);};
+
+/* ── Deployment (grouped) ── */
+$('loadDeploy').onclick=function(){withLoading('loadDeploy',async function(){
+  showErr('deployErr','');var res=await fetch(appURL('/operator/api/deployment'),{headers:authHeaders()});
+  var body=await res.json().catch(function(){return{};});
+  if(!res.ok){showErr('deployErr',body.error||res.statusText);return;}
+  var root=$('deployCards');root.innerHTML='';root.hidden=false;
+
+  function dc(l,v,opts){
+    opts=opts||{};
+    var d=document.createElement('div');
+    var accent=opts.accent||'';
+    var plainVal=String(v!=null&&v!==''?v:'');
+    d.className='deploy-card copy-card'+(accent?' '+accent:'');
+    d.innerHTML='<div class="copy-tip">Copied!</div><div class="dk">'+escapeHtml(l)+'</div><div class="dv">'+(opts.html||escapeHtml(plainVal||'\u2014'))+'</div>';
+    if(plainVal)d.onclick=function(){copyToClip(plainVal,d);};
+    d.title=plainVal?'Click to copy':'';
+    return d;
+  }
+  function addGroup(label,cards){
+    var wrap=document.createElement('div');wrap.className='mg-group';
+    var lbl=document.createElement('div');lbl.className='mg-label';lbl.textContent=label;
+    wrap.appendChild(lbl);
+    var grid=document.createElement('div');grid.className='deploy-grid';
+    cards.forEach(function(c){if(c)grid.appendChild(c);});
+    wrap.appendChild(grid);root.appendChild(wrap);
+  }
+
+  // Service identity
+  addGroup('Service',[
+    dc('Version',body.version),
+    dc('Uptime',null,{html:escapeHtml(fmtUptime(body.uptime_seconds))}),
+    body.cloud_env&&body.cloud_env.ENV?dc('Environment',body.cloud_env.ENV):null,
+    dc('Dry Run',body.dry_run?'yes':'no',{accent:body.dry_run?'mc-warn':''})
+  ]);
+
+  // Health
+  var mongoCard=null;
+  if(body.mongo_healthy!=null){
+    var mOk=body.mongo_healthy;
+    mongoCard=dc('MongoDB',null,{html:'<span class="dot '+(mOk?'dot-green':'dot-red')+'"></span> '+(mOk?'connected':'unreachable'),accent:mOk?'mc-ok':'mc-danger'});
+    updateTBMongo(mOk);
+  }
+  addGroup('Health',[
+    dc('Audit',body.audit_enabled?'enabled':'disabled',{accent:body.audit_enabled?'mc-ok':''}),
+    body.audit_enabled&&body.audit_database?dc('Audit DB',body.audit_database+'.'+(body.audit_collection||'')):null,
+    mongoCard
+  ]);
+
+  // Infrastructure (only if Cloud Run fields present)
+  var infraCards=[];
+  if(body.cloud_run_service)infraCards.push(dc('Cloud Run',body.cloud_run_service));
+  if(body.cloud_run_revision)infraCards.push(dc('Revision',body.cloud_run_revision));
+  if(body.google_cloud_region)infraCards.push(dc('Region',body.google_cloud_region));
+  if(body.google_cloud_project)infraCards.push(dc('Project',body.google_cloud_project));
+  if(infraCards.length>0)addGroup('Infrastructure',infraCards);
+
+  // Configuration
+  addGroup('Configuration',[
+    dc('Webhook Path',body.webhook_path),
+    dc('Config Repo',body.config_repo),
+    body.effective_config_file?dc('Config File',body.effective_config_file):null,
+    dc('Release API',body.release_api_mode,{accent:body.release_api_mode==='tag_create_enabled'?'mc-ok':''}),
+    body.operator_repo_slug?dc('Operator Repo',body.operator_repo_slug):null
+  ]);
+
+  if(body.uptime_seconds!=null)updateTBUptime(body.uptime_seconds);
+  var toggle=$('deployToggleRaw'),pre=$('deployJson');toggle.hidden=false;pre.textContent=JSON.stringify(body,null,2);
+  toggle.onclick=function(){pre.hidden=!pre.hidden;toggle.textContent=pre.hidden?'Show raw JSON':'Hide raw JSON';};
+});};
+
+/* ── Probes ── */
+function statusClass(c){return c>=200&&c<300?'http-ok':c===503||c===429?'http-warn':'http-err';}
+async function loadProbe(path,sId,pId){var se=$(sId),pr=$(pId);try{var r=await fetch(appURL(path),{headers:{Accept:'application/json'}});var t=await r.text();se.innerHTML='<span class="'+statusClass(r.status)+'">HTTP '+r.status+'</span>';pr.hidden=false;try{pr.textContent=JSON.stringify(JSON.parse(t),null,2);}catch(e){pr.textContent=t;}return r.status;}catch(e){se.innerHTML='<span class="http-err">failed</span>';pr.hidden=false;pr.textContent=String(e);return 0;}}
+async function loadAllProbes(){showErr('probesErr','');await loadProbe('/health','healthStatus','healthJson');await loadProbe('/ready','readyStatus','readyJson');var ms=await loadProbe('/metrics','metricsStatus','metricsJson');if(ms===404)showErr('probesErr','/metrics not mounted (METRICS_ENABLED=false)');}
+$('loadProbes').onclick=function(){withLoading('loadProbes',loadAllProbes);};
+
+/* ── Deliveries ── */
+async function loadDeliveries(){showErr('delErr','');var lim=parseInt($('delLimit').value,10)||50;var res=await fetch(appURL('/operator/api/observability/deliveries?limit='+encodeURIComponent(Math.min(200,Math.max(1,lim)))),{headers:authHeaders()});var body=await res.json().catch(function(){return{};});if(!res.ok){showErr('delErr',body.error||res.statusText);return;}var tb=$('delBody');tb.innerHTML='';var dels=body.deliveries||[];dels.forEach(function(row){var tr=document.createElement('tr');tr.innerHTML='<td class="mono">'+fmtTime(row.seen_at)+'</td><td class="mono">'+escapeHtml(row.delivery_id||'')+'</td><td>'+(row.duplicate?'<span class="fail">yes</span>':'<span class="ok">no</span>')+'</td>';tb.appendChild(tr);});emptyState('delBody',3,'\u{1F4E6}','No delivery observations yet');setBadge('delCount',dels.length+(dels.length>=lim?' (limit)':''));}
+$('loadDeliveries').onclick=function(){withLoading('loadDeliveries',loadDeliveries);};
+
+/* ── Release ── */
+$('doRelease').onclick=function(){
+  var v=$('version').value.trim();
+  if(!v){showErr('relErr','Enter a version tag');return;}
+  if(!confirm('Push tag '+v+' to GitHub?\n\nThis may trigger a CI deploy pipeline.'))return;
+  withLoading('doRelease',async function(){showErr('relErr','');var res=await fetch(appURL('/operator/api/release'),{method:'POST',headers:Object.assign({'Content-Type':'application/json'},authHeaders()),body:JSON.stringify({version:v})});var body=await res.json().catch(function(){return{};});var pre=$('relJson');pre.hidden=false;pre.textContent=JSON.stringify(body,null,2);if(!res.ok)showErr('relErr',body.error||res.statusText);});
+};
+
+/* ── Global refresh ── */
+function loadAllSecured(){if(!hasToken())return;loadAudit();loadWebhookTraces();loadDeliveries();loadOverview();loadWorkflows();loadAISettingsStatus();$('loadDeploy').click();}
+function refreshAll(){if(COP_ORIGIN){loadMetricsCards();loadAllProbes();}loadAllSecured();}
+$('refreshAll').onclick=refreshAll;
+
+/* Deep-linkable URL params (#5) */
+function initFromURL(){
+  var p=new URLSearchParams(location.search);
+  if(p.has('event_type'))$('fltEvent').value=p.get('event_type');
+  if(p.has('success'))$('fltSuccess').value=p.get('success');
+  if(p.has('rule_name'))$('fltRule').value=p.get('rule_name');
+  if(p.has('since'))$('fltSince').value=p.get('since');
+  if(p.has('limit'))$('limit').value=p.get('limit');
+  if(p.has('pr')){$('prLookup').value=p.get('pr');$('auditBody').dataset.prFilter=p.get('pr');}
+  if(p.has('path')){$('pathLookup').value=p.get('path');$('auditBody').dataset.pathFilter=p.get('path');}
+  if(p.has('tab'))switchTab(p.get('tab'));
+  if(p.has('mode'))setMode(p.get('mode'));
+}
+
+/* ── Keyboard shortcuts (#10) ── */
+$('helpBtn').onclick=function(){$('helpOverlay').hidden=!$('helpOverlay').hidden;};
+document.addEventListener('keydown',function(e){
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT'){if(e.key==='Escape'){e.target.blur();}return;}
+  if(e.key==='Escape'){$('helpOverlay').hidden=true;closeDrawer();return;}
+  if(e.key==='r'||e.key==='R'){e.preventDefault();refreshAll();}
+  if(e.key==='d'||e.key==='D'){e.preventDefault();$('darkToggle').click();}
+  if(e.key==='t'||e.key==='T'){e.preventDefault();toggleTimeMode();}
+  if(e.key==='w'||e.key==='W'){e.preventDefault();setMode(document.body.classList.contains('writer-mode')?'operator':'writer');}
+  if(e.key==='1'){switchTab('overview');}
+  if(e.key==='2'){switchTab('webhooks');}
+  if(e.key==='3'){switchTab('audit');}
+  if(e.key==='4'){switchTab('workflows');}
+  if(e.key==='5'){switchTab('system');}
+  if(e.key==='?'){e.preventDefault();$('helpOverlay').hidden=!$('helpOverlay').hidden;}
+});
+
+/* ── Init ── */
+function restoreAutoRefresh(){
+  if(localStorage.getItem('op-auto-metrics')==='1'){$('metricsAuto').checked=true;syncMetricsAuto();}
+  if(localStorage.getItem('op-auto-traces')==='1'){$('tracesAuto').checked=true;syncTracesAuto();}
+  if(localStorage.getItem('op-auto-audit')==='1'){$('auditAuto').checked=true;syncAuditAuto();}
+}
+initDarkMode();initMode();syncTimeBtn();initSections();initTabs();initFromURL();checkServerStatus();startHeartbeat();
+if(COP_ORIGIN){
+  loadAllProbes();loadMetricsCards();restoreAutoRefresh();
+  if(hasToken()){fetchMe();loadAudit();loadWebhookTraces();loadOverview();loadAISettingsStatus();$('loadDeploy').click();}
+}
+</script>
+
+<!-- Drawer (must be after script so closeDrawer is defined) -->
+<div id="drawer" hidden>
+  <div class="drawer-backdrop" onclick="closeDrawer()"></div>
+  <div class="drawer-panel">
+    <div class="drawer-hd"><h3>Event detail</h3><button class="drawer-cx" onclick="closeDrawer()">&times;</button></div>
+    <div class="drawer-bd" id="drawerBody"></div>
+  </div>
+</div>
+
+</body>
+</html>

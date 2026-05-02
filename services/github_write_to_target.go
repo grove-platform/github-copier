@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -11,6 +12,10 @@ import (
 	"github.com/grove-platform/github-copier/configs"
 	"github.com/grove-platform/github-copier/types"
 )
+
+// errTreeUnchanged is returned by commitFilesToBranch when the new file tree is
+// identical to the branch HEAD, meaning there is nothing to commit.
+var errTreeUnchanged = errors.New("tree unchanged — nothing to commit")
 
 // parseRepoPath parses a repository path in the format "owner/repo" and returns owner and repo separately.
 // If the path doesn't contain a slash, it returns defaultOwner and the path as repo name.
@@ -54,7 +59,8 @@ func normalizeRefPath(branchPath string, fullPath bool) string {
 
 // AddFilesToTargetRepos uploads files to target repository branches.
 // It accepts the upload map as a parameter for concurrency safety.
-func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector) {
+// When auditLogger is non-nil, each file copy is recorded (success or failure) for MongoDB audit.
+func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToUpload map[types.UploadKey]types.UploadFileContent, prTemplateFetcher PRTemplateFetcher, metricsCollector *MetricsCollector, auditLogger AuditLogger) {
 	if config.DryRun {
 		for key, value := range filesToUpload {
 			LogInfo("[DRY-RUN] Would upload files to target repo",
@@ -71,11 +77,95 @@ func AddFilesToTargetRepos(ctx context.Context, config *configs.Config, filesToU
 	}
 
 	for key, value := range filesToUpload {
+		batchStart := time.Now()
 		if err := uploadToTarget(ctx, config, key, value, prTemplateFetcher); err != nil {
 			LogCritical("Failed to upload files", "repo", key.RepoName, "error", err)
 			recordBatchFailure(metricsCollector, len(value.Content))
+			auditLogCopyBatchFailure(ctx, auditLogger, key, value, err)
+		} else {
+			auditLogCopyBatchSuccess(ctx, auditLogger, key, value, time.Since(batchStart))
 		}
 	}
+}
+
+func auditLogCopyBatchSuccess(ctx context.Context, auditLogger AuditLogger, key types.UploadKey, value types.UploadFileContent, elapsed time.Duration) {
+	if auditLogger == nil || len(value.Content) == 0 {
+		return
+	}
+	n := len(value.Content)
+	perFileMs := elapsed.Milliseconds() / int64(n)
+	if perFileMs == 0 && elapsed > 0 {
+		perFileMs = 1
+	}
+	for i := range value.Content {
+		f := value.Content[i]
+		meta := types.CopierFileMeta{}
+		if i < len(value.FileMeta) {
+			meta = value.FileMeta[i]
+		}
+		srcPath := meta.SourcePath
+		if srcPath == "" {
+			srcPath = f.GetPath()
+		}
+		ev := &AuditEvent{
+			RuleName:   meta.RuleName,
+			SourceRepo: meta.SourceRepo,
+			SourcePath: srcPath,
+			CommitSHA:  meta.CommitSHA,
+			TargetRepo: key.RepoName,
+			TargetPath: f.GetName(),
+			PRNumber:   meta.PRNumber,
+			Success:    true,
+			DurationMs: perFileMs,
+			FileSize:   int64(decodedFileBytes(&f)),
+		}
+		if err := auditLogger.LogCopyEvent(ctx, ev); err != nil {
+			LogWarning("audit LogCopyEvent failed", "error", err)
+		}
+	}
+}
+
+func auditLogCopyBatchFailure(ctx context.Context, auditLogger AuditLogger, key types.UploadKey, value types.UploadFileContent, batchErr error) {
+	if auditLogger == nil || len(value.Content) == 0 {
+		return
+	}
+	msg := batchErr.Error()
+	for i := range value.Content {
+		f := value.Content[i]
+		meta := types.CopierFileMeta{}
+		if i < len(value.FileMeta) {
+			meta = value.FileMeta[i]
+		}
+		srcPath := meta.SourcePath
+		if srcPath == "" {
+			srcPath = f.GetPath()
+		}
+		ev := &AuditEvent{
+			RuleName:     meta.RuleName,
+			SourceRepo:   meta.SourceRepo,
+			SourcePath:   srcPath,
+			CommitSHA:    meta.CommitSHA,
+			TargetRepo:   key.RepoName,
+			TargetPath:   f.GetName(),
+			PRNumber:     meta.PRNumber,
+			Success:      false,
+			ErrorMessage: msg,
+		}
+		if err := auditLogger.LogCopyEvent(ctx, ev); err != nil {
+			LogWarning("audit LogCopyEvent (failure) failed", "error", err)
+		}
+	}
+}
+
+func decodedFileBytes(f *github.RepositoryContent) int {
+	if f == nil {
+		return 0
+	}
+	c, err := f.GetContent()
+	if err != nil {
+		return 0
+	}
+	return len(c)
 }
 
 // uploadToTarget handles a single upload-key: authenticates for the target org,
@@ -230,6 +320,11 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 
 		// Push new files to the existing branch
 		if err := commitFilesToBranch(ctx, config, client, key, files, existingBranch, commitMessage); err != nil {
+			if errors.Is(err, errTreeUnchanged) {
+				LogInfo("No changes to push to existing copier PR — files already up to date",
+					"pr_number", existingPR.GetNumber(), "repo", key.RepoName)
+				return nil
+			}
 			return fmt.Errorf("commit to existing copier branch %s: %w", existingBranch, err)
 		}
 
@@ -259,6 +354,13 @@ func addFilesViaPR(ctx context.Context, config *configs.Config, client *github.C
 
 	// 2. Commit files to temp branch
 	if err := commitFilesToBranch(ctx, config, client, key, files, tempBranch, commitMessage); err != nil {
+		if errors.Is(err, errTreeUnchanged) {
+			LogInfo("No changes to commit — files already match target. Cleaning up temp branch.",
+				"repo", key.RepoName, "branch", tempBranch)
+			// Best-effort cleanup of the empty branch
+			_, _ = client.Git.DeleteRef(ctx, owner, repoName, "refs/heads/"+tempBranch)
+			return nil
+		}
 		return err
 	}
 
@@ -305,7 +407,7 @@ func commitFilesToBranch(ctx context.Context, config *configs.Config, client *gi
 			"branch", tempBranch,
 			"tree_sha", tr.TreeSHA,
 		)
-		return nil
+		return errTreeUnchanged
 	}
 
 	if err = createCommit(ctx, client, config.ConfigRepoOwner, tempKey, tr.BaseSHA, tr.TreeSHA, commitMessage); err != nil {

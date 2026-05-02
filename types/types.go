@@ -110,14 +110,25 @@ type UploadKey struct {
 }
 
 type UploadFileContent struct {
-	TargetBranch   string                     `json:"target_branch"`
-	Content        []github.RepositoryContent `json:"content"`
-	CommitStrategy CommitStrategy             `json:"commit_strategy,omitempty"`
-	CommitMessage  string                     `json:"commit_message,omitempty"`
-	PRTitle        string                     `json:"pr_title,omitempty"`
-	PRBody         string                     `json:"pr_body,omitempty"`
-	UsePRTemplate  bool                       `json:"use_pr_template,omitempty"` // If true, fetch and merge PR template from target repo
-	AutoMergePR    bool                       `json:"auto_merge_pr,omitempty"`
+	TargetBranch string                     `json:"target_branch"`
+	Content      []github.RepositoryContent `json:"content"`
+	// FileMeta aligns 1:1 with Content — provenance for each file (audit, Slack, diagnostics).
+	FileMeta       []CopierFileMeta `json:"file_meta,omitempty"`
+	CommitStrategy CommitStrategy   `json:"commit_strategy,omitempty"`
+	CommitMessage  string           `json:"commit_message,omitempty"`
+	PRTitle        string           `json:"pr_title,omitempty"`
+	PRBody         string           `json:"pr_body,omitempty"`
+	UsePRTemplate  bool             `json:"use_pr_template,omitempty"` // If true, fetch and merge PR template from target repo
+	AutoMergePR    bool             `json:"auto_merge_pr,omitempty"`
+}
+
+// CopierFileMeta carries per-file provenance for uploads (order matches UploadFileContent.Content).
+type CopierFileMeta struct {
+	RuleName   string `json:"rule_name,omitempty"`
+	SourceRepo string `json:"source_repo,omitempty"`
+	SourcePath string `json:"source_path,omitempty"`
+	CommitSHA  string `json:"commit_sha,omitempty"`
+	PRNumber   int    `json:"pr_number,omitempty"`
 }
 
 // CommitStrategy represents the strategy for committing changes

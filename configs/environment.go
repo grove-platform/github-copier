@@ -69,6 +69,29 @@ type Config struct {
 	// Webhook retry configuration
 	WebhookMaxRetries        int // max retry attempts for failed webhook processing
 	WebhookRetryInitialDelay int // initial delay between retries in seconds (doubles each attempt)
+
+	// Operator web UI — off unless OPERATOR_UI_ENABLED=true. Works with any HTTP
+	// origin (local dev, Cloud Run, etc.). Access is gated by GitHub PATs:
+	// each user authenticates with their personal token, and the role
+	// (operator or writer) is determined by their permission on OPERATOR_AUTH_REPO.
+	OperatorUIEnabled           bool
+	OperatorAuthRepo            string // "owner/repo" — user permissions here determine role (required when UI is enabled)
+	OperatorRepoSlug            string // "owner/repo" for GitHub links in audit/trace rows (optional)
+	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
+	OperatorReleaseTargetBranch string // branch SHA used when creating a tag (default main)
+
+	// AI rule suggestion (optional) — LLM-powered rule generation in the operator UI.
+	// The feature is available whenever the LLM provider is reachable at runtime;
+	// operators can change the active model and base URL from the UI without restart.
+	LLMProvider string // "ollama" (local) or "anthropic" (hosted)
+	LLMBaseURL  string // initial default; overridable from the UI
+	LLMModel    string // initial default; overridable from the UI
+
+	// Anthropic API key — required when LLMProvider="anthropic". Loaded from
+	// Secret Manager via AnthropicAPIKeySecretName, or directly via
+	// ANTHROPIC_API_KEY for local dev.
+	AnthropicAPIKey           string
+	AnthropicAPIKeySecretName string
 }
 
 const (
@@ -117,6 +140,16 @@ const (
 	WebhookProcessingTimeoutSeconds = "WEBHOOK_PROCESSING_TIMEOUT_SECONDS"
 	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
 	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
+	OperatorUIEnabled               = "OPERATOR_UI_ENABLED"
+	OperatorAuthRepo                = "OPERATOR_AUTH_REPO" // repo for GitHub PAT permission check
+	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
+	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
+	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
+	LLMProvider                     = "LLM_PROVIDER"
+	LLMBaseURL                      = "LLM_BASE_URL"
+	LLMModel                        = "LLM_MODEL"
+	AnthropicAPIKey                 = "ANTHROPIC_API_KEY"             // #nosec G101 -- env var name, not a credential
+	AnthropicAPIKeySecretName       = "ANTHROPIC_API_KEY_SECRET_NAME" // #nosec G101 -- env var name, not a credential
 )
 
 // NewConfig returns a new Config instance with default values
@@ -235,6 +268,24 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.WebhookMaxRetries = getIntEnvWithDefault(WebhookMaxRetries, config.WebhookMaxRetries)
 	config.WebhookRetryInitialDelay = getIntEnvWithDefault(WebhookRetryInitialDelay, config.WebhookRetryInitialDelay)
 
+	config.OperatorUIEnabled = getBoolEnvWithDefault(OperatorUIEnabled, false)
+	config.OperatorAuthRepo = os.Getenv(OperatorAuthRepo)
+	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
+	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
+	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
+
+	config.LLMProvider = strings.ToLower(getEnvWithDefault(LLMProvider, "ollama"))
+	// Per-provider defaults: Ollama runs locally, Anthropic is hosted.
+	if config.LLMProvider == "anthropic" {
+		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "https://api.anthropic.com")
+		config.LLMModel = getEnvWithDefault(LLMModel, "claude-haiku-4-5")
+	} else {
+		config.LLMBaseURL = getEnvWithDefault(LLMBaseURL, "http://localhost:11434")
+		config.LLMModel = getEnvWithDefault(LLMModel, "qwen2.5-coder:7b")
+	}
+	config.AnthropicAPIKey = os.Getenv(AnthropicAPIKey)
+	config.AnthropicAPIKeySecretName = os.Getenv(AnthropicAPIKeySecretName)
+
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -323,5 +374,53 @@ func validateConfig(config *Config) error {
 		}
 	}
 
+	if err := validateWebserverPath(config.WebserverPath); err != nil {
+		return err
+	}
+
+	if err := validateOperatorAuth(config); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateOperatorAuth enforces that OPERATOR_AUTH_REPO is set when the UI is
+// enabled. Without it, any valid GitHub user could authenticate with full
+// operator access since there would be no per-repo permission gate.
+func validateOperatorAuth(config *Config) error {
+	if !config.OperatorUIEnabled {
+		return nil
+	}
+	if strings.TrimSpace(config.OperatorAuthRepo) == "" {
+		return fmt.Errorf("OPERATOR_UI_ENABLED=true requires OPERATOR_AUTH_REPO (owner/repo) to gate access — each user authenticates with their GitHub PAT and their permission on that repo determines their role")
+	}
+	if !strings.Contains(config.OperatorAuthRepo, "/") {
+		return fmt.Errorf("OPERATOR_AUTH_REPO must be in owner/repo format (got %q)", config.OperatorAuthRepo)
+	}
+	return nil
+}
+
+// validateWebserverPath rejects values that would collide with built-in HTTP routes.
+func validateWebserverPath(p string) error {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return fmt.Errorf("WEBSERVER_PATH cannot be empty")
+	}
+	if !strings.HasPrefix(p, "/") {
+		return fmt.Errorf("WEBSERVER_PATH must start with / (got %q)", p)
+	}
+	if p == "/" {
+		return fmt.Errorf("WEBSERVER_PATH cannot be / (reserved; use a dedicated path such as /events)")
+	}
+	for _, reserved := range []string{"/health", "/ready", "/metrics", "/config", "/operator"} {
+		if strings.EqualFold(p, reserved) {
+			return fmt.Errorf("WEBSERVER_PATH cannot be %s (reserved for a built-in route)", reserved)
+		}
+	}
+	norm := strings.TrimSuffix(strings.ToLower(p), "/") + "/"
+	if strings.HasPrefix(norm, "/operator/") {
+		return fmt.Errorf("WEBSERVER_PATH cannot be under /operator/ (reserved for the operator UI)")
+	}
 	return nil
 }
