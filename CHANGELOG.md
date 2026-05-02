@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.4.2] - 2026-05-02
+
 ### Fixed
 
 - **Version always showing "dev"** — `--set-build-env-vars` does not propagate to Docker `ARG` values in Cloud Run's buildless deploy path. App now reads `APP_VERSION` env var at startup as a runtime fallback; CI deploy sets it via `--set-env-vars`.
