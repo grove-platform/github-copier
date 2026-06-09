@@ -8,8 +8,8 @@ ingress:
 replicaCount: 2
 
 env:
-  GITHUB_APP_ID: ""        # fill in
-  INSTALLATION_ID: ""      # fill in
+  GITHUB_APP_ID: "1166559"     
+  INSTALLATION_ID: "91420665"
 
   CONFIG_REPO_OWNER: "grove-platform"
   CONFIG_REPO_NAME: "github-copier"
