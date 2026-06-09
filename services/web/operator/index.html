@@ -328,7 +328,7 @@
 
 <main>
 
-  <section>
+  <section id="tokenSection">
     <div class="sb" style="padding-top:0.85rem">
       <label for="token"><strong>GitHub Personal Access Token</strong> (read access to <code id="authRepoLabel">the configured auth repo</code>)</label>
       <div class="row">
@@ -714,9 +714,13 @@
 /* ── Utilities ── */
 var TKEY='github-copier-operator-token', SKEY='operator-sections', DKEY='operator-dark', TMKEY='operator-time-mode';
 var COP_ORIGIN=(location.protocol==='file:'||!location.origin)?'':location.origin;
+var _authMode='github'; // updated from /operator/api/status on load
 function appURL(p){return COP_ORIGIN?COP_ORIGIN+(p[0]==='/'?p:'/'+p):p;}
 function authHeaders(){var t=sessionStorage.getItem(TKEY)||'',h={Accept:'application/json'};if(t)h['Authorization']='Bearer '+t;return h;}
 function hasToken(){return!!sessionStorage.getItem(TKEY);}
+// hasAuth: true when the user has a stored PAT (github mode) or auth is
+// handled transparently by the CorpSecure proxy (kanopy mode).
+function hasAuth(){return _authMode==='kanopy'||hasToken();}
 function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
 function showErr(id,msg){var el=$(id);if(!msg){el.hidden=true;el.textContent='';return;}el.hidden=false;el.textContent=msg;}
 function $(id){return document.getElementById(id);}
@@ -886,7 +890,7 @@ $('clearToken').onclick=function(){
 /* ── Authenticated user ── */
 var _currentUser=null;
 function fetchMe(){
-  if(!hasToken())return;
+  if(!hasAuth())return;
   fetch(appURL('/operator/api/me'),{headers:authHeaders()}).then(function(r){
     if(!r.ok)return null;
     return r.json();
@@ -933,6 +937,12 @@ function checkServerStatus(){
       if(lbl){lbl.textContent=d.auth_repo;}
     }
     setLLMAvailable(!!d.llm_available);
+    if(d.auth_mode==='kanopy'){
+      _authMode='kanopy';
+      var ts=$('tokenSection');if(ts)ts.hidden=true;
+      fetchMe();
+      loadAllSecured();
+    }
   }).catch(function(){});
 }
 
@@ -1902,7 +1912,7 @@ $('doRelease').onclick=function(){
 };
 
 /* ── Global refresh ── */
-function loadAllSecured(){if(!hasToken())return;loadAudit();loadWebhookTraces();loadDeliveries();loadOverview();loadWorkflows();loadAISettingsStatus();$('loadDeploy').click();}
+function loadAllSecured(){if(!hasAuth())return;loadAudit();loadWebhookTraces();loadDeliveries();loadOverview();loadWorkflows();loadAISettingsStatus();$('loadDeploy').click();}
 function refreshAll(){if(COP_ORIGIN){loadMetricsCards();loadAllProbes();}loadAllSecured();}
 $('refreshAll').onclick=refreshAll;
 

@@ -66,11 +66,17 @@ func (o *operatorUI) handleSuggestRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Per-PAT rate limit caps Anthropic token spend per operator. Keyed by
-	// hashed PAT so the bucket survives across cache evictions of the full
-	// user record and can't be leaked by a memory dump.
-	if pat := bearerToken(r); pat != "" && o.suggestLimiter != nil {
-		allowed, resetAt := o.suggestLimiter.Allow(hashToken(pat))
+	// Per-user rate limit caps Anthropic token spend. In github mode keyed by
+	// hashed PAT; in kanopy mode keyed by hashed login (no PAT available).
+	// Either way the raw credential never sits in the bucket map.
+	var rlKey string
+	if pat := bearerToken(r); pat != "" {
+		rlKey = hashToken(pat)
+	} else if u := operatorUserFromCtx(r); u != nil {
+		rlKey = hashToken(u.Login)
+	}
+	if rlKey != "" && o.suggestLimiter != nil {
+		allowed, resetAt := o.suggestLimiter.Allow(rlKey)
 		if !allowed {
 			retry := time.Until(resetAt).Round(time.Second)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", int(retry.Seconds())))

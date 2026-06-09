@@ -1,0 +1,72 @@
+kind: pipeline
+type: kubernetes
+name: default
+
+platform:
+  arch: amd64
+
+trigger:
+  event:
+    - push
+    - tag
+  ref:
+    - refs/heads/main
+    - refs/tags/v*
+
+steps:
+  - name: publish
+    image: plugins/kaniko-ecr
+    settings:
+      create_repository: true
+      registry: 795250896452.dkr.ecr.us-east-1.amazonaws.com
+      repo: docs/${DRONE_REPO_NAME}
+      context: .
+      dockerfile: Dockerfile
+      tags:
+        - git-${DRONE_COMMIT_SHA:0:7}
+        - latest
+      access_key:
+        from_secret: ecr_access_key
+      secret_key:
+        from_secret: ecr_secret_key
+    when:
+      event:
+        - push
+
+  - name: deploy-staging
+    image: public.ecr.aws/kanopy/drone-helm:v3
+    settings:
+      chart: mongodb/web-app
+      chart_version: 4.30.0
+      atomic: true
+      add_repos: [mongodb=https://10gen.github.io/helm-charts]
+      namespace: docs
+      release: ${DRONE_REPO_NAME}
+      values: image.tag=git-${DRONE_COMMIT_SHA:0:7},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/${DRONE_REPO_NAME}
+      values_files: ["kanopy/values.yaml", "kanopy/values.staging.yaml"]
+      api_server: https://api.staging.corp.mongodb.com
+      kubernetes_token:
+        from_secret: staging_kubernetes_token
+    when:
+      event:
+        - push
+
+  - name: deploy-prod
+    image: public.ecr.aws/kanopy/drone-helm:v3
+    settings:
+      chart: mongodb/web-app
+      chart_version: 4.30.0
+      atomic: true
+      add_repos: [mongodb=https://10gen.github.io/helm-charts]
+      namespace: docs
+      release: ${DRONE_REPO_NAME}
+      values: image.tag=git-${DRONE_COMMIT_SHA:0:7},image.repository=795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/${DRONE_REPO_NAME}
+      values_files: ["kanopy/values.yaml", "kanopy/values.prod.yaml"]
+      api_server: https://api.prod.corp.mongodb.com
+      kubernetes_token:
+        from_secret: prod_kubernetes_token
+    when:
+      event:
+        - tag
+      ref:
+        - refs/tags/v*

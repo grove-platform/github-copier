@@ -1,0 +1,66 @@
+# Staging overlay for github-copier. Merged on top of values.yaml at deploy time.
+
+ingress:
+  enabled: true
+  hosts:
+    - github-copier.docs.staging.corp.mongodb.com
+
+replicaCount: 1
+
+# Non-secret environment variables.
+env:
+  # GitHub App — org-specific IDs (not sensitive, but vary by deployment)
+  GITHUB_APP_ID: ""        # fill in: your GitHub App's numeric ID
+  INSTALLATION_ID: ""      # fill in: the installation ID for the grove-platform org
+
+  # Config repository
+  CONFIG_REPO_OWNER: "grove-platform"
+  CONFIG_REPO_NAME: "github-copier"
+  CONFIG_REPO_BRANCH: "main"
+  MAIN_CONFIG_FILE: ".copier/main.yaml"
+  USE_MAIN_CONFIG: "true"
+  DEPRECATION_FILE: "deprecated_examples.json"
+
+  # Webhook + committer
+  WEBSERVER_PATH: "/events"
+  COMMITTER_NAME: "GitHub Copier App"
+  COMMITTER_EMAIL: "bot@mongodb.com"
+
+  # GCP logging (still used even on Kanopy for structured logs)
+  GOOGLE_CLOUD_PROJECT_ID: "github-copy-code-examples"
+  COPIER_LOG_NAME: "code-copier-log"
+
+  # Features
+  AUDIT_ENABLED: "true"
+  METRICS_ENABLED: "true"
+
+  # Operator UI — Kanopy CorpSecure auth mode
+  OPERATOR_UI_ENABLED: "true"
+  OPERATOR_AUTH_MODE: "kanopy"
+  OPERATOR_AUTH_KANOPY_GROUP: "10gen-github-copier-operators"
+  # Staging uses the staging JWKS endpoint; issuer remains login.corp.mongodb.com.
+  OPERATOR_AUTH_KANOPY_JWKS_URL: "https://login.staging.corp.mongodb.com/.well-known/jwks.json"
+  OPERATOR_REPO_SLUG: "grove-platform/github-copier"
+
+  # Secrets are read from env vars directly (no GCP Secret Manager on Kanopy).
+  SKIP_SECRET_MANAGER: "true"
+
+  # LLM rule suggester
+  LLM_PROVIDER: "anthropic"
+  LLM_BASE_URL: "https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic"
+  LLM_MODEL: "claude-haiku-4-5"
+
+# envSecrets maps ENV_VAR_NAME → Kubernetes Secret name.
+# Provision all entries before first deploy:
+#
+#   helm ksec set github-copier-secrets \
+#     GITHUB_APP_PRIVATE_KEY_B64="$(base64 < your-app.private-key.pem)" \
+#     WEBHOOK_SECRET="your-webhook-secret" \
+#     MONGO_URI="mongodb+srv://..." \
+#     ANTHROPIC_API_KEY="sk-ant-..."
+#
+envSecrets:
+  GITHUB_APP_PRIVATE_KEY_B64: github-copier-secrets
+  WEBHOOK_SECRET: github-copier-secrets
+  MONGO_URI: github-copier-secrets
+  ANTHROPIC_API_KEY: github-copier-secrets

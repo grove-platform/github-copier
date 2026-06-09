@@ -37,10 +37,13 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 		cfg:       cfg,
 		container: container,
 		version:   version,
-		ghCache:   newGHAuthCache(5 * time.Minute),
-		// 30 suggestions/hour/PAT caps Anthropic spend per operator. Normal
+		authMode:  cfg.OperatorAuthMode,
+		// 30 suggestions/hour/user caps Anthropic spend per operator. Normal
 		// usage is well under this; a misbehaving client can't rack up a bill.
 		suggestLimiter: newTokenBucket(30, time.Hour),
+	}
+	if o.authMode != "kanopy" {
+		o.ghCache = newGHAuthCache(5 * time.Minute)
 	}
 	// Always create the LLM client; availability is checked dynamically via Ping.
 	// Operators can change the active model and base URL from the UI without restart.
@@ -77,7 +80,11 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 	mux.HandleFunc("/operator", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/operator/", http.StatusFound)
 	})
-	LogInfo("Operator UI: /operator/ with GitHub PAT authentication", "auth_repo", cfg.OperatorAuthRepo)
+	if o.authMode == "kanopy" {
+		LogInfo("Operator UI: /operator/ with Kanopy CorpSecure authentication", "operator_group", cfg.OperatorAuthKanopyGroup)
+	} else {
+		LogInfo("Operator UI: /operator/ with GitHub PAT authentication", "auth_repo", cfg.OperatorAuthRepo)
+	}
 }
 
 type operatorUI struct {
@@ -85,9 +92,10 @@ type operatorUI struct {
 	container      *ServiceContainer
 	version        string
 	replayInFlight sync.Map     // key: "owner/repo#pr" → prevents concurrent replays
-	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache
+	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache (github mode only)
+	authMode       string       // "github" or "kanopy"
 	llm            LLMClient    // optional: enabled when cfg.LLMEnabled is true
-	suggestLimiter *tokenBucket // per-PAT rate limit for /api/suggest-rule (LLM cost cap)
+	suggestLimiter *tokenBucket // per-user rate limit for /api/suggest-rule (LLM cost cap)
 	llmPing        llmPingCache // cached Ping() result so /llm/status doesn't burn tokens on every refresh
 }
 
@@ -134,8 +142,18 @@ func operatorUserFromCtx(r *http.Request) *OperatorUser {
 	return u
 }
 
-// wrapAPI validates the incoming request's GitHub PAT and attaches the user to the context.
+// wrapAPI validates the incoming request and attaches the authenticated user to
+// the context. Dispatches to the github or kanopy implementation based on
+// the configured auth mode.
 func (o *operatorUI) wrapAPI(next http.HandlerFunc) http.HandlerFunc {
+	if o.authMode == "kanopy" {
+		return o.wrapAPIKanopy(next)
+	}
+	return o.wrapAPIGitHub(next)
+}
+
+// wrapAPIGitHub validates a GitHub PAT from the Authorization: Bearer header.
+func (o *operatorUI) wrapAPIGitHub(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		token := bearerToken(r)
@@ -148,6 +166,39 @@ func (o *operatorUI) wrapAPI(next http.HandlerFunc) http.HandlerFunc {
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		ctx := context.WithValue(r.Context(), operatorUserCtxKey{}, user)
+		next(w, r.WithContext(ctx))
+	}
+}
+
+// wrapAPIKanopy validates the CorpSecure JWT from X-Kanopy-Internal-Authorization.
+// CorpSecure injects this header after authenticating the user against Okta;
+// the app never sees unauthenticated requests when deployed behind the proxy.
+func (o *operatorUI) wrapAPIKanopy(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		// Dev escape hatch: DEV_BYPASS_AUTH=1 in local development only.
+		if u := devBypassUser(); u != nil {
+			ctx := context.WithValue(r.Context(), operatorUserCtxKey{}, u)
+			next(w, r.WithContext(ctx))
+			return
+		}
+
+		raw := strings.TrimPrefix(r.Header.Get("X-Kanopy-Internal-Authorization"), "Bearer ")
+		if raw == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "missing Kanopy authorization header"})
+			return
+		}
+
+		user, err := validateKanopyJWT(r.Context(), raw, o.cfg.OperatorAuthKanopyGroup, o.cfg.OperatorAuthKanopyJWKSURL)
+		if err != nil {
+			LogWarning("Kanopy JWT verification failed", "error", err.Error())
+			w.WriteHeader(http.StatusUnauthorized)
+			_ = json.NewEncoder(w).Encode(map[string]string{"error": "authentication failed"})
 			return
 		}
 		ctx := context.WithValue(r.Context(), operatorUserCtxKey{}, user)
@@ -200,11 +251,14 @@ func (o *operatorUI) handleOperatorStatus(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	out := map[string]any{
 		"operator_apis_enabled": true,
-		"auth_repo":             o.cfg.OperatorAuthRepo,
+		"auth_mode":             o.authMode,
 		"llm_available":         o.llm != nil, // client exists; reachability checked via /operator/api/llm/status
 		"metrics_enabled":       o.cfg.MetricsEnabled,
 		"audit_enabled":         o.cfg.AuditEnabled,
 		"version":               o.version,
+	}
+	if o.authMode != "kanopy" {
+		out["auth_repo"] = o.cfg.OperatorAuthRepo
 	}
 	if o.container != nil && o.container.DeliveryTracker != nil {
 		out["webhook_dedupe_entries"] = o.container.DeliveryTracker.Len()
@@ -249,15 +303,24 @@ func (o *operatorUI) handleRepoPermission(w http.ResponseWriter, r *http.Request
 	}
 	repos := strings.Split(reposParam, ",")
 
-	// Per-repo result: Allowed + optional Error. Surfacing the error lets
-	// the frontend distinguish "user genuinely can't read this repo" from
-	// "GitHub rate limited us" so disabled replay buttons can carry an
-	// actionable tooltip instead of an opaque gray state.
+	// Per-repo result: Allowed + optional Error.
 	type repoPerm struct {
 		Allowed bool   `json:"allowed"`
 		Error   string `json:"error,omitempty"`
 	}
 	result := make(map[string]repoPerm, len(repos))
+
+	// In kanopy mode there is no GitHub PAT to call the permissions API with.
+	// Writers see all repos (CorpSecure already guarantees a valid MongoDB employee).
+	if o.authMode == "kanopy" {
+		for _, repo := range repos {
+			if repo = strings.TrimSpace(repo); repo != "" {
+				result[repo] = repoPerm{Allowed: true}
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"permissions": result})
+		return
+	}
 
 	user := operatorUserFromCtx(r)
 	userPAT := bearerToken(r)
@@ -674,13 +737,15 @@ func (o *operatorUI) handleDeliveryLogs(w http.ResponseWriter, r *http.Request) 
 			_ = json.NewEncoder(w).Encode(map[string]string{"error": "delivery not visible"})
 			return
 		}
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-		canRead, _ := o.ghCache.CanUserReadRepo(ctx, bearerToken(r), user.Login, repo)
-		if !canRead {
-			w.WriteHeader(http.StatusForbidden)
-			_ = json.NewEncoder(w).Encode(map[string]string{"error": "delivery not visible"})
-			return
+		if o.ghCache != nil {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
+			canRead, _ := o.ghCache.CanUserReadRepo(ctx, bearerToken(r), user.Login, repo)
+			if !canRead {
+				w.WriteHeader(http.StatusForbidden)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": "delivery not visible"})
+				return
+			}
 		}
 	}
 	logs := o.container.DeliveryLogs.Get(deliveryID)
@@ -803,9 +868,10 @@ func (o *operatorUI) handleReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Source-repo permission check: the user's PAT must have at least read
-	// access to the source repo being replayed.
-	{
+	// Source-repo permission check (github mode only): the user's PAT must have
+	// at least read access to the source repo being replayed. Skipped in kanopy
+	// mode — operators are already trusted members of the operator Okta group.
+	if o.ghCache != nil {
 		user := operatorUserFromCtx(r)
 		userPAT := bearerToken(r)
 		if user == nil || userPAT == "" {

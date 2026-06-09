@@ -1,0 +1,51 @@
+# Kanopy web-app chart base values for github-copier.
+# Per-environment overlays in values.<env>.yaml are merged on top at deploy time.
+# Field names follow the mongodb/web-app chart schema.
+
+image:
+  repository: 795250896452.dkr.ecr.us-east-1.amazonaws.com/docs/github-copier
+  pullPolicy: IfNotPresent
+  # tag is not set here — the Drone deploy step passes image.tag=git-<sha> at deploy time.
+
+# The app listens on PORT 8080. The chart routes Ingress → port 80 → targetPort 8080.
+services:
+  - name: http
+    ingress: true
+    port: 80
+    probes: true
+    protocol: TCP
+    targetPort: 8080
+    type: ClusterIP
+
+# Health and readiness checks against /health and /ready.
+probes:
+  enabled: true
+  path: /health
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Join the Istio service mesh so that inbound requests from CorpSecure arrive
+# with the X-Kanopy-Internal-Authorization JWT injected by the proxy.
+mesh:
+  enabled: true
+
+# Dedicated ServiceAccount for a distinct SPIFFE identity on outbound requests.
+serviceAccount:
+  enabled: true
+  name: sa

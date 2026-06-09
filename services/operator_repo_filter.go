@@ -30,8 +30,10 @@ func newRepoFilter(ctx context.Context, cache *ghAuthCache, pat string, user *Op
 
 // bypass reports whether this filter should let every row through unmodified.
 // Operators see everything; writers go through per-repo checks.
+// When cache is nil (kanopy auth mode has no GitHub PAT), bypass so writers
+// see all rows — there is no PAT available to call the GitHub permission API.
 func (f *repoFilter) bypass() bool {
-	return f == nil || f.user == nil || f.user.Role == RoleOperator
+	return f == nil || f.user == nil || f.user.Role == RoleOperator || f.cache == nil
 }
 
 // canRead returns true if the caller has read access to repo. Empty repo

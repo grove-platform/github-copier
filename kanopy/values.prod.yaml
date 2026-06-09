@@ -1,0 +1,55 @@
+# Prod overlay for github-copier. Merged on top of values.yaml at deploy time.
+
+ingress:
+  enabled: true
+  hosts:
+    - github-copier.docs.corp.mongodb.com
+
+replicaCount: 2
+
+env:
+  GITHUB_APP_ID: ""        # fill in
+  INSTALLATION_ID: ""      # fill in
+
+  CONFIG_REPO_OWNER: "grove-platform"
+  CONFIG_REPO_NAME: "github-copier"
+  CONFIG_REPO_BRANCH: "main"
+  MAIN_CONFIG_FILE: ".copier/main.yaml"
+  USE_MAIN_CONFIG: "true"
+  DEPRECATION_FILE: "deprecated_examples.json"
+
+  WEBSERVER_PATH: "/events"
+  COMMITTER_NAME: "GitHub Copier App"
+  COMMITTER_EMAIL: "bot@mongodb.com"
+
+  GOOGLE_CLOUD_PROJECT_ID: "github-copy-code-examples"
+  COPIER_LOG_NAME: "code-copier-log"
+
+  AUDIT_ENABLED: "true"
+  METRICS_ENABLED: "true"
+
+  OPERATOR_UI_ENABLED: "true"
+  OPERATOR_AUTH_MODE: "kanopy"
+  OPERATOR_AUTH_KANOPY_GROUP: "10gen-github-copier-operators"
+  # Prod uses the default JWKS endpoint (login.corp.mongodb.com); no override needed.
+  OPERATOR_REPO_SLUG: "grove-platform/github-copier"
+
+  SKIP_SECRET_MANAGER: "true"
+
+  LLM_PROVIDER: "anthropic"
+  LLM_BASE_URL: "https://grove-gateway-prod.azure-api.net/grove-foundry-prod/anthropic"
+  LLM_MODEL: "claude-haiku-4-5"
+
+# Provision before first prod deploy (use the prod cluster context):
+#
+#   helm ksec set github-copier-secrets \
+#     GITHUB_APP_PRIVATE_KEY_B64="$(base64 < your-app.private-key.pem)" \
+#     WEBHOOK_SECRET="your-webhook-secret" \
+#     MONGO_URI="mongodb+srv://..." \
+#     ANTHROPIC_API_KEY="sk-ant-..."
+#
+envSecrets:
+  GITHUB_APP_PRIVATE_KEY_B64: github-copier-secrets
+  WEBHOOK_SECRET: github-copier-secrets
+  MONGO_URI: github-copier-secrets
+  ANTHROPIC_API_KEY: github-copier-secrets

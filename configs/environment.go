@@ -71,11 +71,19 @@ type Config struct {
 	WebhookRetryInitialDelay int // initial delay between retries in seconds (doubles each attempt)
 
 	// Operator web UI — off unless OPERATOR_UI_ENABLED=true. Works with any HTTP
-	// origin (local dev, Cloud Run, etc.). Access is gated by GitHub PATs:
-	// each user authenticates with their personal token, and the role
-	// (operator or writer) is determined by their permission on OPERATOR_AUTH_REPO.
+	// origin (local dev, Cloud Run, etc.).
+	//
+	// Auth mode "github" (default): each user authenticates with their GitHub PAT;
+	// their permission on OPERATOR_AUTH_REPO determines role.
+	//
+	// Auth mode "kanopy": Kanopy's CorpSecure proxy handles authentication;
+	// the app reads the X-Kanopy-Internal-Authorization JWT and maps Okta group
+	// membership to roles. OPERATOR_AUTH_REPO is not required in this mode.
 	OperatorUIEnabled           bool
-	OperatorAuthRepo            string // "owner/repo" — user permissions here determine role (required when UI is enabled)
+	OperatorAuthMode            string // "github" (default) or "kanopy"
+	OperatorAuthRepo            string // "owner/repo" — required in github mode
+	OperatorAuthKanopyGroup     string // Okta group for RoleOperator in kanopy mode (e.g. "10gen-github-copier-operators")
+	OperatorAuthKanopyJWKSURL   string // override JWKS endpoint (default: prod login.corp.mongodb.com)
 	OperatorRepoSlug            string // "owner/repo" for GitHub links in audit/trace rows (optional)
 	OperatorReleaseGitHubToken  string // PAT with contents:write to create a version tag (optional)
 	OperatorReleaseTargetBranch string // branch SHA used when creating a tag (default main)
@@ -141,7 +149,10 @@ const (
 	WebhookMaxRetries               = "WEBHOOK_MAX_RETRIES"
 	WebhookRetryInitialDelay        = "WEBHOOK_RETRY_INITIAL_DELAY" //nolint:gosec // env var name, not a credential
 	OperatorUIEnabled               = "OPERATOR_UI_ENABLED"
-	OperatorAuthRepo                = "OPERATOR_AUTH_REPO" // repo for GitHub PAT permission check
+	OperatorAuthMode                = "OPERATOR_AUTH_MODE"
+	OperatorAuthRepo                = "OPERATOR_AUTH_REPO" // repo for GitHub PAT permission check (github mode)
+	OperatorAuthKanopyGroup         = "OPERATOR_AUTH_KANOPY_GROUP"
+	OperatorAuthKanopyJWKSURL       = "OPERATOR_AUTH_KANOPY_JWKS_URL"
 	OperatorRepoSlug                = "OPERATOR_REPO_SLUG"
 	OperatorReleaseGitHubToken      = "OPERATOR_RELEASE_GITHUB_TOKEN" // #nosec G101 -- env var name
 	OperatorReleaseTargetBranch     = "OPERATOR_RELEASE_TARGET_BRANCH"
@@ -269,7 +280,10 @@ func LoadEnvironment(envFile string) (*Config, error) {
 	config.WebhookRetryInitialDelay = getIntEnvWithDefault(WebhookRetryInitialDelay, config.WebhookRetryInitialDelay)
 
 	config.OperatorUIEnabled = getBoolEnvWithDefault(OperatorUIEnabled, false)
+	config.OperatorAuthMode = strings.ToLower(getEnvWithDefault(OperatorAuthMode, "github"))
 	config.OperatorAuthRepo = os.Getenv(OperatorAuthRepo)
+	config.OperatorAuthKanopyGroup = os.Getenv(OperatorAuthKanopyGroup)
+	config.OperatorAuthKanopyJWKSURL = os.Getenv(OperatorAuthKanopyJWKSURL)
 	config.OperatorRepoSlug = os.Getenv(OperatorRepoSlug)
 	config.OperatorReleaseGitHubToken = os.Getenv(OperatorReleaseGitHubToken)
 	config.OperatorReleaseTargetBranch = getEnvWithDefault(OperatorReleaseTargetBranch, "main")
@@ -385,18 +399,26 @@ func validateConfig(config *Config) error {
 	return nil
 }
 
-// validateOperatorAuth enforces that OPERATOR_AUTH_REPO is set when the UI is
-// enabled. Without it, any valid GitHub user could authenticate with full
-// operator access since there would be no per-repo permission gate.
+// validateOperatorAuth enforces that auth-mode-specific required fields are set
+// when the operator UI is enabled.
 func validateOperatorAuth(config *Config) error {
 	if !config.OperatorUIEnabled {
 		return nil
 	}
-	if strings.TrimSpace(config.OperatorAuthRepo) == "" {
-		return fmt.Errorf("OPERATOR_UI_ENABLED=true requires OPERATOR_AUTH_REPO (owner/repo) to gate access — each user authenticates with their GitHub PAT and their permission on that repo determines their role")
-	}
-	if !strings.Contains(config.OperatorAuthRepo, "/") {
-		return fmt.Errorf("OPERATOR_AUTH_REPO must be in owner/repo format (got %q)", config.OperatorAuthRepo)
+	switch config.OperatorAuthMode {
+	case "kanopy":
+		if strings.TrimSpace(config.OperatorAuthKanopyGroup) == "" {
+			return fmt.Errorf("OPERATOR_AUTH_MODE=kanopy requires OPERATOR_AUTH_KANOPY_GROUP (the Okta group whose members get operator role, e.g. \"10gen-github-copier-operators\")")
+		}
+	case "github", "":
+		if strings.TrimSpace(config.OperatorAuthRepo) == "" {
+			return fmt.Errorf("OPERATOR_UI_ENABLED=true requires OPERATOR_AUTH_REPO (owner/repo) to gate access — each user authenticates with their GitHub PAT and their permission on that repo determines their role")
+		}
+		if !strings.Contains(config.OperatorAuthRepo, "/") {
+			return fmt.Errorf("OPERATOR_AUTH_REPO must be in owner/repo format (got %q)", config.OperatorAuthRepo)
+		}
+	default:
+		return fmt.Errorf("OPERATOR_AUTH_MODE must be \"github\" or \"kanopy\" (got %q)", config.OperatorAuthMode)
 	}
 	return nil
 }
