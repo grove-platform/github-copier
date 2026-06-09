@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"os"
@@ -122,9 +123,12 @@ func fetchAndParseJWKS(ctx context.Context, url string) (map[string]*rsa.PublicK
 		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<17)) // 128 KB cap
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<17)) // 128 KB cap
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("JWKS HTTP %d", resp.StatusCode)
+	}
+	if readErr != nil {
+		return nil, fmt.Errorf("read JWKS response: %w", readErr)
 	}
 
 	var set jwkSet
@@ -225,19 +229,26 @@ func validateKanopyJWT(ctx context.Context, rawToken string, operatorGroup strin
 	}, nil
 }
 
-// devBypassUser returns a synthetic OperatorUser when DEV_BYPASS_AUTH=1 and
-// the process is running outside Kubernetes. Returns nil when inactive.
-//
-// Double-gated on the absence of KUBERNETES_SERVICE_HOST so a stray env var
-// can never disable auth in a Kanopy pod. Mirrors the pattern in
-// agent-skill-dashboard lib/auth.ts (assertDevBypassIsLocalDev).
+// init runs the dev-bypass safety check once at process startup — not on the
+// first request — so a misconfigured pod is refused before it ever serves
+// traffic. Mirrors agent-skill-dashboard lib/auth.ts (assertDevBypassIsLocalDev).
+func init() {
+	if os.Getenv("DEV_BYPASS_AUTH") != "1" {
+		return
+	}
+	inCluster := os.Getenv("KUBERNETES_SERVICE_HOST") != "" || os.Getenv("KANOPY_NAMESPACE") != ""
+	if inCluster {
+		log.Fatal("[kanopy auth] DEV_BYPASS_AUTH=1 is set inside a Kubernetes pod — refusing to start. Unset it from the deployment config.")
+	}
+}
+
+// devBypassUser returns a synthetic OperatorUser when DEV_BYPASS_AUTH=1.
+// The Kubernetes safety check is enforced at startup by init(); this function
+// is a non-panicking helper that callers invoke per-request.
+// Returns nil when the bypass is not active.
 func devBypassUser() *OperatorUser {
 	if os.Getenv("DEV_BYPASS_AUTH") != "1" {
 		return nil
-	}
-	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" || os.Getenv("KANOPY_NAMESPACE") != "" {
-		// Refuse to bypass inside a real cluster.
-		panic("[kanopy auth] DEV_BYPASS_AUTH=1 inside a Kubernetes pod — refusing to start. Unset it from the deployment config.")
 	}
 	email := os.Getenv("DEV_BYPASS_AUTH_EMAIL")
 	if email == "" {
