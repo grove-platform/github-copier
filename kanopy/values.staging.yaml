@@ -10,8 +10,8 @@ replicaCount: 1
 # Non-secret environment variables.
 env:
   # GitHub App — org-specific IDs (not sensitive, but vary by deployment)
-  GITHUB_APP_ID: ""        # fill in: your GitHub App's numeric ID
-  INSTALLATION_ID: ""      # fill in: the installation ID for the grove-platform org
+  GITHUB_APP_ID: "1166559"
+  INSTALLATION_ID: "91420665"
 
   # Config repository
   CONFIG_REPO_OWNER: "grove-platform"
