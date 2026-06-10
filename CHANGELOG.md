@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Kanopy CorpSecure auth mode** — new `OPERATOR_AUTH_MODE=kanopy` option for the operator UI. When deployed behind Kanopy's CorpSecure proxy, authentication is handled automatically via Okta; the app verifies the forwarded `X-Kanopy-Internal-Authorization` JWT and maps Okta group membership to roles (`OPERATOR_AUTH_KANOPY_GROUP` → operator, all other authenticated employees → writer). GitHub PAT auth (`OPERATOR_AUTH_MODE=github`) remains the default and is unchanged.
+- **Kanopy deployment** — Drone CI/CD pipeline (`.drone.yml`) and Helm values (`kanopy/`) to deploy the copier as a Kanopy app. Staging deploys on push to `main`; production deploys on `v*` tag. Secrets provisioned via `helm ksec`; GCP Secret Manager bypassed with `SKIP_SECRET_MANAGER=true`.
+- **`OPERATOR_AUTH_KANOPY_JWKS_URL`** — optional override for the CorpSecure JWKS endpoint, used to point staging deployments at `login.staging.corp.mongodb.com`.
+
 ## [v0.4.3] - 2026-05-02
 
 ### Fixed
