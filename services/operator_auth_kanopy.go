@@ -12,10 +12,12 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/sync/singleflight"
 )
 
 // corpSecureClaims represents the JWT claims forwarded by Kanopy's CorpSecure
@@ -27,6 +29,9 @@ type corpSecureClaims struct {
 	jwt.RegisteredClaims
 	Email  string   `json:"email"`
 	Groups []string `json:"groups"`
+	// Scp carries scopes for service-principal and mesh-internal tokens.
+	// Human user tokens do not set this field.
+	Scp []string `json:"scp"`
 }
 
 // kanopyJWKSURLDefault is the prod JWKS endpoint. Override with
@@ -40,65 +45,86 @@ const jwksTTL = 10 * time.Minute
 const jwksFailureCooldown = 30 * time.Second
 
 // kanopyJWKSCache fetches and caches RSA public keys from the CorpSecure JWKS
-// endpoint. A single global instance is used per process.
+// endpoint. Construct with newKanopyJWKSCache; the zero value is not valid.
 //
-// Concurrency model: callers acquire a read lock to check freshness; on a miss
-// they upgrade to a write lock and fetch. The double-checked locking pattern
-// ensures at most one in-flight fetch at a time. Holding the write lock during
-// the HTTP call is intentional — the fetch takes ~100ms and occurs at most
-// once per jwksTTL (10 min). Serving slightly stale keys under brief lock
-// contention is acceptable.
+// Concurrency: singleflight deduplicates concurrent fetches so a slow JWKS
+// endpoint degrades individual request latency (singleflight wait) rather
+// than serialising all auth requests behind a write lock for the full HTTP
+// timeout. The write lock is held only for the in-memory cache update, not
+// across the network call.
 type kanopyJWKSCache struct {
+	url     string
 	mu      sync.RWMutex
 	keys    map[string]*rsa.PublicKey // kid → public key
 	fetched time.Time
 	failed  time.Time
-	url     string
+	sf      singleflight.Group
 }
 
-var globalKanopyJWKS = &kanopyJWKSCache{}
+func newKanopyJWKSCache(url string) *kanopyJWKSCache {
+	if url == "" {
+		url = kanopyJWKSURLDefault
+	}
+	return &kanopyJWKSCache{url: url}
+}
 
-func (c *kanopyJWKSCache) getKeys(ctx context.Context) (map[string]*rsa.PublicKey, error) {
+func (c *kanopyJWKSCache) getKeys() (map[string]*rsa.PublicKey, error) {
+	// Fast path: cache is fresh.
 	c.mu.RLock()
 	if !c.fetched.IsZero() && time.Since(c.fetched) < jwksTTL {
 		keys := c.keys
 		c.mu.RUnlock()
 		return keys, nil
 	}
-	c.mu.RUnlock()
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Double-check after acquiring write lock.
-	if !c.fetched.IsZero() && time.Since(c.fetched) < jwksTTL {
-		return c.keys, nil
-	}
-	// Failure cooldown: serve stale keys if available rather than hammering
-	// a downed JWKS endpoint on every request.
+	// Failure cooldown: serve stale keys rather than hammering a downed endpoint.
 	if !c.failed.IsZero() && time.Since(c.failed) < jwksFailureCooldown {
-		if c.keys != nil {
-			return c.keys, nil
+		keys := c.keys
+		c.mu.RUnlock()
+		if keys != nil {
+			return keys, nil
 		}
 		return nil, fmt.Errorf("JWKS unavailable: in backoff after failed fetch")
 	}
+	c.mu.RUnlock()
 
-	endpoint := c.url
-	if endpoint == "" {
-		endpoint = kanopyJWKSURLDefault
+	// Slow path: deduplicate concurrent fetches with singleflight.
+	type result struct {
+		keys map[string]*rsa.PublicKey
+		err  error
 	}
-	keys, err := fetchAndParseJWKS(ctx, endpoint)
-	if err != nil {
-		c.failed = time.Now()
-		if c.keys != nil {
-			return c.keys, nil // serve last-known-good on transient failure
+	v, _, _ := c.sf.Do("fetch", func() (any, error) {
+		// Re-check after winning the singleflight slot — another goroutine may
+		// have refreshed the cache while we were waiting.
+		c.mu.RLock()
+		if !c.fetched.IsZero() && time.Since(c.fetched) < jwksTTL {
+			k := c.keys
+			c.mu.RUnlock()
+			return result{keys: k}, nil
 		}
-		return nil, fmt.Errorf("JWKS fetch failed: %w", err)
-	}
-	c.keys = keys
-	c.fetched = time.Now()
-	c.failed = time.Time{}
-	return keys, nil
+		c.mu.RUnlock()
+
+		// Fetch with background context — JWKS is a shared resource not tied to
+		// any individual request. Using the caller's context would cancel the
+		// fetch (and invalidate it for all singleflight waiters) if that
+		// specific request times out first.
+		keys, fetchErr := fetchAndParseJWKS(context.Background(), c.url)
+
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if fetchErr != nil {
+			c.failed = time.Now()
+			if c.keys != nil {
+				return result{keys: c.keys}, nil // serve stale on transient failure
+			}
+			return result{err: fmt.Errorf("JWKS fetch failed: %w", fetchErr)}, nil
+		}
+		c.keys = keys
+		c.fetched = time.Now()
+		c.failed = time.Time{}
+		return result{keys: keys}, nil
+	})
+	r := v.(result)
+	return r.keys, r.err
 }
 
 // jwkEntry is the minimal subset of a JWK we need.
@@ -171,36 +197,30 @@ func jwkToRSA(k jwkEntry) (*rsa.PublicKey, error) {
 
 // validateKanopyJWT verifies a CorpSecure JWT and returns an OperatorUser.
 // operatorGroup is the Okta group whose members receive RoleOperator; all other
-// authenticated employees receive RoleWriter.
-func validateKanopyJWT(ctx context.Context, rawToken string, operatorGroup string, jwksURL string) (*OperatorUser, error) {
+// authenticated human users receive RoleWriter.
+//
+// cache is the caller-owned JWKS cache — injected rather than global so tests
+// can point at an httptest server without process-wide side effects.
+func validateKanopyJWT(rawToken string, operatorGroup string, cache *kanopyJWKSCache) (*OperatorUser, error) {
 	if rawToken == "" {
 		return nil, fmt.Errorf("empty token")
 	}
-
-	cache := globalKanopyJWKS
-	cache.mu.Lock()
-	if cache.url == "" && jwksURL != "" {
-		cache.url = jwksURL
-	}
-	cache.mu.Unlock()
 
 	var claims corpSecureClaims
 	_, err := jwt.ParseWithClaims(rawToken, &claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodRSA); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		keys, err := cache.getKeys(ctx)
+		keys, err := cache.getKeys()
 		if err != nil {
 			return nil, err
 		}
 		kid, _ := t.Header["kid"].(string)
 		key, ok := keys[kid]
 		if !ok {
-			// kid may be empty or rotate; try any key as fallback
-			for _, k := range keys {
-				return k, nil
-			}
-			return nil, fmt.Errorf("no matching key for kid %q", kid)
+			// Do not fall back to an arbitrary key — random map iteration would
+			// pick the wrong key during rotation and produce spurious rejections.
+			return nil, fmt.Errorf("no key for kid %q in JWKS (%d keys cached)", kid, len(keys))
 		}
 		return key, nil
 	},
@@ -213,9 +233,18 @@ func validateKanopyJWT(ctx context.Context, rawToken string, operatorGroup strin
 		return nil, fmt.Errorf("verify token: %w", err)
 	}
 
-	login := claims.Subject
-	if login == "" {
-		return nil, fmt.Errorf("empty sub claim")
+	// Reject service-mesh principals. Per corpsecure/mesh.md and the
+	// 2025-01-31_mesh_service_principal_identity advisory, mesh-internal tokens
+	// are minted by CorpSecure for all pod-to-pod requests when mesh.enabled=true.
+	// They carry scp=["mesh-internal"] and a spiffe:// subject instead of an
+	// email + groups. They pass signature and issuer checks identically to user
+	// tokens — the operator UI must explicitly reject them to prevent any
+	// mesh-resident workload from reading audit events, delivery logs, and
+	// workflow config.
+	if claims.Email == "" ||
+		slices.Contains(claims.Scp, "mesh-internal") ||
+		strings.HasPrefix(claims.Subject, "spiffe://") {
+		return nil, fmt.Errorf("non-user principal rejected (service-mesh identity)")
 	}
 
 	role := RoleWriter
@@ -224,7 +253,7 @@ func validateKanopyJWT(ctx context.Context, rawToken string, operatorGroup strin
 	}
 
 	return &OperatorUser{
-		Login: login,
+		Login: claims.Subject,
 		Role:  role,
 	}, nil
 }

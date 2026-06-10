@@ -42,7 +42,9 @@ func RegisterOperatorRoutes(mux *http.ServeMux, cfg *configs.Config, container *
 		// usage is well under this; a misbehaving client can't rack up a bill.
 		suggestLimiter: newTokenBucket(30, time.Hour),
 	}
-	if o.authMode != "kanopy" {
+	if o.authMode == "kanopy" {
+		o.kanopyJWKS = newKanopyJWKSCache(cfg.OperatorAuthKanopyJWKSURL)
+	} else {
 		o.ghCache = newGHAuthCache(5 * time.Minute)
 	}
 	// Always create the LLM client; availability is checked dynamically via Ping.
@@ -91,12 +93,13 @@ type operatorUI struct {
 	cfg            *configs.Config
 	container      *ServiceContainer
 	version        string
-	replayInFlight sync.Map     // key: "owner/repo#pr" → prevents concurrent replays
-	ghCache        *ghAuthCache // GitHub PAT validation + per-repo permission cache (github mode only)
-	authMode       string       // "github" or "kanopy"
-	llm            LLMClient    // optional: enabled when cfg.LLMEnabled is true
-	suggestLimiter *tokenBucket // per-user rate limit for /api/suggest-rule (LLM cost cap)
-	llmPing        llmPingCache // cached Ping() result so /llm/status doesn't burn tokens on every refresh
+	replayInFlight sync.Map         // key: "owner/repo#pr" → prevents concurrent replays
+	ghCache        *ghAuthCache     // GitHub PAT validation + per-repo permission cache (github mode only)
+	kanopyJWKS     *kanopyJWKSCache // Kanopy JWKS cache (kanopy mode only)
+	authMode       string           // "github" or "kanopy"
+	llm            LLMClient        // optional: enabled when cfg.LLMEnabled is true
+	suggestLimiter *tokenBucket     // per-user rate limit for /api/suggest-rule (LLM cost cap)
+	llmPing        llmPingCache     // cached Ping() result so /llm/status doesn't burn tokens on every refresh
 }
 
 // llmPingCache memoises the most recent LLMClient.Ping() outcome. Status-tab
@@ -194,7 +197,7 @@ func (o *operatorUI) wrapAPIKanopy(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		user, err := validateKanopyJWT(r.Context(), raw, o.cfg.OperatorAuthKanopyGroup, o.cfg.OperatorAuthKanopyJWKSURL)
+		user, err := validateKanopyJWT(raw, o.cfg.OperatorAuthKanopyGroup, o.kanopyJWKS)
 		if err != nil {
 			LogWarning("Kanopy JWT verification failed", "error", err.Error())
 			w.WriteHeader(http.StatusUnauthorized)

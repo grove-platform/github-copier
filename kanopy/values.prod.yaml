@@ -8,7 +8,7 @@ ingress:
 replicaCount: 2
 
 env:
-  GITHUB_APP_ID: "1166559"     
+  GITHUB_APP_ID: "1166559"
   INSTALLATION_ID: "91420665"
 
   CONFIG_REPO_OWNER: "grove-platform"
