@@ -12,6 +12,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - **Kanopy deployment** — Drone CI/CD pipeline (`.drone.yml`) and Helm values (`kanopy/`) to deploy the copier as a Kanopy app. Staging deploys on push to `main`; production deploys on `v*` tag. Secrets provisioned via `helm ksec`; GCP Secret Manager bypassed with `SKIP_SECRET_MANAGER=true`.
 - **`OPERATOR_AUTH_KANOPY_JWKS_URL`** — optional override for the CorpSecure JWKS endpoint, used to point staging deployments at `login.staging.corp.mongodb.com`.
 
+### Security
+
+- **Dependency bumps for 14 Dependabot alerts** — `golang.org/x/crypto` 0.46.0 → 0.52.0 (13 SSH-related CVEs, incl. 4 critical) and `golang.org/x/net` 0.48.0 → 0.55.0 (HTML-parser DoS). Both are indirect dependencies; no source changes.
+
 ## [v0.4.3] - 2026-05-02
 
 ### Fixed
