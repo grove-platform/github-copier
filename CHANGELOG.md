@@ -6,6 +6,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [v0.4.4] - 2026-10-19
+
+### Security
+
+- **gRPC-Go upgrades** — bumped `google.golang.org/grpc` v1.82.1 → v1.83.2 to fix xDS server DoS via missing `:authority`/`Host` headers (GHSA-2v4p-qf9q-27wj, high), heap exhaustion via HTTP/2 DATA frame fragmentation (GHSA-vp52-pcj8-j9qc, high), xDS RBAC filter bypass via mixed-case header matching (GHSA-qc2q-p7wx-3px3, medium), and DoS via malformed RPC requests (CVE-2026-84445). With transitive updates to `google.golang.org/api`, `genproto`, and OpenTelemetry.
+- **golang.org/x upgrades** — bumped `x/net` to v0.60.0 (CVE-2026-78669, HTTP/2 SETTINGS frame DoS) and `x/crypto` to v0.57.0 (CVE-2026-56854, ssh source-address authentication bypass). Clears all Dependabot and Trivy scan findings.
+
 ## [v0.4.3] - 2026-05-02
 
 ### Fixed
