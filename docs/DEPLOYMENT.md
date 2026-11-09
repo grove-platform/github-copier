@@ -594,7 +594,6 @@ gcloud config get-value project
 
 # Enable required APIs
 gcloud services enable secretmanager.googleapis.com
-gcloud services enable appengine.googleapis.com
 ```
 
 ### ☐ 3. Secrets in Secret Manager
