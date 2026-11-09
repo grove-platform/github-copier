@@ -6,10 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [v0.4.4] - 2026-11-09
+### Security
 
-- **Security fixes**
-Addresses nine Wiz Posture Issue errors.
+- Addresses nine Wiz Posture Issue errors.
 
 ## [v0.4.3] - 2026-05-02
 
