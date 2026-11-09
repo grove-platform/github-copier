@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.26.0-alpine AS builder
+FROM golang:1.26.10-alpine AS builder
 
 # Version is set at build time via:
 # - Docker: docker build --build-arg VERSION=v1.0.0
@@ -24,7 +24,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -X main.version=${VERSION}" -o github-copier .
 
 # Runtime stage - pin to specific version for reproducible builds
-FROM alpine:3.21
+FROM alpine:3.24
 
 # Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates
