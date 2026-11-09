@@ -1,6 +1,6 @@
 module github.com/grove-platform/github-copier
 
-go 1.26.0
+go 1.26.10
 
 require (
 	cloud.google.com/go/logging v1.13.2
