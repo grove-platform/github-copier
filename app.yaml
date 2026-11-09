@@ -1,0 +1,38 @@
+# 1. Core Runtime Settings
+runtime: go127        # Maps from your flexible version '1.23'
+instance_class: F1 # Matches your ~2GB RAM requirement
+
+# 2. Scaling Configurations
+automatic_scaling:
+  target_cpu_utilization: 0.6
+  min_instances: 1
+  max_instances: 10
+
+# 3. Application Environment Variables
+env_variables:
+  AUDIT_ENABLED: 'false'
+  COMMITTER_EMAIL: foo@mongodb.com
+  COMMITTER_NAME: GitHub Copier App
+  CONFIG_FILE: copier-config.yaml
+  COPIER_DEBUG: 'true'
+  COPIER_LOG_NAME: code-copier-log
+  DEPRECATION_FILE: deprecated_examples.json
+  DRY_RUN: 'false'
+  GITHUB_APP_ID: ''
+  GITHUB_APP_PRIVATE_KEY_SECRET_NAME: projects/XXX/secrets/XXX/versions/latest
+  GOOGLE_CLOUD_PROJECT_ID: github-copy-code-examples
+  INSTALLATION_ID: ''
+  LOG_LEVEL: debug
+  METRICS_ENABLED: 'true'
+  MONGO_URI_SECRET_NAME: projects/XXX/secrets/XXX/versions/latest
+  REPO_NAME: docs-code-examples
+  REPO_OWNER: mongodb
+  SRC_BRANCH: main
+  WEBHOOK_SECRET_NAME: projects/XXX/secrets/XXX/versions/latest
+  WEBSERVER_PATH: /events
+
+# 4. Standard App Engine Handlers
+handlers:
+- url: /.*
+  script: auto
+  secure: always
